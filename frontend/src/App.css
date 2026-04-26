@@ -33,6 +33,10 @@
   color: #4d6862;
 }
 
+.question-body {
+  animation: fade-slide-in 0.24s ease;
+}
+
 .options-grid {
   display: grid;
   gap: 0.85rem;
@@ -166,6 +170,19 @@ textarea {
   line-height: 1.35;
 }
 
+.node-chip {
+  display: inline-block;
+  margin-bottom: 0.45rem;
+  padding: 0.14rem 0.46rem;
+  border-radius: 999px;
+  border: 1px solid #cad8d2;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #38574f;
+  background: #f2f7f5;
+}
+
 .path-node.root {
   width: 280px;
   border-color: #94b3aa;
@@ -204,6 +221,17 @@ textarea {
   margin: 0.8rem 0 0;
   color: #a62f2f;
   font-size: 0.95rem;
+}
+
+@keyframes fade-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (max-width: 840px) {

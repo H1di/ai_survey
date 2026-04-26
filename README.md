@@ -61,7 +61,11 @@ Both return:
       "financialOutlook": "...",
       "risks": "...",
       "psychologicalProfile": "...",
-      "fitWhy": "..."
+      "fitWhy": "...",
+      "keyDifferenceFromParent": "...",
+      "newOpportunities": "...",
+      "newRisks": "...",
+      "isBranch": false
     }
   ]
 }

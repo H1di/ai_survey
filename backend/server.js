@@ -9,6 +9,9 @@ const app = express();
 
 const PORT = Number(process.env.PORT) || 3001;
 const MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+const INITIAL_TARGET_COUNT = 3;
+const BRANCH_MIN_COUNT = 2;
+const BRANCH_MAX_COUNT = 3;
 
 const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -53,68 +56,103 @@ function parseJsonFromContent(content) {
   throw new Error("Could not parse JSON from model output.");
 }
 
-function normalizePath(path, index) {
+function normalizeText(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizePath(path, index, branchMode) {
   const fallbackTitle = `Life Path ${index + 1}`;
+  const title = normalizeText(path?.title) || fallbackTitle;
+
+  if (!branchMode) {
+    return {
+      title,
+      shortDescription: normalizeText(path?.shortDescription),
+      dailyLifestyle: normalizeText(path?.dailyLifestyle),
+      careerTrajectory: normalizeText(path?.careerTrajectory),
+      financialOutlook: normalizeText(path?.financialOutlook),
+      risks: normalizeText(path?.risks),
+      psychologicalProfile: normalizeText(path?.psychologicalProfile),
+      fitWhy: normalizeText(path?.fitWhy),
+      keyDifferenceFromParent: "",
+      newOpportunities: "",
+      newRisks: "",
+      isBranch: false,
+    };
+  }
+
+  const newRisks = normalizeText(path?.newRisks || path?.risks);
 
   return {
-    title: String(path.title || fallbackTitle).trim(),
-    shortDescription: String(path.shortDescription || "").trim(),
-    dailyLifestyle: String(path.dailyLifestyle || "").trim(),
-    careerTrajectory: String(path.careerTrajectory || "").trim(),
-    financialOutlook: String(path.financialOutlook || "").trim(),
-    risks: String(path.risks || "").trim(),
-    psychologicalProfile: String(path.psychologicalProfile || "").trim(),
-    fitWhy: String(path.fitWhy || "").trim(),
+    title,
+    shortDescription: normalizeText(path?.description || path?.shortDescription),
+    dailyLifestyle: normalizeText(path?.dailyLifestyle),
+    careerTrajectory: normalizeText(path?.careerTrajectory),
+    financialOutlook: normalizeText(path?.financialOutlook),
+    risks: newRisks,
+    psychologicalProfile: normalizeText(path?.psychologicalProfile),
+    fitWhy: normalizeText(path?.fitWhy || path?.fit),
+    keyDifferenceFromParent: normalizeText(
+      path?.keyDifferenceFromParent || path?.keyDifference
+    ),
+    newOpportunities: normalizeText(path?.newOpportunities),
+    newRisks,
+    isBranch: true,
   };
 }
 
-function buildSystemPrompt({ targetCount, branchMode }) {
-  const pathType = branchMode
-    ? "sub-paths that evolve from the selected parent path"
-    : "life paths";
+function buildSystemPrompt({ branchMode }) {
+  if (!branchMode) {
+    return [
+      "You are an insightful life and career strategist.",
+      "Generate realistic scenarios for the user's future.",
+      `Return exactly ${INITIAL_TARGET_COUNT} distinct life paths.`,
+      "Return valid JSON only. No markdown, no commentary, no extra keys.",
+      'Use this JSON shape: {"paths":[{"title":"","shortDescription":"","dailyLifestyle":"","careerTrajectory":"","financialOutlook":"","risks":"","psychologicalProfile":"","fitWhy":""}]}',
+      "Keep every field concise and specific.",
+    ].join(" ");
+  }
 
   return [
     "You are an insightful life and career strategist.",
-    "Your task is to generate realistic future scenarios for a user.",
-    `Return exactly ${targetCount} distinct ${pathType}.`,
+    "Generate deeper path variations from a selected parent path.",
+    "Return 2 or 3 options.",
     "Return valid JSON only. No markdown, no commentary, no extra keys.",
-    'Use this JSON shape: {"paths":[{"title":"","shortDescription":"","dailyLifestyle":"","careerTrajectory":"","financialOutlook":"","risks":"","psychologicalProfile":"","fitWhy":""}]}',
-    "Keep fields concise and concrete.",
-    "Write with balanced optimism: practical, non-fantasy, and specific.",
+    'Use this JSON shape: {"paths":[{"title":"","description":"","keyDifferenceFromParent":"","newRisks":"","newOpportunities":""}]}',
+    "Each option must feel like a concrete specialization, not a duplicate.",
   ].join(" ");
 }
 
 function buildUserPrompt({ reason, dream, why, parentPath, branchMode }) {
   const base = [
-    `Reason: ${reason}`,
-    `Dream: ${dream}`,
-    `Motivation: ${why}`,
+    "User answers:",
+    `- Reason: ${reason}`,
+    `- Dream: ${dream}`,
+    `- Motivation: ${why}`,
   ];
 
   if (!branchMode) {
-    base.push(
-      "Generate alternative top-level life directions the user could explore."
-    );
-    return base.join("\n");
+    return [
+      ...base,
+      "Generate 3 possible life paths.",
+      "For each path include: title, short description, daily lifestyle, career trajectory, financial outlook, risks, psychological profile, and why this path fits the user.",
+    ].join("\n");
   }
 
-  const parentSection = [
-    "Selected parent path:",
-    `Title: ${parentPath.title || ""}`,
-    `Description: ${parentPath.shortDescription || ""}`,
-    `Daily lifestyle: ${parentPath.dailyLifestyle || ""}`,
-    `Career trajectory: ${parentPath.careerTrajectory || ""}`,
-    `Financial outlook: ${parentPath.financialOutlook || ""}`,
-    `Risks: ${parentPath.risks || ""}`,
-    `Psychological profile: ${parentPath.psychologicalProfile || ""}`,
-    `Why it fits: ${parentPath.fitWhy || ""}`,
+  const selectedPath = [
+    "Given this life path:",
+    `- Title: ${parentPath?.title || ""}`,
+    `- Description: ${parentPath?.shortDescription || parentPath?.description || ""}`,
+    `- Key difference from parent: ${parentPath?.keyDifferenceFromParent || ""}`,
+    `- Risks: ${parentPath?.newRisks || parentPath?.risks || ""}`,
+    `- Opportunities: ${parentPath?.newOpportunities || ""}`,
   ].join("\n");
 
   return [
     ...base,
-    parentSection,
-    "Generate deeper sub-path options that branch from this selected path.",
-    "These sub-paths should feel like concrete next decisions, not duplicates.",
+    selectedPath,
+    "Generate 2-3 deeper variations or specializations of this path.",
+    "For each include: title, description, key difference from parent path, and new risks and opportunities.",
   ].join("\n\n");
 }
 
@@ -123,8 +161,6 @@ async function generatePaths({ reason, dream, why, parentPath, branchMode }) {
     throw new Error("OPENAI_API_KEY is missing on the backend.");
   }
 
-  const targetCount = branchMode ? 3 : 3;
-
   const completion = await openai.chat.completions.create({
     model: MODEL,
     temperature: 0.85,
@@ -132,7 +168,7 @@ async function generatePaths({ reason, dream, why, parentPath, branchMode }) {
     messages: [
       {
         role: "system",
-        content: buildSystemPrompt({ targetCount, branchMode }),
+        content: buildSystemPrompt({ branchMode }),
       },
       {
         role: "user",
@@ -148,15 +184,20 @@ async function generatePaths({ reason, dream, why, parentPath, branchMode }) {
     throw new Error("Model response did not include a valid paths array.");
   }
 
-  const normalized = parsed.paths
-    .slice(0, targetCount)
-    .map((path, index) => normalizePath(path, index));
+  const capped = parsed.paths.slice(
+    0,
+    branchMode ? BRANCH_MAX_COUNT : INITIAL_TARGET_COUNT
+  );
 
-  if (normalized.length === 0) {
-    throw new Error("No paths were generated.");
+  const normalized = capped.map((path, index) =>
+    normalizePath(path, index, branchMode)
+  );
+
+  if (!branchMode && normalized.length < INITIAL_TARGET_COUNT) {
+    throw new Error("Expected 3 initial paths.");
   }
 
-  if (branchMode && normalized.length < 2) {
+  if (branchMode && normalized.length < BRANCH_MIN_COUNT) {
     throw new Error("Expected at least 2 branch options.");
   }
 

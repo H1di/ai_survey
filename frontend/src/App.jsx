@@ -23,6 +23,9 @@ function PathNode({ data, selected }) {
 
   return (
     <div className={`path-node ${selected ? "selected" : ""}`}>
+      <div className="node-chip">
+        {data.path.isBranch ? "Branch Option" : "Life Path"}
+      </div>
       <h3>{data.path.title}</h3>
       <p>{data.path.shortDescription}</p>
       <div className="node-footnote">
@@ -39,6 +42,18 @@ function PathNode({ data, selected }) {
 const nodeTypes = {
   pathNode: PathNode,
 };
+
+function DetailRow({ label, value }) {
+  if (!value) {
+    return null;
+  }
+
+  return (
+    <p>
+      <strong>{label}:</strong> {value}
+    </p>
+  );
+}
 
 function createRootNode() {
   return {
@@ -305,63 +320,64 @@ function App() {
       {!showGraph && (
         <section className="question-card">
           <p className="step-indicator">Step {step + 1} of 3</p>
+          <div key={step} className="question-body">
+            {step === 0 && (
+              <>
+                <h1>Why are you here?</h1>
+                <div className="options-grid">
+                  {REASONS.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      className={`option-button ${
+                        answers.reason === option ? "selected" : ""
+                      }`}
+                      onClick={() =>
+                        setAnswers((existing) => ({
+                          ...existing,
+                          reason: option,
+                        }))
+                      }
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
 
-          {step === 0 && (
-            <>
-              <h1>Why are you here?</h1>
-              <div className="options-grid">
-                {REASONS.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    className={`option-button ${
-                      answers.reason === option ? "selected" : ""
-                    }`}
-                    onClick={() =>
-                      setAnswers((existing) => ({
-                        ...existing,
-                        reason: option,
-                      }))
-                    }
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+            {step === 1 && (
+              <>
+                <h1>What would you do if you knew you couldn&apos;t fail?</h1>
+                <textarea
+                  value={answers.dream}
+                  onChange={(event) =>
+                    setAnswers((existing) => ({
+                      ...existing,
+                      dream: event.target.value,
+                    }))
+                  }
+                  placeholder="Describe your ideal direction..."
+                />
+              </>
+            )}
 
-          {step === 1 && (
-            <>
-              <h1>What would you do if you knew you couldn&apos;t fail?</h1>
-              <textarea
-                value={answers.dream}
-                onChange={(event) =>
-                  setAnswers((existing) => ({
-                    ...existing,
-                    dream: event.target.value,
-                  }))
-                }
-                placeholder="Describe your ideal direction..."
-              />
-            </>
-          )}
-
-          {step === 2 && (
-            <>
-              <h1>Why this choice?</h1>
-              <textarea
-                value={answers.why}
-                onChange={(event) =>
-                  setAnswers((existing) => ({
-                    ...existing,
-                    why: event.target.value,
-                  }))
-                }
-                placeholder="Share the deeper reason behind it..."
-              />
-            </>
-          )}
+            {step === 2 && (
+              <>
+                <h1>Why this choice?</h1>
+                <textarea
+                  value={answers.why}
+                  onChange={(event) =>
+                    setAnswers((existing) => ({
+                      ...existing,
+                      why: event.target.value,
+                    }))
+                  }
+                  placeholder="Share the deeper reason behind it..."
+                />
+              </>
+            )}
+          </div>
 
           {error && <p className="error">{error}</p>}
 
@@ -434,28 +450,40 @@ function App() {
             {selectedPath ? (
               <>
                 <h3>{selectedPath.title}</h3>
-                <p>
-                  <strong>Short description:</strong> {selectedPath.shortDescription}
-                </p>
-                <p>
-                  <strong>Daily lifestyle:</strong> {selectedPath.dailyLifestyle}
-                </p>
-                <p>
-                  <strong>Career trajectory:</strong> {selectedPath.careerTrajectory}
-                </p>
-                <p>
-                  <strong>Financial outlook:</strong> {selectedPath.financialOutlook}
-                </p>
-                <p>
-                  <strong>Risks:</strong> {selectedPath.risks}
-                </p>
-                <p>
-                  <strong>Psychological profile:</strong>{" "}
-                  {selectedPath.psychologicalProfile}
-                </p>
-                <p>
-                  <strong>Why this fits you:</strong> {selectedPath.fitWhy}
-                </p>
+                <DetailRow
+                  label="Short description"
+                  value={selectedPath.shortDescription}
+                />
+                <DetailRow
+                  label="Key difference from parent"
+                  value={selectedPath.keyDifferenceFromParent}
+                />
+                <DetailRow
+                  label="New opportunities"
+                  value={selectedPath.newOpportunities}
+                />
+                <DetailRow
+                  label={selectedPath.isBranch ? "New risks" : "Risks"}
+                  value={
+                    selectedPath.isBranch
+                      ? selectedPath.newRisks || selectedPath.risks
+                      : selectedPath.risks
+                  }
+                />
+                <DetailRow label="Daily lifestyle" value={selectedPath.dailyLifestyle} />
+                <DetailRow
+                  label="Career trajectory"
+                  value={selectedPath.careerTrajectory}
+                />
+                <DetailRow
+                  label="Financial outlook"
+                  value={selectedPath.financialOutlook}
+                />
+                <DetailRow
+                  label="Psychological profile"
+                  value={selectedPath.psychologicalProfile}
+                />
+                <DetailRow label="Why this fits you" value={selectedPath.fitWhy} />
               </>
             ) : (
               <p>Select a path node to inspect the full details.</p>
