@@ -1,272 +1,341 @@
 const cors = require("cors");
 const dotenv = require("dotenv");
 const express = require("express");
-const OpenAI = require("openai");
+const { createAiEngine } = require("./aiEngine");
+const { BRANCH_THEMES } = require("./questionPool");
+const {
+  QUESTION_BY_ID,
+  TARGET_COUNTS,
+  buildProgress,
+  getQuestionById,
+  isQuestionAvailableForSession,
+  normalizeAnswer,
+  pickNextQuestion,
+  resolveAnswerLabel,
+  serializeQuestion,
+  summarizeAnswersForClient,
+} = require("./questionEngine");
+const { SessionStore } = require("./sessionStore");
 
 dotenv.config();
 
 const app = express();
+const store = new SessionStore();
 
 const PORT = Number(process.env.PORT) || 3001;
 const MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
-const INITIAL_TARGET_COUNT = 3;
-const BRANCH_MIN_COUNT = 2;
-const BRANCH_MAX_COUNT = 3;
 
-const openai = process.env.OPENAI_API_KEY
-  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-  : null;
+const aiEngine = createAiEngine({
+  apiKey: process.env.OPENAI_API_KEY,
+  model: MODEL,
+});
 
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-function parseJsonFromContent(content) {
-  if (!content || typeof content !== "string") {
-    throw new Error("OpenAI returned an empty response.");
-  }
-
-  const trimmed = content.trim();
-
-  try {
-    return JSON.parse(trimmed);
-  } catch (_) {
-    // Continue with fallback parsing.
-  }
-
-  const withoutFence = trimmed
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/, "")
-    .trim();
-
-  try {
-    return JSON.parse(withoutFence);
-  } catch (_) {
-    // Continue with substring parsing.
-  }
-
-  const firstBrace = withoutFence.indexOf("{");
-  const lastBrace = withoutFence.lastIndexOf("}");
-
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    const candidate = withoutFence.slice(firstBrace, lastBrace + 1);
-    return JSON.parse(candidate);
-  }
-
-  throw new Error("Could not parse JSON from model output.");
+function isValidEntryChoice(value) {
+  return value === "change" || value === "find";
 }
 
-function normalizeText(value) {
-  return typeof value === "string" ? value.trim() : "";
-}
+function sendSessionSnapshot(res, session, extras = {}) {
+  const progress = buildProgress(session);
+  const answers = summarizeAnswersForClient(session);
 
-function normalizePath(path, index, branchMode) {
-  const fallbackTitle = `Life Path ${index + 1}`;
-  const title = normalizeText(path?.title) || fallbackTitle;
-
-  if (!branchMode) {
-    return {
-      title,
-      shortDescription: normalizeText(path?.shortDescription),
-      dailyLifestyle: normalizeText(path?.dailyLifestyle),
-      careerTrajectory: normalizeText(path?.careerTrajectory),
-      financialOutlook: normalizeText(path?.financialOutlook),
-      risks: normalizeText(path?.risks),
-      psychologicalProfile: normalizeText(path?.psychologicalProfile),
-      fitWhy: normalizeText(path?.fitWhy),
-      keyDifferenceFromParent: "",
-      newOpportunities: "",
-      newRisks: "",
-      isBranch: false,
-    };
-  }
-
-  const newRisks = normalizeText(path?.newRisks || path?.risks);
-
-  return {
-    title,
-    shortDescription: normalizeText(path?.description || path?.shortDescription),
-    dailyLifestyle: normalizeText(path?.dailyLifestyle),
-    careerTrajectory: normalizeText(path?.careerTrajectory),
-    financialOutlook: normalizeText(path?.financialOutlook),
-    risks: newRisks,
-    psychologicalProfile: normalizeText(path?.psychologicalProfile),
-    fitWhy: normalizeText(path?.fitWhy || path?.fit),
-    keyDifferenceFromParent: normalizeText(
-      path?.keyDifferenceFromParent || path?.keyDifference
-    ),
-    newOpportunities: normalizeText(path?.newOpportunities),
-    newRisks,
-    isBranch: true,
-  };
-}
-
-function buildSystemPrompt({ branchMode }) {
-  if (!branchMode) {
-    return [
-      "You are an insightful life and career strategist.",
-      "Generate realistic scenarios for the user's future.",
-      `Return exactly ${INITIAL_TARGET_COUNT} distinct life paths.`,
-      "Return valid JSON only. No markdown, no commentary, no extra keys.",
-      'Use this JSON shape: {"paths":[{"title":"","shortDescription":"","dailyLifestyle":"","careerTrajectory":"","financialOutlook":"","risks":"","psychologicalProfile":"","fitWhy":""}]}',
-      "Keep every field concise and specific.",
-    ].join(" ");
-  }
-
-  return [
-    "You are an insightful life and career strategist.",
-    "Generate deeper path variations from a selected parent path.",
-    "Return 2 or 3 options.",
-    "Return valid JSON only. No markdown, no commentary, no extra keys.",
-    'Use this JSON shape: {"paths":[{"title":"","description":"","keyDifferenceFromParent":"","newRisks":"","newOpportunities":""}]}',
-    "Each option must feel like a concrete specialization, not a duplicate.",
-  ].join(" ");
-}
-
-function buildUserPrompt({ reason, dream, why, parentPath, branchMode }) {
-  const base = [
-    "User answers:",
-    `- Reason: ${reason}`,
-    `- Dream: ${dream}`,
-    `- Motivation: ${why}`,
-  ];
-
-  if (!branchMode) {
-    return [
-      ...base,
-      "Generate 3 possible life paths.",
-      "For each path include: title, short description, daily lifestyle, career trajectory, financial outlook, risks, psychological profile, and why this path fits the user.",
-    ].join("\n");
-  }
-
-  const selectedPath = [
-    "Given this life path:",
-    `- Title: ${parentPath?.title || ""}`,
-    `- Description: ${parentPath?.shortDescription || parentPath?.description || ""}`,
-    `- Key difference from parent: ${parentPath?.keyDifferenceFromParent || ""}`,
-    `- Risks: ${parentPath?.newRisks || parentPath?.risks || ""}`,
-    `- Opportunities: ${parentPath?.newOpportunities || ""}`,
-  ].join("\n");
-
-  return [
-    ...base,
-    selectedPath,
-    "Generate 2-3 deeper variations or specializations of this path.",
-    "For each include: title, description, key difference from parent path, and new risks and opportunities.",
-  ].join("\n\n");
-}
-
-async function generatePaths({ reason, dream, why, parentPath, branchMode }) {
-  if (!openai) {
-    throw new Error("OPENAI_API_KEY is missing on the backend.");
-  }
-
-  const completion = await openai.chat.completions.create({
-    model: MODEL,
-    temperature: 0.85,
-    response_format: { type: "json_object" },
-    messages: [
-      {
-        role: "system",
-        content: buildSystemPrompt({ branchMode }),
-      },
-      {
-        role: "user",
-        content: buildUserPrompt({ reason, dream, why, parentPath, branchMode }),
-      },
-    ],
+  return res.json({
+    ...store.serializeSessionState(session, progress, answers),
+    ...extras,
   });
-
-  const content = completion?.choices?.[0]?.message?.content;
-  const parsed = parseJsonFromContent(content);
-
-  if (!parsed || !Array.isArray(parsed.paths)) {
-    throw new Error("Model response did not include a valid paths array.");
-  }
-
-  const capped = parsed.paths.slice(
-    0,
-    branchMode ? BRANCH_MAX_COUNT : INITIAL_TARGET_COUNT
-  );
-
-  const normalized = capped.map((path, index) =>
-    normalizePath(path, index, branchMode)
-  );
-
-  if (!branchMode && normalized.length < INITIAL_TARGET_COUNT) {
-    throw new Error("Expected 3 initial paths.");
-  }
-
-  if (branchMode && normalized.length < BRANCH_MIN_COUNT) {
-    throw new Error("Expected at least 2 branch options.");
-  }
-
-  return normalized;
 }
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true });
+  res.json({
+    ok: true,
+    model: MODEL,
+    hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY),
+  });
 });
 
-app.post("/api/generate-initial", async (req, res) => {
-  try {
-    const { reason, dream, why } = req.body || {};
+app.post("/api/session/start", (req, res) => {
+  const { entryChoice, dreamAnswer, premiumDepth = false } = req.body || {};
 
-    if (!reason || !dream || !why) {
+  if (!isValidEntryChoice(entryChoice)) {
+    return res.status(400).json({ error: "entryChoice must be 'change' or 'find'." });
+  }
+
+  const normalizedDream = typeof dreamAnswer === "string" ? dreamAnswer.trim() : "";
+
+  if (!normalizedDream) {
+    return res.status(400).json({ error: "dreamAnswer is required." });
+  }
+
+  const session = store.createSession({
+    entryChoice,
+    dreamAnswer: normalizedDream,
+    premiumDepth,
+  });
+
+  const nextQuestion = pickNextQuestion(session);
+
+  return sendSessionSnapshot(res, session, {
+    nextQuestion: serializeQuestion(nextQuestion),
+    questionPoolSize: QUESTION_BY_ID.size,
+    targetRange: {
+      min: TARGET_COUNTS.minimum,
+      core: TARGET_COUNTS.core,
+      premium: TARGET_COUNTS.premium,
+    },
+  });
+});
+
+app.get("/api/session/:sessionId", (req, res) => {
+  try {
+    const session = store.require(req.params.sessionId);
+    const nextQuestion = pickNextQuestion(session);
+
+    return sendSessionSnapshot(res, session, {
+      nextQuestion: serializeQuestion(nextQuestion),
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ error: error.message });
+  }
+});
+
+app.post("/api/session/premium", (req, res) => {
+  try {
+    const { sessionId, premiumDepth } = req.body || {};
+    const session = store.require(sessionId);
+
+    store.setPremiumDepth(session, Boolean(premiumDepth));
+
+    const nextQuestion = pickNextQuestion(session);
+
+    return sendSessionSnapshot(res, session, {
+      nextQuestion: serializeQuestion(nextQuestion),
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ error: error.message });
+  }
+});
+
+app.post("/api/questions/answer", (req, res) => {
+  try {
+    const { sessionId, questionId, answer } = req.body || {};
+
+    const session = store.require(sessionId);
+    const question = getQuestionById(questionId);
+
+    if (!question) {
+      return res.status(404).json({ error: "Question not found." });
+    }
+
+    if (!isQuestionAvailableForSession(question, session)) {
       return res.status(400).json({
-        error: "reason, dream, and why are required.",
+        error:
+          "This question is not currently available. Continue with the suggested next question.",
       });
     }
 
-    const paths = await generatePaths({
-      reason,
-      dream,
-      why,
-      branchMode: false,
+    const normalizedAnswer = normalizeAnswer(question, answer);
+
+    store.upsertAnswer(session, {
+      questionId,
+      answer: normalizedAnswer,
     });
 
-    return res.json({ paths });
+    const progress = buildProgress(session);
+    const nextQuestion = pickNextQuestion(session);
+
+    return res.json({
+      ok: true,
+      progress,
+      recordedAnswer: {
+        questionId,
+        answer: normalizedAnswer,
+        answerLabel: resolveAnswerLabel(question, normalizedAnswer),
+      },
+      nextQuestion: serializeQuestion(nextQuestion),
+    });
   } catch (error) {
-    console.error("[generate-initial]", error);
-    return res.status(500).json({
-      error:
-        error.message === "OPENAI_API_KEY is missing on the backend."
-          ? error.message
-          : "Failed to generate life paths.",
+    return res.status(error.statusCode || 500).json({ error: error.message });
+  }
+});
+
+app.post("/api/branches/initial", async (req, res) => {
+  try {
+    const { sessionId } = req.body || {};
+    const session = store.require(sessionId);
+
+    if (session.answers.length < TARGET_COUNTS.minimum) {
+      return res.status(400).json({
+        error: `Answer at least ${TARGET_COUNTS.minimum} questions before generating the first branch.`,
+      });
+    }
+
+    const existingPrimary = session.branches.find((branch) => branch.theme === "primary");
+
+    if (existingPrimary) {
+      return sendSessionSnapshot(res, session, {
+        branch: existingPrimary,
+      });
+    }
+
+    const payload = await aiEngine.generateInitialBranch({
+      session,
+      themeId: "primary",
+      questionById: QUESTION_BY_ID,
+    });
+
+    const branch = store.createBranch(session, {
+      themeId: "primary",
+      payload,
+    });
+
+    return sendSessionSnapshot(res, session, {
+      branch,
+    });
+  } catch (error) {
+    console.error("[branches/initial]", error);
+    return res.status(error.statusCode || 500).json({
+      error: "Failed to generate the initial branch.",
     });
   }
 });
 
-app.post("/api/generate-branch", async (req, res) => {
+app.post("/api/payment/unlock-theme", (req, res) => {
   try {
-    const { reason, dream, why, parentPath } = req.body || {};
+    const { sessionId, themeId } = req.body || {};
+    const session = store.require(sessionId);
 
-    if (!reason || !dream || !why || !parentPath) {
-      return res.status(400).json({
-        error: "reason, dream, why, and parentPath are required.",
+    const theme = BRANCH_THEMES.find((item) => item.id === themeId);
+
+    if (!theme) {
+      return res.status(400).json({ error: "Unknown theme." });
+    }
+
+    const unlockedThemes = store.unlockTheme(session, themeId);
+
+    return res.json({
+      ok: true,
+      unlockedThemes,
+      receipt: {
+        id: `pay_${Date.now()}`,
+        themeId,
+        amount: 900,
+        currency: "usd",
+        status: "paid",
+        paidAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ error: error.message });
+  }
+});
+
+app.post("/api/branches/create", async (req, res) => {
+  try {
+    const { sessionId, themeId } = req.body || {};
+    const session = store.require(sessionId);
+
+    if (!themeId || themeId === "primary") {
+      return res.status(400).json({ error: "themeId must be one paid thematic branch." });
+    }
+
+    if (!store.isThemeUnlocked(session, themeId)) {
+      return res.status(402).json({
+        error: "Theme is locked. Unlock it first.",
       });
     }
 
-    const paths = await generatePaths({
-      reason,
-      dream,
-      why,
-      parentPath,
-      branchMode: true,
+    const existing = session.branches.find((branch) => branch.theme === themeId);
+
+    if (existing) {
+      return sendSessionSnapshot(res, session, { branch: existing });
+    }
+
+    const payload = await aiEngine.generateInitialBranch({
+      session,
+      themeId,
+      questionById: QUESTION_BY_ID,
     });
 
-    return res.json({ paths });
+    const branch = store.createBranch(session, {
+      themeId,
+      payload,
+    });
+
+    return sendSessionSnapshot(res, session, {
+      branch,
+    });
   } catch (error) {
-    console.error("[generate-branch]", error);
-    return res.status(500).json({
-      error:
-        error.message === "OPENAI_API_KEY is missing on the backend."
-          ? error.message
-          : "Failed to generate deeper life paths.",
+    console.error("[branches/create]", error);
+    return res.status(error.statusCode || 500).json({
+      error: "Failed to create branch.",
+    });
+  }
+});
+
+app.post("/api/branches/evolve", async (req, res) => {
+  try {
+    const { sessionId, branchId, nodeId, answer } = req.body || {};
+    const session = store.require(sessionId);
+    const branch = store.getBranch(session, branchId);
+
+    if (!branch) {
+      return res.status(404).json({ error: "Branch not found." });
+    }
+
+    const node = branch.nodes.find((item) => item.id === nodeId);
+
+    if (!node) {
+      return res.status(404).json({ error: "Node not found." });
+    }
+
+    if (!node.question) {
+      return res.status(400).json({ error: "This node has no further question." });
+    }
+
+    if (node.answeredChoice) {
+      return res.status(400).json({ error: "This node was already answered." });
+    }
+
+    const option = node.question.options.find((item) => item.value === answer);
+
+    if (!option) {
+      return res.status(400).json({ error: "Invalid branch answer option." });
+    }
+
+    const evolution = await aiEngine.evolveBranch({
+      session,
+      branch,
+      node,
+      answerLabel: option.label,
+      questionById: QUESTION_BY_ID,
+    });
+
+    const nextNode = store.appendNode(session, branch, {
+      parentNodeId: nodeId,
+      parentAnswer: answer,
+      parentAnswerLabel: option.label,
+      nextNodeTitle: evolution.nextNodeTitle,
+      nextNodeSummary: evolution.nextNodeSummary,
+      clarityGain: evolution.clarityGain,
+      riskNote: evolution.riskNote,
+      question: evolution.question,
+      shouldStop: evolution.shouldStop,
+    });
+
+    return sendSessionSnapshot(res, session, {
+      branch,
+      nextNode,
+    });
+  } catch (error) {
+    console.error("[branches/evolve]", error);
+    return res.status(error.statusCode || 500).json({
+      error: "Failed to evolve branch.",
     });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`Life Path Explorer API listening on http://localhost:${PORT}`);
+  console.log(`Working Name API listening on http://localhost:${PORT}`);
 });
