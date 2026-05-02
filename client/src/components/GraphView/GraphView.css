@@ -1,0 +1,45 @@
+.graph-view {
+  width: 100%;
+  height: 100%;
+}
+
+.react-flow__attribution {
+  display: none;
+}
+
+.graph-controls {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.graph-controls button {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border) !important;
+  border-radius: 2px !important;
+  color: var(--color-text-muted);
+  box-shadow: none !important;
+  width: 28px;
+  height: 28px;
+}
+
+.graph-controls button:hover {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.react-flow__edge-path {
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.branch-edge {
+  fill: none;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: branch-draw 800ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes branch-draw {
+  to { stroke-dashoffset: 0; }
+}

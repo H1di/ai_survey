@@ -1,0 +1,125 @@
+.tradeoff-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(255,255,255,0.9);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 24px;
+}
+
+.tradeoff-modal {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  padding: 48px;
+  max-width: 520px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+}
+
+.tradeoff-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  font-size: 20px;
+  color: var(--color-text-muted);
+  transition: color var(--transition);
+}
+
+.tradeoff-close:hover { color: var(--color-text); }
+
+.tradeoff-path-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  margin-bottom: 8px;
+}
+
+.tradeoff-title {
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  margin-bottom: 12px;
+}
+
+.tradeoff-subtitle {
+  font-size: 14px;
+  color: var(--color-text-muted);
+  margin-bottom: 40px;
+  line-height: 1.5;
+}
+
+.tradeoff-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.tradeoff-q-text {
+  font-size: 16px;
+  font-weight: 300;
+  letter-spacing: -0.01em;
+  margin-bottom: 16px;
+  color: var(--color-text);
+  line-height: 1.4;
+}
+
+.tradeoff-q-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tradeoff-option {
+  padding: 13px 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--color-text);
+  text-align: left;
+  transition: all var(--transition);
+  background: transparent;
+}
+
+.tradeoff-option:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface);
+}
+
+.tradeoff-option.selected {
+  border-color: var(--color-text);
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.tradeoff-footer {
+  margin-top: 40px;
+  padding-top: 32px;
+  border-top: 1px solid var(--color-border);
+}
+
+.tradeoff-submit {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-text);
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-text);
+  transition: all var(--transition);
+}
+
+.tradeoff-submit:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.tradeoff-submit:not(:disabled):hover {
+  letter-spacing: 0.02em;
+}
