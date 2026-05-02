@@ -1,0 +1,25 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  font-family: "Inter", "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+  background: #ffffff;
+  color: #111111;
+}
+
+button,
+textarea,
+input {
+  font: inherit;
+}
