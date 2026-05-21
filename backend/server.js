@@ -2,17 +2,20 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const express = require("express");
 const { createAiEngine } = require("./aiEngine");
-const { BRANCH_THEMES } = require("./questionPool");
 const {
-  QUESTION_BY_ID,
-  TARGET_COUNTS,
-  buildProgress,
-  getQuestionById,
-  isQuestionAvailableForSession,
-  normalizeAnswer,
+  BRANCH_THEMES,
+  VALUES_DIMENSIONS,
+  DEMOGRAPHIC_QUESTIONS,
+} = require("./questionPool");
+const {
   pickNextQuestion,
-  resolveAnswerLabel,
-  serializeQuestion,
+  validateDemographicAnswer,
+  validateBigFiveAnswer,
+  validateValuesAnswer,
+  computeBigFiveScores,
+  deriveBigFiveTraits,
+  computeValuesScores,
+  buildProgress,
   summarizeAnswersForClient,
 } = require("./questionEngine");
 const { SessionStore } = require("./sessionStore");
@@ -39,10 +42,10 @@ function isValidEntryChoice(value) {
 
 function sendSessionSnapshot(res, session, extras = {}) {
   const progress = buildProgress(session);
-  const answers = summarizeAnswersForClient(session);
+  const summary = summarizeAnswersForClient(session);
 
   return res.json({
-    ...store.serializeSessionState(session, progress, answers),
+    ...store.serializeSessionState(session, progress, summary),
     ...extras,
   });
 }
@@ -56,7 +59,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.post("/api/session/start", (req, res) => {
-  const { entryChoice, dreamAnswer, premiumDepth = false } = req.body || {};
+  const { entryChoice, dreamAnswer } = req.body || {};
 
   if (!isValidEntryChoice(entryChoice)) {
     return res.status(400).json({ error: "entryChoice must be 'change' or 'find'." });
@@ -71,89 +74,133 @@ app.post("/api/session/start", (req, res) => {
   const session = store.createSession({
     entryChoice,
     dreamAnswer: normalizedDream,
-    premiumDepth,
   });
 
-  const nextQuestion = pickNextQuestion(session);
-
   return sendSessionSnapshot(res, session, {
-    nextQuestion: serializeQuestion(nextQuestion),
-    questionPoolSize: QUESTION_BY_ID.size,
-    targetRange: {
-      min: TARGET_COUNTS.minimum,
-      core: TARGET_COUNTS.core,
-      premium: TARGET_COUNTS.premium,
-    },
+    nextQuestion: pickNextQuestion(session),
+    valuesDimensions: VALUES_DIMENSIONS,
   });
 });
 
 app.get("/api/session/:sessionId", (req, res) => {
   try {
     const session = store.require(req.params.sessionId);
-    const nextQuestion = pickNextQuestion(session);
-
     return sendSessionSnapshot(res, session, {
-      nextQuestion: serializeQuestion(nextQuestion),
+      nextQuestion: pickNextQuestion(session),
+      valuesDimensions: VALUES_DIMENSIONS,
     });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ error: error.message });
   }
 });
 
-app.post("/api/session/premium", (req, res) => {
+app.post("/api/session/demographics", (req, res) => {
   try {
-    const { sessionId, premiumDepth } = req.body || {};
+    const { sessionId, questionId, value } = req.body || {};
     const session = store.require(sessionId);
 
-    store.setPremiumDepth(session, Boolean(premiumDepth));
+    if (session.step !== "demographics") {
+      return res.status(400).json({ error: "Session is past the demographics step." });
+    }
 
-    const nextQuestion = pickNextQuestion(session);
+    const normalized = validateDemographicAnswer(questionId, value);
+    store.setDemographicAnswer(session, questionId, normalized);
+
+    const allAnswered = DEMOGRAPHIC_QUESTIONS.every(
+      (q) => session.demographics[q.id] !== undefined
+    );
+    if (allAnswered) {
+      store.advanceStep(session, "depth_choice");
+    }
 
     return sendSessionSnapshot(res, session, {
-      nextQuestion: serializeQuestion(nextQuestion),
+      nextQuestion: pickNextQuestion(session),
     });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ error: error.message });
   }
 });
 
-app.post("/api/questions/answer", (req, res) => {
+app.post("/api/session/big-five-depth", async (req, res) => {
   try {
-    const { sessionId, questionId, answer } = req.body || {};
-
+    const { sessionId, depth } = req.body || {};
     const session = store.require(sessionId);
-    const question = getQuestionById(questionId);
 
-    if (!question) {
-      return res.status(404).json({ error: "Question not found." });
+    if (session.step !== "depth_choice") {
+      return res
+        .status(400)
+        .json({ error: "Big Five depth already chosen or not yet available." });
+    }
+    if (depth !== "short" && depth !== "deep") {
+      return res.status(400).json({ error: "depth must be 'short' or 'deep'." });
     }
 
-    if (!isQuestionAvailableForSession(question, session)) {
-      return res.status(400).json({
-        error:
-          "This question is not currently available. Continue with the suggested next question.",
-      });
-    }
+    const items = await aiEngine.generateBigFiveItems({ depth });
+    store.setBigFiveDepthAndItems(session, depth, items);
+    store.advanceStep(session, "big_five");
 
-    const normalizedAnswer = normalizeAnswer(question, answer);
-
-    store.upsertAnswer(session, {
-      questionId,
-      answer: normalizedAnswer,
+    return sendSessionSnapshot(res, session, {
+      nextQuestion: pickNextQuestion(session),
     });
+  } catch (error) {
+    console.error("[session/big-five-depth]", error);
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: "Failed to start Big Five." });
+  }
+});
 
-    const progress = buildProgress(session);
-    const nextQuestion = pickNextQuestion(session);
+app.post("/api/big-five/answer", (req, res) => {
+  try {
+    const { sessionId, itemId, value } = req.body || {};
+    const session = store.require(sessionId);
 
-    return res.json({
-      ok: true,
-      progress,
-      recordedAnswer: {
-        questionId,
-        answer: normalizedAnswer,
-        answerLabel: resolveAnswerLabel(question, normalizedAnswer),
-      },
-      nextQuestion: serializeQuestion(nextQuestion),
+    if (session.step !== "big_five") {
+      return res.status(400).json({ error: "Not currently in the Big Five step." });
+    }
+
+    const normalized = validateBigFiveAnswer(session, itemId, value);
+    store.recordBigFiveAnswer(session, itemId, normalized);
+
+    const allAnswered = session.bigFiveItems.every(
+      (i) => session.bigFiveAnswers[i.id] !== undefined
+    );
+    if (allAnswered) {
+      const scores = computeBigFiveScores(session);
+      const derived = deriveBigFiveTraits(scores);
+      store.setBigFiveScores(session, scores, derived);
+      store.advanceStep(session, "values");
+    }
+
+    return sendSessionSnapshot(res, session, {
+      nextQuestion: pickNextQuestion(session),
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ error: error.message });
+  }
+});
+
+app.post("/api/values/answer", (req, res) => {
+  try {
+    const { sessionId, questionId, choice } = req.body || {};
+    const session = store.require(sessionId);
+
+    if (session.step !== "values") {
+      return res.status(400).json({ error: "Not currently in the values step." });
+    }
+
+    const normalized = validateValuesAnswer(questionId, choice);
+    store.recordValuesAnswer(session, questionId, normalized);
+
+    const { scores, answered } = computeValuesScores(session);
+    if (scores) {
+      store.setValuesScores(session, scores);
+      store.advanceStep(session, "complete");
+    }
+
+    return sendSessionSnapshot(res, session, {
+      nextQuestion: pickNextQuestion(session),
+      valuesAnswered: answered,
     });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ error: error.message });
@@ -165,9 +212,9 @@ app.post("/api/branches/initial", async (req, res) => {
     const { sessionId } = req.body || {};
     const session = store.require(sessionId);
 
-    if (session.answers.length < TARGET_COUNTS.minimum) {
+    if (session.step !== "complete") {
       return res.status(400).json({
-        error: `Answer at least ${TARGET_COUNTS.minimum} questions before generating the first branch.`,
+        error: "Complete the assessment before generating the first branch.",
       });
     }
 
@@ -182,7 +229,6 @@ app.post("/api/branches/initial", async (req, res) => {
     const payload = await aiEngine.generateInitialBranch({
       session,
       themeId: "primary",
-      questionById: QUESTION_BY_ID,
     });
 
     const branch = store.createBranch(session, {
@@ -255,7 +301,6 @@ app.post("/api/branches/create", async (req, res) => {
     const payload = await aiEngine.generateInitialBranch({
       session,
       themeId,
-      questionById: QUESTION_BY_ID,
     });
 
     const branch = store.createBranch(session, {
@@ -309,7 +354,6 @@ app.post("/api/branches/evolve", async (req, res) => {
       branch,
       node,
       answerLabel: option.label,
-      questionById: QUESTION_BY_ID,
     });
 
     const nextNode = store.appendNode(session, branch, {
