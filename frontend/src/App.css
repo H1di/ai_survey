@@ -471,3 +471,135 @@
     width: 240px;
   }
 }
+
+/* Depth choice */
+.depth-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.depth-card {
+  appearance: none;
+  border: 1px solid #111111;
+  background: #ffffff;
+  color: #111111;
+  border-radius: 20px;
+  padding: 24px;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, opacity 160ms ease;
+}
+.depth-card:hover:enabled {
+  background: #111111;
+  color: #ffffff;
+}
+.depth-title {
+  margin: 0 0 6px;
+  font-weight: 600;
+  font-size: 1.2rem;
+}
+.depth-meta {
+  margin: 0;
+  color: #555555;
+}
+.depth-loading {
+  margin: 8px 0 0;
+  color: #444444;
+  font-size: 0.9rem;
+}
+
+/* Likert */
+.likert-row {
+  display: grid;
+  gap: 8px;
+}
+.likert-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+.likert-value {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.likert-label {
+  font-size: 0.98rem;
+}
+
+/* Values A/B */
+.values-card {
+  gap: 14px;
+}
+.dimension-header {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.dimension-emoji {
+  font-size: 1.3rem;
+}
+.dimension-label {
+  letter-spacing: -0.01em;
+}
+.dimension-counter {
+  color: #777777;
+  font-weight: 400;
+  font-size: 0.92rem;
+}
+
+.ab-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.ab-option {
+  appearance: none;
+  border: 1px solid #111111;
+  background: #ffffff;
+  color: #111111;
+  border-radius: 20px;
+  padding: 18px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 160ms ease, color 160ms ease, opacity 160ms ease;
+}
+.ab-option:hover:enabled {
+  background: #111111;
+  color: #ffffff;
+}
+.ab-tag {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.ab-text {
+  line-height: 1.35;
+  font-size: 1.02rem;
+}
+
+@media (max-width: 760px) {
+  .depth-options,
+  .ab-pair {
+    grid-template-columns: 1fr;
+  }
+}
