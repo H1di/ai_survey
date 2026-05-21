@@ -6,21 +6,74 @@ const BASE_SYSTEM = [
   "Write concise outputs and avoid buzzwords.",
 ].join(" ");
 
-function buildProfileDigest({ entryChoice, dreamAnswer, answers }) {
+function buildProfileDigest({
+  entryChoice,
+  dreamAnswer,
+  demographics,
+  bigFiveScores,
+  derivedTraits,
+  valuesScores,
+  valuesDimensions,
+}) {
   const lines = [];
   lines.push(`Entry intent: ${entryChoice}`);
   lines.push(`Dream answer: ${dreamAnswer}`);
 
-  if (!answers.length) {
-    lines.push("No additional analysis answers provided yet.");
-  } else {
-    lines.push("Analysis signals:");
-    answers.forEach((item) => {
-      lines.push(`- ${item.question}: ${item.answerLabel || item.answer}`);
-    });
+  if (demographics && Object.keys(demographics).length) {
+    lines.push("Demographics:");
+    if (demographics.sex !== undefined) lines.push(`- Sex: ${demographics.sex}`);
+    if (demographics.age !== undefined) lines.push(`- Age: ${demographics.age}`);
+    if (demographics.country !== undefined) lines.push(`- Country: ${demographics.country}`);
+  }
+
+  if (bigFiveScores) {
+    lines.push("Big Five (0–100):");
+    lines.push(`- Openness: ${bigFiveScores.O}`);
+    lines.push(`- Conscientiousness: ${bigFiveScores.C}`);
+    lines.push(`- Extraversion: ${bigFiveScores.E}`);
+    lines.push(`- Agreeableness: ${bigFiveScores.A}`);
+    lines.push(`- Neuroticism: ${bigFiveScores.N}`);
+  }
+
+  if (derivedTraits) {
+    lines.push(
+      `Derived: behaviour tendencies=${derivedTraits.behaviourTendencies}, decision priorities=${derivedTraits.decisionPriorities}.`
+    );
+    if (derivedTraits.summary) lines.push(`Trait summary: ${derivedTraits.summary}`);
+  }
+
+  if (valuesScores && valuesDimensions) {
+    lines.push("Values inventory (0–5, A-choices per dimension):");
+    for (const dim of valuesDimensions) {
+      const score = valuesScores[dim.id];
+      if (score === undefined) continue;
+      lines.push(`- ${dim.emoji} ${dim.label}: ${score}/5`);
+    }
   }
 
   return lines.join("\n");
+}
+
+function buildBigFiveItemsPrompt(depth) {
+  const count = depth === "deep" ? 50 : 20;
+  const perTrait = count / 5;
+
+  const system = [
+    "You generate Big Five (OCEAN) self-report items in the style of the IPIP item pool.",
+    "Return valid JSON only. No prose, no markdown fences, no commentary.",
+    `JSON schema: {"items":[{"id":"item_1","trait":"O|C|E|A|N","reverse":true|false,"text":"..."}]}`,
+    `Generate exactly ${count} items.`,
+    `Distribute exactly ${perTrait} items per trait across O, C, E, A, N.`,
+    "Roughly half of each trait's items should be reverse-keyed (reverse: true).",
+    "Each `text` is a first-person statement (e.g., 'I am the life of the party.', 'I rarely worry.').",
+    "Items must be answerable on a 1–5 Likert (Strongly disagree → Strongly agree).",
+    "Avoid double-barrelled or negated-twice phrasings. Keep each item under 90 characters.",
+    "Use varied phrasings per session; do not output identical wording each call.",
+  ].join(" ");
+
+  const user = `Generate ${count} Big Five items now.`;
+
+  return { system, user };
 }
 
 function buildInitialBranchPrompts({ profileDigest, theme }) {
@@ -32,7 +85,8 @@ function buildInitialBranchPrompts({ profileDigest, theme }) {
   const system = [
     BASE_SYSTEM,
     "Generate one initial life path branch.",
-    "The branch must integrate motivations, values, psychological style, and real constraints.",
+    "Integrate demographics, Big Five personality scores, derived traits, and the 8-dimension values inventory.",
+    "Reflect the user's strongest values dimensions (highest scores) in the path's tradeoffs.",
     "Return valid JSON only and no extra keys.",
     'JSON schema: {"title":"","thesis":"","whyFit":"","firstMilestone":"","constraintsNote":"","question":{"text":"","options":[{"value":"","label":""}]}}',
     "question.options must have exactly 4 options.",
@@ -47,6 +101,7 @@ function buildInitialBranchPrompts({ profileDigest, theme }) {
     "Constraints:",
     "- Keep the branch realistic and grounded in labor-market reality.",
     "- Avoid generic motivational language.",
+    "- Reflect the dominant values dimensions in the whyFit copy.",
     "- The branch should feel immediately actionable.",
   ].join("\n\n");
 
@@ -60,6 +115,7 @@ function buildEvolutionPrompts({ profileDigest, branch, node, answerLabel }) {
     "Return valid JSON only and no extra keys.",
     'JSON schema: {"nextNodeTitle":"","nextNodeSummary":"","clarityGain":"","riskNote":"","question":{"text":"","options":[{"value":"","label":""}]},"shouldStop":false}',
     "question.options must have exactly 4 options.",
+    "Continue to reflect the user's values dimensions and personality scores in the tradeoff design.",
     "If clarity is already high, you may set shouldStop true.",
   ].join(" ");
 
@@ -83,6 +139,7 @@ function buildEvolutionPrompts({ profileDigest, branch, node, answerLabel }) {
 
 module.exports = {
   buildProfileDigest,
+  buildBigFiveItemsPrompt,
   buildInitialBranchPrompts,
   buildEvolutionPrompts,
 };
