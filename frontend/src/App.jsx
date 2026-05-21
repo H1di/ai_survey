@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import ReactFlow, { Controls, MarkerType } from "reactflow";
-import "reactflow/dist/style.css";
+import { useState } from "react";
+import { AnimatePresence, motion as Motion } from "framer-motion";
+import GraphView from "./components/GraphView";
+import TradeoffModal from "./components/GraphView/TradeoffModal";
+import { DetailPanel } from "./components/GraphView/NodeComponent";
 import {
   chooseBigFiveDepth,
   createThematicBranch,
@@ -13,8 +15,8 @@ import {
   unlockTheme,
 } from "./api";
 import "./App.css";
+import "./components/GraphView/GraphPage.css";
 
-const ROOT_NODE_ID = "root-me";
 const ENTRY_OPTIONS = [
   { value: "change", label: "Change my career" },
   { value: "find", label: "Find my career" },
@@ -202,116 +204,168 @@ function ValuesQuestionCard({ q, busy, onChoose, progress }) {
   );
 }
 
-function TreeNode({ data, selected }) {
-  if (data.isRoot) {
-    return (
-      <div className={`tree-node root-node ${selected ? "selected" : ""}`}>
-        <span>Me</span>
-      </div>
-    );
-  }
+const ME_NODE = { id: "me", type: "me", position: { x: 0, y: 0 }, data: {} };
 
-  return (
-    <div className={`tree-node path-node ${selected ? "selected" : ""}`}>
-      <p className="path-theme">{data.themeLabel}</p>
-      <h3>{data.title}</h3>
-      <p>{data.summary}</p>
-      {data.answeredChoiceLabel && (
-        <p className="node-answer">Answer: {data.answeredChoiceLabel}</p>
-      )}
-      <p className="node-status">
-        {data.question
-          ? "Click to continue exploration"
-          : data.shouldStop
-            ? "Clarity reached"
-            : "Path snapshot"}
-      </p>
-    </div>
-  );
+// Layout: primary in center, unlockable themes spread on a row below "Me".
+const BRANCH_COLUMN_GAP = 340;
+const BRANCH_Y = 260;
+const CHILD_VSPACING = 240;
+
+function branchColumnX(branchIndex, branchCount) {
+  return (branchIndex - (branchCount - 1) / 2) * BRANCH_COLUMN_GAP;
 }
 
-function buildGraph(branches) {
-  const nodes = [
-    {
-      id: ROOT_NODE_ID,
-      type: "treeNode",
-      position: { x: 0, y: 0 },
-      draggable: false,
-      data: { isRoot: true },
-    },
+function buildGraphFromState({
+  branches,
+  themes,
+  unlockedThemes,
+  expandingBranchId,
+  evolvingBranchId,
+  onExpandBranch,
+  onUnlockTheme,
+  onCreateTheme,
+  onSelectVariation,
+}) {
+  // Order: primary first, then any other created branches, then locked theme slots.
+  const createdById = new Map(branches.map((b) => [b.theme, b]));
+  const themeOrder = [
+    "primary",
+    ...themes.filter((t) => t.id !== "primary").map((t) => t.id),
   ];
 
+  // Render slots only for themes that are created OR available to unlock.
+  const slots = themeOrder.map((themeId) => {
+    if (themeId === "primary") {
+      return { kind: "primary", themeId, branch: createdById.get("primary") || null };
+    }
+    const theme = themes.find((t) => t.id === themeId);
+    const branch = createdById.get(themeId) || null;
+    const unlocked = unlockedThemes.includes(themeId);
+    return { kind: "theme", themeId, theme, branch, unlocked };
+  });
+
+  const visibleSlots = slots.filter((slot) => {
+    if (slot.kind === "primary") return Boolean(slot.branch);
+    return true; // show all theme slots (locked or unlocked)
+  });
+
+  const nodes = [ME_NODE];
   const edges = [];
-  const branchCount = Math.max(1, branches.length);
 
-  branches.forEach((branch, branchIndex) => {
-    const branchOffset = (branchIndex - (branchCount - 1) / 2) * 420;
+  visibleSlots.forEach((slot, index) => {
+    const x = branchColumnX(index, visibleSlots.length);
 
-    branch.nodes.forEach((node, nodeIndex) => {
-      const graphNodeId = `${branch.id}::${node.id}`;
+    if (slot.kind === "primary" || slot.branch) {
+      const branch = slot.branch;
+      const rootBranchNode = branch.nodes[0];
+      const isExpanding = expandingBranchId === branch.id;
 
       nodes.push({
-        id: graphNodeId,
-        type: "treeNode",
-        position: {
-          x: branchOffset,
-          y: 220 + nodeIndex * 220,
-        },
-        draggable: false,
+        id: branch.id,
+        type: "path",
+        position: { x, y: BRANCH_Y },
+        draggable: true,
         data: {
-          isRoot: false,
-          branchId: branch.id,
-          nodeId: node.id,
-          theme: branch.theme,
-          themeLabel: branch.themeLabel,
-          title: node.title,
-          summary: node.summary,
-          question: node.question,
-          shouldStop: node.shouldStop,
-          answeredChoiceLabel: node.answeredChoiceLabel,
+          archetype: branch.themeLabel,
+          title: branch.title,
+          locked: false,
+          isExpanding,
+          onExpand: rootBranchNode.question
+            ? () => onExpandBranch(branch, rootBranchNode)
+            : undefined,
         },
       });
+      edges.push({
+        id: `me-${branch.id}`,
+        source: "me",
+        target: branch.id,
+        type: "branch",
+        data: { delay: index * 180 },
+      });
 
-      if (nodeIndex === 0) {
-        edges.push({
-          id: `edge-${ROOT_NODE_ID}-${graphNodeId}`,
-          source: ROOT_NODE_ID,
-          target: graphNodeId,
+      // Render evolved variation children in sequence below the path node.
+      const childNodes = branch.nodes.slice(1);
+      childNodes.forEach((child, childIdx) => {
+        const childId = `${branch.id}::${child.id}`;
+        const parentId =
+          childIdx === 0
+            ? branch.id
+            : `${branch.id}::${branch.nodes[childIdx].id}`; // previous child
+        const childX = x;
+        const childY = BRANCH_Y + (childIdx + 1) * CHILD_VSPACING;
+
+        nodes.push({
+          id: childId,
+          type: "variation",
+          position: { x: childX, y: childY },
+          draggable: true,
+          data: {
+            title: child.title,
+            difference: child.summary,
+            onExpand: child.question
+              ? () => onExpandBranch(branch, child)
+              : () => onSelectVariation(branch, child),
+          },
         });
-      } else {
-        const prevNodeId = `${branch.id}::${branch.nodes[nodeIndex - 1].id}`;
-
         edges.push({
-          id: `edge-${prevNodeId}-${graphNodeId}`,
-          source: prevNodeId,
-          target: graphNodeId,
+          id: `${parentId}-${childId}`,
+          source: parentId,
+          target: childId,
+          type: "branch",
+          data: { delay: childIdx * 120 },
+        });
+      });
+
+      // Loading placeholder while evolve is in flight on this branch.
+      if (evolvingBranchId === branch.id) {
+        const loadingId = `${branch.id}::__loading__`;
+        const lastChildIdx = childNodes.length;
+        const parentForLoading =
+          lastChildIdx === 0
+            ? branch.id
+            : `${branch.id}::${branch.nodes[lastChildIdx].id}`;
+        nodes.push({
+          id: loadingId,
+          type: "loading",
+          position: { x, y: BRANCH_Y + (lastChildIdx + 1) * CHILD_VSPACING },
+          data: {},
+        });
+        edges.push({
+          id: `${parentForLoading}-${loadingId}`,
+          source: parentForLoading,
+          target: loadingId,
+          type: "branch",
         });
       }
-    });
+    } else if (slot.kind === "theme") {
+      // Locked theme card (or unlocked but no branch yet)
+      const id = `theme_${slot.themeId}`;
+      nodes.push({
+        id,
+        type: "path",
+        position: { x, y: BRANCH_Y },
+        draggable: true,
+        data: {
+          archetype: slot.theme.label,
+          title: slot.unlocked ? "Create this branch" : slot.theme.description,
+          locked: !slot.unlocked,
+          isExpanding: false,
+          onExpand: slot.unlocked
+            ? () => onCreateTheme(slot.themeId)
+            : () => onUnlockTheme(slot.themeId),
+        },
+      });
+      edges.push({
+        id: `me-${id}`,
+        source: "me",
+        target: id,
+        type: "branch",
+        data: { delay: index * 180 },
+      });
+    }
   });
 
   return { nodes, edges };
-}
-
-function getSelectedBranchNode(branches, selectedGraphNodeId) {
-  if (!selectedGraphNodeId || selectedGraphNodeId === ROOT_NODE_ID) {
-    return null;
-  }
-
-  const [branchId, nodeId] = selectedGraphNodeId.split("::");
-  const branch = branches.find((item) => item.id === branchId);
-
-  if (!branch) {
-    return null;
-  }
-
-  const node = branch.nodes.find((item) => item.id === nodeId);
-
-  if (!node) {
-    return null;
-  }
-
-  return { branch, node };
 }
 
 function App() {
@@ -331,10 +385,11 @@ function App() {
   const [themes, setThemes] = useState([]);
   const [unlockedThemes, setUnlockedThemes] = useState([]);
 
-  const [selectedNodeId, setSelectedNodeId] = useState(ROOT_NODE_ID);
-  const [branchAnswer, setBranchAnswer] = useState("");
-
-  const [graphInstance, setGraphInstance] = useState(null);
+  const [tradeoffContext, setTradeoffContext] = useState(null);
+  const [detailContext, setDetailContext] = useState(null);
+  const [evolvingBranchId, setEvolvingBranchId] = useState("");
+  const [expandingBranchId, setExpandingBranchId] = useState("");
+  const [graphStatus, setGraphStatus] = useState("");
 
   const [busy, setBusy] = useState({
     start: false,
@@ -350,43 +405,6 @@ function App() {
 
   const [error, setError] = useState("");
 
-  const nodeTypes = useMemo(() => ({ treeNode: TreeNode }), []);
-  const graph = useMemo(() => buildGraph(branches), [branches]);
-
-  const selected = useMemo(
-    () => getSelectedBranchNode(branches, selectedNodeId),
-    [branches, selectedNodeId]
-  );
-
-  const defaultEdgeOptions = useMemo(
-    () => ({
-      type: "smoothstep",
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-        color: "#111111",
-      },
-      style: {
-        stroke: "#111111",
-        strokeWidth: 1,
-      },
-    }),
-    []
-  );
-
-  useEffect(() => {
-    if (stage !== "tree" || !graphInstance) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      graphInstance.fitView({
-        duration: 350,
-        padding: 0.22,
-      });
-    }, 40);
-
-    return () => window.clearTimeout(timer);
-  }, [stage, graphInstance, branches]);
 
   const applySessionSnapshot = (data) => {
     setSessionId(data.sessionId);
@@ -502,14 +520,6 @@ function App() {
     try {
       const data = await generateInitialBranch({ sessionId });
       applySessionSnapshot(data);
-
-      const primary = data.branches?.find((branch) => branch.theme === "primary");
-      if (primary && primary.nodes[0]) {
-        setSelectedNodeId(`${primary.id}::${primary.nodes[0].id}`);
-      } else {
-        setSelectedNodeId(ROOT_NODE_ID);
-      }
-      setBranchAnswer("");
       setStage("tree");
     } catch (e) {
       setError(e.message || "Could not generate first branch.");
@@ -522,11 +532,14 @@ function App() {
     if (!sessionId || !themeId) return;
     setError("");
     setBusy((p) => ({ ...p, unlockThemeId: themeId }));
+    setGraphStatus("Unlocking…");
     try {
       const data = await unlockTheme({ sessionId, themeId });
       setUnlockedThemes(data.unlockedThemes || []);
+      setGraphStatus("");
     } catch (e) {
       setError(e.message || "Could not unlock theme.");
+      setGraphStatus("");
     } finally {
       setBusy((p) => ({ ...p, unlockThemeId: "" }));
     }
@@ -536,41 +549,61 @@ function App() {
     if (!sessionId || !themeId) return;
     setError("");
     setBusy((p) => ({ ...p, createThemeId: themeId }));
+    setGraphStatus("Mapping new direction…");
     try {
       const data = await createThematicBranch({ sessionId, themeId });
       applySessionSnapshot(data);
-      if (data.branch?.nodes?.[0]) {
-        setSelectedNodeId(`${data.branch.id}::${data.branch.nodes[0].id}`);
-        setBranchAnswer("");
-      }
+      setGraphStatus("");
     } catch (e) {
       setError(e.message || "Could not create branch.");
+      setGraphStatus("");
     } finally {
       setBusy((p) => ({ ...p, createThemeId: "" }));
     }
   };
 
-  const handleEvolveBranch = async () => {
-    if (!selected || !sessionId || !branchAnswer) return;
+  const handleOpenTradeoff = (branch, node) => {
+    if (!branch || !node?.question) return;
+    setExpandingBranchId(branch.id);
+    setTradeoffContext({ branch, node });
+  };
+
+  const handleTradeoffClose = () => {
+    setTradeoffContext(null);
+    setExpandingBranchId("");
+  };
+
+  const handleTradeoffSubmit = async (answers) => {
+    if (!tradeoffContext) return;
+    const { branch, node } = tradeoffContext;
+    const picked = answers[0];
+    if (!picked) return;
+    const option = node.question.options.find((o) => o.label === picked.answer);
+    if (!option) return;
+
+    setTradeoffContext(null);
+    setExpandingBranchId("");
+    setEvolvingBranchId(branch.id);
     setError("");
     setBusy((p) => ({ ...p, evolve: true }));
     try {
       const data = await evolveBranch({
         sessionId,
-        branchId: selected.branch.id,
-        nodeId: selected.node.id,
-        answer: branchAnswer,
+        branchId: branch.id,
+        nodeId: node.id,
+        answer: option.value,
       });
-      setBranches(data.branches || []);
-      if (data.nextNode?.id) {
-        setSelectedNodeId(`${selected.branch.id}::${data.nextNode.id}`);
-        setBranchAnswer("");
-      }
+      applySessionSnapshot(data);
     } catch (e) {
       setError(e.message || "Could not evolve branch.");
     } finally {
       setBusy((p) => ({ ...p, evolve: false }));
+      setEvolvingBranchId("");
     }
+  };
+
+  const handleSelectVariation = (branch, node) => {
+    setDetailContext({ branch, node });
   };
 
   const resetAll = () => {
@@ -586,8 +619,11 @@ function App() {
     setBranches([]);
     setThemes([]);
     setUnlockedThemes([]);
-    setSelectedNodeId(ROOT_NODE_ID);
-    setBranchAnswer("");
+    setTradeoffContext(null);
+    setDetailContext(null);
+    setEvolvingBranchId("");
+    setExpandingBranchId("");
+    setGraphStatus("");
     setError("");
     setBusy({
       start: false,
@@ -602,11 +638,17 @@ function App() {
     });
   };
 
-  const createdThemes = new Set(
-    branches
-      .map((branch) => branch.theme)
-      .filter((theme) => theme && theme !== "primary")
-  );
+  const graph = buildGraphFromState({
+    branches,
+    themes,
+    unlockedThemes,
+    expandingBranchId,
+    evolvingBranchId,
+    onExpandBranch: handleOpenTradeoff,
+    onUnlockTheme: handleUnlockTheme,
+    onCreateTheme: handleCreateThemeBranch,
+    onSelectVariation: handleSelectVariation,
+  });
 
   return (
     <main className="app-shell">
@@ -720,160 +762,73 @@ function App() {
       )}
 
       {stage === "tree" && (
-        <section className="tree-screen">
-          <header className="screen-header tree-header">
-            <div>
-              <h2>Life Path Engine</h2>
-              <p>
-                First branch is free. Additional thematic branches unlock
-                separately.
-              </p>
-            </div>
-            <button type="button" className="ghost-action" onClick={resetAll}>
-              Restart
+        <div className="graph-page">
+          <div className="graph-header">
+            <button type="button" className="graph-back" onClick={resetAll}>
+              ← Restart
             </button>
-          </header>
-
-          <div className="tree-layout">
-            <div className="flow-panel">
-              <ReactFlow
-                nodes={graph.nodes}
-                edges={graph.edges}
-                nodeTypes={nodeTypes}
-                onNodeClick={(_event, node) => {
-                  setSelectedNodeId(node.id);
-                  setBranchAnswer("");
-                }}
-                onInit={setGraphInstance}
-                minZoom={0.2}
-                maxZoom={1.6}
-                fitView
-                defaultEdgeOptions={defaultEdgeOptions}
-                proOptions={{ hideAttribution: true }}
-              >
-                <Controls showInteractive={false} />
-              </ReactFlow>
-            </div>
-
-            <aside className="side-panel">
-              {selected ? (
-                <>
-                  <p className="side-theme">{selected.branch.themeLabel}</p>
-                  <h3>{selected.node.title}</h3>
-                  <p>{selected.node.summary}</p>
-                  {selected.node.milestone && (
-                    <p className="side-note">
-                      <strong>Milestone:</strong> {selected.node.milestone}
-                    </p>
-                  )}
-                  {selected.node.answeredChoiceLabel && (
-                    <p className="side-note">
-                      <strong>Latest answer:</strong> {selected.node.answeredChoiceLabel}
-                    </p>
-                  )}
-                  <p className="side-note">
-                    <strong>Risk:</strong> {selected.node.riskNote}
-                  </p>
-
-                  {selected.node.question ? (
-                    <div className="tradeoff-box">
-                      <p className="tradeoff-title">Tradeoff question</p>
-                      <p>{selected.node.question.text}</p>
-                      <div className="option-list compact">
-                        {selected.node.question.options.map((option) => (
-                          <button
-                            key={option.value}
-                            type="button"
-                            className={`option-button ${branchAnswer === option.value ? "selected" : ""}`}
-                            onClick={() => setBranchAnswer(option.value)}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                      <button
-                        type="button"
-                        className="primary-action"
-                        onClick={handleEvolveBranch}
-                        disabled={!branchAnswer || busy.evolve}
-                      >
-                        {busy.evolve ? "Evolving..." : "Continue this branch"}
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="tradeoff-box">
-                      <p className="tradeoff-title">Branch status</p>
-                      <p>
-                        {selected.node.shouldStop
-                          ? "This branch reached a strong clarity point."
-                          : "Select another node to continue exploring."}
-                      </p>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <h3>Me</h3>
-                  <p>
-                    Select a branch node to continue exploration through adaptive
-                    tradeoff decisions.
-                  </p>
-                </>
-              )}
-
-              <div className="theme-section">
-                <h4>Unlock New Branches</h4>
-                <p className="theme-caption">
-                  New branches evolve independently and do not change existing
-                  branches.
-                </p>
-                <div className="theme-list">
-                  {themes.map((theme) => {
-                    if (theme.id === "primary") {
-                      return null;
-                    }
-
-                    const isCreated = createdThemes.has(theme.id);
-                    const isUnlocked = unlockedThemes.includes(theme.id);
-                    const isUnlockBusy = busy.unlockThemeId === theme.id;
-                    const isCreateBusy = busy.createThemeId === theme.id;
-
-                    return (
-                      <div key={theme.id} className="theme-card">
-                        <p className="theme-title">{theme.label}</p>
-                        <p>{theme.description}</p>
-
-                        {isCreated ? (
-                          <span className="theme-state">Exploring</span>
-                        ) : isUnlocked ? (
-                          <button
-                            type="button"
-                            className="secondary-action"
-                            onClick={() => handleCreateThemeBranch(theme.id)}
-                            disabled={isCreateBusy}
-                          >
-                            {isCreateBusy ? "Creating..." : "Create branch"}
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="secondary-action"
-                            onClick={() => handleUnlockTheme(theme.id)}
-                            disabled={isUnlockBusy}
-                          >
-                            {isUnlockBusy ? "Unlocking..." : "Unlock $9"}
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </aside>
+            <span className="graph-logo">Life Path Explorer</span>
+            <span className="graph-hint">Click a path to explore deeper</span>
           </div>
 
-          {error && <p className="error-text">{error}</p>}
-        </section>
+          {graphStatus && <div className="graph-status">{graphStatus}</div>}
+
+          <div className="graph-canvas">
+            <GraphView nodes={graph.nodes} edges={graph.edges} />
+          </div>
+
+          <AnimatePresence>
+            {tradeoffContext && (
+              <TradeoffModal
+                key="tradeoff"
+                questions={[
+                  {
+                    id: tradeoffContext.node.id,
+                    text: tradeoffContext.node.question.text,
+                    options: tradeoffContext.node.question.options.map(
+                      (o) => o.label
+                    ),
+                  },
+                ]}
+                pathTitle={tradeoffContext.node.title || tradeoffContext.branch.title}
+                onSubmit={handleTradeoffSubmit}
+                onClose={handleTradeoffClose}
+              />
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {detailContext && (
+              <Motion.div
+                key="detail"
+                initial={{ x: 20, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: 20, opacity: 0 }}
+                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <DetailPanel
+                  data={{
+                    path: {
+                      archetype: detailContext.branch.themeLabel,
+                      title: detailContext.node.title,
+                      description: detailContext.node.summary,
+                      lifestyle: detailContext.node.clarityGain,
+                      careerTrajectory: detailContext.node.milestone,
+                      financialOutlook: detailContext.node.constraintsNote,
+                      whyItFits: detailContext.node.whyFit,
+                      risks: detailContext.node.riskNote
+                        ? [detailContext.node.riskNote]
+                        : null,
+                    },
+                    onClose: () => setDetailContext(null),
+                  }}
+                />
+              </Motion.div>
+            )}
+          </AnimatePresence>
+
+          {error && <p className="error-text graph-error">{error}</p>}
+        </div>
       )}
     </main>
   );
