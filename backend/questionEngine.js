@@ -1,236 +1,249 @@
 const {
-  QUESTION_POOL,
-  TARGET_COUNTS,
-  CATEGORY_TARGETS,
+  DEMOGRAPHIC_QUESTIONS,
+  DEMOGRAPHIC_BY_ID,
+  VALUES_DIMENSIONS,
+  VALUES_QUESTIONS,
+  VALUES_BY_ID,
 } = require("./questionPool");
 
-const QUESTION_BY_ID = new Map(QUESTION_POOL.map((question) => [question.id, question]));
-
-function getQuestionById(questionId) {
-  return QUESTION_BY_ID.get(questionId) || null;
-}
-
-function getTargetCount(session) {
-  return session.premiumDepth ? TARGET_COUNTS.premium : TARGET_COUNTS.core;
-}
-
-function getAnswerMap(session) {
-  return Object.fromEntries(session.answers.map((item) => [item.questionId, item.answer]));
-}
-
-function getCategoryCounts(session) {
-  return session.answers.reduce((acc, item) => {
-    const question = getQuestionById(item.questionId);
-
-    if (!question) {
-      return acc;
-    }
-
-    acc[question.category] = (acc[question.category] || 0) + 1;
-    return acc;
-  }, {});
-}
-
-function dependencySatisfied(dep, answerMap) {
-  const currentValue = answerMap[dep.id];
-
-  if (currentValue === undefined) {
-    return false;
-  }
-
-  if (!dep.values || dep.values.length === 0) {
-    return true;
-  }
-
-  return dep.values.includes(currentValue);
-}
-
-function isQuestionAvailable(question, session, answerMap) {
-  if (session.answers.some((item) => item.questionId === question.id)) {
-    return false;
-  }
-
-  if (question.module === "premium" && !session.premiumDepth) {
-    return false;
-  }
-
-  if (question.dependsOn && question.dependsOn.length > 0) {
-    return question.dependsOn.every((dep) => dependencySatisfied(dep, answerMap));
-  }
-
-  return true;
-}
-
-function isQuestionAvailableForSession(question, session) {
-  const answerMap = getAnswerMap(session);
-  return isQuestionAvailable(question, session, answerMap);
-}
-
-function getQuestionScore(question, session, answerMap, categoryCounts) {
-  const categoryTarget = CATEGORY_TARGETS[question.category] || 2;
-  const currentCount = categoryCounts[question.category] || 0;
-  const deficit = Math.max(0, categoryTarget - currentCount);
-
-  let score = (question.priority || 0) + deficit * 10;
-
-  if (question.kind === "text") {
-    score -= 3;
-  }
-
-  if (question.boostIf && question.boostIf.length > 0) {
-    question.boostIf.forEach((rule) => {
-      if (dependencySatisfied(rule, answerMap)) {
-        score += 6;
-      }
-    });
-  }
-
-  if (session.entryChoice === "change" && question.category === "career_reality") {
-    score += 3;
-  }
-
-  if (session.entryChoice === "find" && question.category === "psychology") {
-    score += 2;
-  }
-
-  const answeredCount = session.answers.length;
-  const targetCount = getTargetCount(session);
-
-  if (answeredCount >= targetCount - 2 && question.category === "values") {
-    score += 4;
-  }
-
-  return score;
-}
+const TRAIT_KEYS = ["O", "C", "E", "A", "N"];
 
 function pickNextQuestion(session) {
-  const answerMap = getAnswerMap(session);
-  const categoryCounts = getCategoryCounts(session);
-
-  const candidates = QUESTION_POOL.filter((question) =>
-    isQuestionAvailable(question, session, answerMap)
-  );
-
-  if (!candidates.length) {
-    return null;
+  switch (session.step) {
+    case "demographics":
+      return pickNextDemographic(session);
+    case "big_five":
+      return pickNextBigFive(session);
+    case "values":
+      return pickNextValue(session);
+    default:
+      return null;
   }
-
-  const ranked = candidates
-    .map((question) => ({
-      question,
-      score: getQuestionScore(question, session, answerMap, categoryCounts),
-    }))
-    .sort((a, b) => {
-      if (b.score !== a.score) {
-        return b.score - a.score;
-      }
-
-      if ((b.question.priority || 0) !== (a.question.priority || 0)) {
-        return (b.question.priority || 0) - (a.question.priority || 0);
-      }
-
-      return a.question.id.localeCompare(b.question.id);
-    });
-
-  return ranked[0].question;
 }
 
-function serializeQuestion(question) {
-  if (!question) {
+function pickNextDemographic(session) {
+  for (const q of DEMOGRAPHIC_QUESTIONS) {
+    if (!session.demographics || session.demographics[q.id] === undefined) {
+      return { stage: "demographics", question: serializeDemographic(q) };
+    }
+  }
+  return null;
+}
+
+function pickNextBigFive(session) {
+  if (!session.bigFiveItems || !session.bigFiveItems.length) {
     return null;
   }
+  for (const item of session.bigFiveItems) {
+    if (session.bigFiveAnswers[item.id] === undefined) {
+      return { stage: "big_five", question: { ...item } };
+    }
+  }
+  return null;
+}
 
+function pickNextValue(session) {
+  for (const q of VALUES_QUESTIONS) {
+    if (session.valuesAnswers[q.id] === undefined) {
+      return { stage: "values", question: serializeValueQuestion(q) };
+    }
+  }
+  return null;
+}
+
+function serializeDemographic(q) {
   return {
-    id: question.id,
-    category: question.category,
-    module: question.module,
-    kind: question.kind,
-    question: question.question,
-    placeholder: question.placeholder || "",
-    options: Array.isArray(question.options)
-      ? question.options.map((option) => ({ ...option }))
-      : [],
+    id: q.id,
+    kind: q.kind,
+    question: q.question,
+    options: q.options || [],
+    placeholder: q.placeholder || "",
+    min: q.min,
+    max: q.max,
   };
 }
 
-function normalizeAnswer(question, rawAnswer) {
-  if (!question) {
-    throw new Error("Question not found.");
-  }
-
-  if (question.kind === "text") {
-    const normalized = typeof rawAnswer === "string" ? rawAnswer.trim() : "";
-
-    if (!normalized) {
-      throw new Error("Text answer cannot be empty.");
-    }
-
-    if (normalized.length > 500) {
-      throw new Error("Text answer is too long.");
-    }
-
-    return normalized;
-  }
-
-  const normalized = typeof rawAnswer === "string" ? rawAnswer.trim() : "";
-
-  if (!normalized) {
-    throw new Error("Please select an answer.");
-  }
-
-  const validOption = question.options.find((option) => option.value === normalized);
-
-  if (!validOption) {
-    throw new Error("Invalid answer option.");
-  }
-
-  return normalized;
+function serializeValueQuestion(q) {
+  return {
+    id: q.id,
+    dimension: q.dimension,
+    dimensionLabel: q.dimensionLabel,
+    dimensionEmoji: q.dimensionEmoji,
+    indexInGroup: q.indexInGroup,
+    optionA: q.optionA,
+    optionB: q.optionB,
+  };
 }
 
-function resolveAnswerLabel(question, answer) {
-  if (question.kind === "text") {
-    return answer;
+function validateDemographicAnswer(id, value) {
+  const q = DEMOGRAPHIC_BY_ID.get(id);
+  if (!q) throw httpErr(404, "Unknown demographic question.");
+
+  if (q.kind === "single") {
+    if (typeof value !== "string" || !q.options.find((o) => o.value === value)) {
+      throw httpErr(400, "Invalid option.");
+    }
+    return value;
+  }
+  if (q.kind === "number") {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < q.min || n > q.max) {
+      throw httpErr(400, `Enter a number between ${q.min} and ${q.max}.`);
+    }
+    return n;
+  }
+  if (q.kind === "text") {
+    const s = typeof value === "string" ? value.trim() : "";
+    if (!s) throw httpErr(400, "Answer cannot be empty.");
+    if (s.length > 80) throw httpErr(400, "Answer is too long.");
+    return s;
+  }
+  throw httpErr(400, "Unsupported question kind.");
+}
+
+function validateBigFiveAnswer(session, itemId, value) {
+  const item = (session.bigFiveItems || []).find((i) => i.id === itemId);
+  if (!item) throw httpErr(404, "Unknown Big Five item.");
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1 || n > 5) {
+    throw httpErr(400, "Big Five answer must be an integer 1–5.");
+  }
+  return n;
+}
+
+function validateValuesAnswer(questionId, choice) {
+  const q = VALUES_BY_ID.get(questionId);
+  if (!q) throw httpErr(404, "Unknown values question.");
+  if (choice !== "A" && choice !== "B") {
+    throw httpErr(400, "Choice must be 'A' or 'B'.");
+  }
+  return choice;
+}
+
+function httpErr(status, message) {
+  const err = new Error(message);
+  err.statusCode = status;
+  return err;
+}
+
+function computeBigFiveScores(session) {
+  if (!session.bigFiveItems || !session.bigFiveItems.length) return null;
+
+  const sum = { O: 0, C: 0, E: 0, A: 0, N: 0 };
+  const count = { O: 0, C: 0, E: 0, A: 0, N: 0 };
+
+  for (const item of session.bigFiveItems) {
+    const raw = session.bigFiveAnswers[item.id];
+    if (raw === undefined) return null;
+    const scored = item.reverse ? 6 - raw : raw;
+    sum[item.trait] += scored;
+    count[item.trait] += 1;
   }
 
-  return question.options.find((option) => option.value === answer)?.label || answer;
+  const scores = {};
+  for (const k of TRAIT_KEYS) {
+    if (!count[k]) {
+      scores[k] = 50;
+    } else {
+      const mean = sum[k] / count[k];
+      scores[k] = Math.round(((mean - 1) / 4) * 100);
+    }
+  }
+  return scores;
+}
+
+function deriveBigFiveTraits(scores) {
+  if (!scores) return null;
+  const invertedN = 100 - scores.N;
+  const behaviourTendencies = Math.round((scores.A + scores.C + invertedN) / 3);
+  const decisionPriorities = Math.round((scores.O + scores.E) / 2);
+  return {
+    behaviourTendencies,
+    decisionPriorities,
+    summary: describeTraits({ behaviourTendencies, decisionPriorities, scores }),
+  };
+}
+
+function describeTraits({ behaviourTendencies, decisionPriorities, scores }) {
+  const high = (v) => v >= 65;
+  const low = (v) => v <= 35;
+  const parts = [];
+  parts.push(
+    high(behaviourTendencies)
+      ? "Behaviour tendencies: steady, organized, low-volatility under stress."
+      : low(behaviourTendencies)
+        ? "Behaviour tendencies: volatile, reactive, less structured."
+        : "Behaviour tendencies: balanced steadiness."
+  );
+  parts.push(
+    high(decisionPriorities)
+      ? "Decision priorities: novelty-seeking, exploratory, energized by people and ideas."
+      : low(decisionPriorities)
+        ? "Decision priorities: conservative, prefers depth and routine over novelty."
+        : "Decision priorities: balanced between exploration and routine."
+  );
+  parts.push(
+    `OCEAN: O=${scores.O}, C=${scores.C}, E=${scores.E}, A=${scores.A}, N=${scores.N}`
+  );
+  return parts.join(" ");
+}
+
+function computeValuesScores(session) {
+  const totals = Object.fromEntries(VALUES_DIMENSIONS.map((d) => [d.id, 0]));
+  let answered = 0;
+  for (const q of VALUES_QUESTIONS) {
+    const choice = session.valuesAnswers[q.id];
+    if (choice === undefined) continue;
+    answered += 1;
+    if (choice === "A") totals[q.dimension] += 1;
+  }
+  if (answered < VALUES_QUESTIONS.length) return { scores: null, answered };
+  return { scores: totals, answered };
 }
 
 function buildProgress(session) {
-  const answered = session.answers.length;
-  const target = getTargetCount(session);
+  const demographicTotal = DEMOGRAPHIC_QUESTIONS.length;
+  const demographicAnswered = session.demographics
+    ? DEMOGRAPHIC_QUESTIONS.filter((q) => session.demographics[q.id] !== undefined).length
+    : 0;
+
+  const bigFiveTotal = session.bigFiveItems ? session.bigFiveItems.length : 0;
+  const bigFiveAnswered = Object.keys(session.bigFiveAnswers || {}).length;
+
+  const valuesTotal = VALUES_QUESTIONS.length;
+  const valuesAnswered = Object.keys(session.valuesAnswers || {}).length;
 
   return {
-    answered,
-    target,
-    remaining: Math.max(0, target - answered),
-    canFinish: answered >= TARGET_COUNTS.minimum,
-    done: answered >= target,
+    step: session.step,
+    demographics: { answered: demographicAnswered, total: demographicTotal },
+    bigFive: { answered: bigFiveAnswered, total: bigFiveTotal, depth: session.bigFiveDepth },
+    values: { answered: valuesAnswered, total: valuesTotal },
+    done: session.step === "complete",
   };
 }
 
 function summarizeAnswersForClient(session) {
-  return session.answers.map((item) => {
-    const question = getQuestionById(item.questionId);
-
-    return {
-      questionId: item.questionId,
-      category: question?.category || "unknown",
-      question: question?.question || item.questionId,
-      answer: item.answer,
-      answerLabel: question ? resolveAnswerLabel(question, item.answer) : item.answer,
-    };
-  });
+  return {
+    demographics: session.demographics || {},
+    bigFive: {
+      depth: session.bigFiveDepth,
+      scores: session.bigFiveScores,
+      derivedTraits: session.derivedTraits,
+    },
+    values: {
+      scores: session.valuesScores,
+    },
+  };
 }
 
 module.exports = {
-  QUESTION_BY_ID,
-  TARGET_COUNTS,
-  buildProgress,
-  getQuestionById,
-  isQuestionAvailableForSession,
-  normalizeAnswer,
   pickNextQuestion,
-  resolveAnswerLabel,
-  serializeQuestion,
+  validateDemographicAnswer,
+  validateBigFiveAnswer,
+  validateValuesAnswer,
+  computeBigFiveScores,
+  deriveBigFiveTraits,
+  computeValuesScores,
+  buildProgress,
   summarizeAnswersForClient,
 };
