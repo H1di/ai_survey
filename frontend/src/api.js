@@ -23,15 +23,29 @@ export function startSession(payload) {
   });
 }
 
-export function setPremiumDepth(payload) {
-  return request("/api/session/premium", {
+export function submitDemographics(payload) {
+  return request("/api/session/demographics", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export function answerQuestion(payload) {
-  return request("/api/questions/answer", {
+export function chooseBigFiveDepth(payload) {
+  return request("/api/session/big-five-depth", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function submitBigFiveAnswer(payload) {
+  return request("/api/big-five/answer", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function submitValuesAnswer(payload) {
+  return request("/api/values/answer", {
     method: "POST",
     body: JSON.stringify(payload),
   });
