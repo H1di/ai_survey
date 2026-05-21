@@ -8,19 +8,27 @@ class SessionStore {
     this.sessions = new Map();
   }
 
-  createSession({ entryChoice, dreamAnswer, premiumDepth }) {
+  createSession({ entryChoice, dreamAnswer }) {
     const id = randomUUID();
+    const now = new Date().toISOString();
 
     const session = {
       id,
       entryChoice,
       dreamAnswer,
-      premiumDepth: Boolean(premiumDepth),
-      answers: [],
+      step: "demographics",
+      demographics: {},
+      bigFiveDepth: null,
+      bigFiveItems: [],
+      bigFiveAnswers: {},
+      bigFiveScores: null,
+      derivedTraits: null,
+      valuesAnswers: {},
+      valuesScores: null,
       branches: [],
       unlockedThemes: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
       branchCounter: 0,
     };
 
@@ -48,31 +56,44 @@ class SessionStore {
     session.updatedAt = new Date().toISOString();
   }
 
-  setPremiumDepth(session, enabled) {
-    session.premiumDepth = Boolean(enabled);
+  setDemographicAnswer(session, questionId, value) {
+    session.demographics[questionId] = value;
     this.touch(session);
-    return session.premiumDepth;
   }
 
-  upsertAnswer(session, { questionId, answer }) {
-    const existingIndex = session.answers.findIndex(
-      (item) => item.questionId === questionId
-    );
-
-    const answerRecord = {
-      questionId,
-      answer,
-      answeredAt: new Date().toISOString(),
-    };
-
-    if (existingIndex >= 0) {
-      session.answers[existingIndex] = answerRecord;
-    } else {
-      session.answers.push(answerRecord);
-    }
-
+  advanceStep(session, nextStep) {
+    session.step = nextStep;
     this.touch(session);
-    return answerRecord;
+  }
+
+  setBigFiveDepthAndItems(session, depth, items) {
+    session.bigFiveDepth = depth;
+    session.bigFiveItems = items;
+    session.bigFiveAnswers = {};
+    session.bigFiveScores = null;
+    session.derivedTraits = null;
+    this.touch(session);
+  }
+
+  recordBigFiveAnswer(session, itemId, value) {
+    session.bigFiveAnswers[itemId] = value;
+    this.touch(session);
+  }
+
+  setBigFiveScores(session, scores, derivedTraits) {
+    session.bigFiveScores = scores;
+    session.derivedTraits = derivedTraits;
+    this.touch(session);
+  }
+
+  recordValuesAnswer(session, questionId, choice) {
+    session.valuesAnswers[questionId] = choice;
+    this.touch(session);
+  }
+
+  setValuesScores(session, scores) {
+    session.valuesScores = scores;
+    this.touch(session);
   }
 
   unlockTheme(session, themeId) {
@@ -205,14 +226,19 @@ class SessionStore {
     return nextNode;
   }
 
-  serializeSessionState(session, progress, answerSummary) {
+  serializeSessionState(session, progress, summary) {
     return {
       sessionId: session.id,
       entryChoice: session.entryChoice,
       dreamAnswer: session.dreamAnswer,
-      premiumDepth: session.premiumDepth,
+      step: session.step,
+      demographics: session.demographics,
+      bigFiveDepth: session.bigFiveDepth,
+      bigFiveScores: session.bigFiveScores,
+      derivedTraits: session.derivedTraits,
+      valuesScores: session.valuesScores,
       progress,
-      answers: answerSummary,
+      summary,
       branches: session.branches,
       unlockedThemes: [...session.unlockedThemes],
       themes: BRANCH_THEMES,
