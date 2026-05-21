@@ -1,10 +1,12 @@
 const OpenAI = require("openai");
 const {
   buildProfileDigest,
+  buildBigFiveItemsPrompt,
   buildInitialBranchPrompts,
   buildEvolutionPrompts,
 } = require("./prompts");
-const { BRANCH_THEMES } = require("./questionPool");
+const { BRANCH_THEMES, VALUES_DIMENSIONS } = require("./questionPool");
+const { getFallbackItems } = require("./bigFiveItems");
 
 function cleanText(value, fallback = "") {
   if (typeof value !== "string") {
@@ -25,7 +27,7 @@ function parseJsonObject(content) {
   try {
     return JSON.parse(trimmed);
   } catch (_error) {
-    // Continue with fallback extraction.
+    // continue
   }
 
   const withoutFence = trimmed
@@ -37,7 +39,7 @@ function parseJsonObject(content) {
   try {
     return JSON.parse(withoutFence);
   } catch (_error) {
-    // Continue with substring extraction.
+    // continue
   }
 
   const firstBrace = withoutFence.indexOf("{");
@@ -82,18 +84,15 @@ function normalizeOptions(options, fallbackPrefix) {
   return normalized.slice(0, 4);
 }
 
-function summarizeAnswers(session, questionById) {
-  return session.answers.map((item) => {
-    const question = questionById.get(item.questionId);
-    const label =
-      question?.options?.find((option) => option.value === item.answer)?.label ||
-      item.answer;
-
-    return {
-      question: question?.question || item.questionId,
-      answer: item.answer,
-      answerLabel: label,
-    };
+function buildSessionDigest(session) {
+  return buildProfileDigest({
+    entryChoice: session.entryChoice,
+    dreamAnswer: session.dreamAnswer,
+    demographics: session.demographics,
+    bigFiveScores: session.bigFiveScores,
+    derivedTraits: session.derivedTraits,
+    valuesScores: session.valuesScores,
+    valuesDimensions: VALUES_DIMENSIONS,
   });
 }
 
@@ -105,38 +104,22 @@ function getTheme(themeId) {
   return BRANCH_THEMES.find((theme) => theme.id === themeId) || null;
 }
 
-function inferPrimaryTitle(session, answerMap) {
+function inferPrimaryTitle(session) {
+  const v = session.valuesScores || {};
+  const sorted = Object.entries(v).sort((a, b) => b[1] - a[1]);
+  const top = sorted[0];
+
   if (session.entryChoice === "change") {
-    if (
-      ["money", "mostly_money"].includes(answerMap.money_vs_meaning) ||
-      ["urgent", "soon"].includes(answerMap.stable_income_timing)
-    ) {
-      return "Strategic Career Pivot Path";
-    }
-
-    if (answerMap.creativity_level === "essential") {
-      return "Creative Repositioning Path";
-    }
-
+    if (top?.[0] === "economic_return") return "Strategic Career Pivot Path";
+    if (top?.[0] === "intellectual_stimulation") return "Creative Repositioning Path";
     return "Deliberate Reinvention Path";
   }
-
-  if (answerMap.autonomy_importance === "critical") {
-    return "Autonomy-First Career Discovery Path";
-  }
-
-  if (["certainty", "mostly_certainty"].includes(answerMap.risk_vs_certainty)) {
-    return "Stability-Optimized Career Direction Path";
-  }
-
+  if (top?.[0] === "independence") return "Autonomy-First Career Discovery Path";
+  if (top?.[0] === "structure") return "Stability-Optimized Career Direction Path";
   return "High-Fit Career Discovery Path";
 }
 
-function fallbackInitialBranch(session, themeId, questionById) {
-  const answerMap = Object.fromEntries(
-    session.answers.map((item) => [item.questionId, item.answer])
-  );
-
+function fallbackInitialBranch(session, themeId) {
   const theme = getTheme(themeId);
 
   const title =
@@ -150,13 +133,9 @@ function fallbackInitialBranch(session, themeId, questionById) {
             ? "Creative Independence Path"
             : themeId === "freedom"
               ? "Freedom-by-Design Path"
-              : inferPrimaryTitle(session, answerMap);
+              : inferPrimaryTitle(session);
 
-  const profileDigest = buildProfileDigest({
-    entryChoice: session.entryChoice,
-    dreamAnswer: session.dreamAnswer,
-    answers: summarizeAnswers(session, questionById),
-  });
+  const profileDigest = buildSessionDigest(session);
 
   return {
     title,
@@ -186,7 +165,7 @@ function fallbackInitialBranch(session, themeId, questionById) {
   };
 }
 
-function fallbackEvolution({ branch, node, answerLabel }) {
+function fallbackEvolution({ branch, answerLabel }) {
   const shouldStop = branch.nodes.length >= 6;
 
   return {
@@ -286,16 +265,12 @@ function normalizeEvolutionPayload(payload) {
 function createAiEngine({ apiKey, model }) {
   const client = apiKey ? new OpenAI({ apiKey }) : null;
 
-  async function generateInitialBranch({ session, themeId, questionById }) {
+  async function generateInitialBranch({ session, themeId }) {
     const theme = getTheme(themeId);
-    const profileDigest = buildProfileDigest({
-      entryChoice: session.entryChoice,
-      dreamAnswer: session.dreamAnswer,
-      answers: summarizeAnswers(session, questionById),
-    });
+    const profileDigest = buildSessionDigest(session);
 
     if (!client) {
-      return fallbackInitialBranch(session, themeId, questionById);
+      return fallbackInitialBranch(session, themeId);
     }
 
     try {
@@ -314,19 +289,15 @@ function createAiEngine({ apiKey, model }) {
       return normalizeInitialPayload(parsed);
     } catch (error) {
       console.error("[AI initial branch fallback]", error.message);
-      return fallbackInitialBranch(session, themeId, questionById);
+      return fallbackInitialBranch(session, themeId);
     }
   }
 
-  async function evolveBranch({ session, branch, node, answerLabel, questionById }) {
-    const profileDigest = buildProfileDigest({
-      entryChoice: session.entryChoice,
-      dreamAnswer: session.dreamAnswer,
-      answers: summarizeAnswers(session, questionById),
-    });
+  async function evolveBranch({ session, branch, node, answerLabel }) {
+    const profileDigest = buildSessionDigest(session);
 
     if (!client) {
-      return fallbackEvolution({ branch, node, answerLabel });
+      return fallbackEvolution({ branch, answerLabel });
     }
 
     try {
@@ -347,13 +318,50 @@ function createAiEngine({ apiKey, model }) {
       return normalizeEvolutionPayload(parsed);
     } catch (error) {
       console.error("[AI evolve branch fallback]", error.message);
-      return fallbackEvolution({ branch, node, answerLabel });
+      return fallbackEvolution({ branch, answerLabel });
+    }
+  }
+
+  async function generateBigFiveItems({ depth }) {
+    if (!client) {
+      return getFallbackItems(depth);
+    }
+    try {
+      const { system, user } = buildBigFiveItemsPrompt(depth);
+      const parsed = await runJsonCompletion(client, {
+        model,
+        system,
+        user,
+        temperature: 0.85,
+      });
+      const items = Array.isArray(parsed?.items) ? parsed.items : [];
+      const expected = depth === "deep" ? 50 : 20;
+      const normalized = items
+        .filter(
+          (i) =>
+            i && typeof i.text === "string" && ["O", "C", "E", "A", "N"].includes(i.trait)
+        )
+        .map((i, idx) => ({
+          id: typeof i.id === "string" && i.id ? i.id : `ai_${idx + 1}`,
+          trait: i.trait,
+          reverse: Boolean(i.reverse),
+          text: i.text.trim().slice(0, 200),
+        }));
+      if (normalized.length !== expected) {
+        console.warn("[AI Big Five items] count mismatch, using fallback");
+        return getFallbackItems(depth);
+      }
+      return normalized;
+    } catch (error) {
+      console.error("[AI Big Five items fallback]", error.message);
+      return getFallbackItems(depth);
     }
   }
 
   return {
     generateInitialBranch,
     evolveBranch,
+    generateBigFiveItems,
   };
 }
 
