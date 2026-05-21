@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import ReactFlow, { Controls, MarkerType } from "reactflow";
 import "reactflow/dist/style.css";
 import {
-  answerQuestion,
+  chooseBigFiveDepth,
   createThematicBranch,
   evolveBranch,
   generateInitialBranch,
-  setPremiumDepth,
   startSession,
+  submitBigFiveAnswer,
+  submitDemographics,
+  submitValuesAnswer,
   unlockTheme,
 } from "./api";
 import "./App.css";
@@ -17,6 +19,188 @@ const ENTRY_OPTIONS = [
   { value: "change", label: "Change my career" },
   { value: "find", label: "Find my career" },
 ];
+
+const LIKERT = [
+  { value: 1, label: "Strongly disagree" },
+  { value: 2, label: "Disagree" },
+  { value: 3, label: "Neutral" },
+  { value: 4, label: "Agree" },
+  { value: 5, label: "Strongly agree" },
+];
+
+function stepHeading(step) {
+  switch (step) {
+    case "demographics": return "About you";
+    case "depth_choice": return "Choose depth";
+    case "big_five":     return "Personality";
+    case "values":       return "Values";
+    case "complete":     return "Ready";
+    default:             return "Deep Analysis";
+  }
+}
+
+function stepProgressText(step, progress) {
+  if (!progress) return "";
+  if (step === "demographics")
+    return `${progress.demographics.answered} / ${progress.demographics.total}`;
+  if (step === "big_five")
+    return `${progress.bigFive.answered} / ${progress.bigFive.total}`;
+  if (step === "values")
+    return `${progress.values.answered} / ${progress.values.total}`;
+  return "";
+}
+
+function DemographicQuestionCard({ q, draft, setDraft, busy, onSubmit }) {
+  return (
+    <div className="question-card">
+      <h3>{q.question}</h3>
+      {q.kind === "single" && (
+        <div className="option-list">
+          {q.options.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              className={`option-button ${draft === o.value ? "selected" : ""}`}
+              onClick={() => setDraft(o.value)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {q.kind === "number" && (
+        <input
+          type="number"
+          className="question-textarea"
+          value={draft}
+          min={q.min}
+          max={q.max}
+          placeholder={q.placeholder}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+      )}
+      {q.kind === "text" && (
+        <input
+          type="text"
+          className="question-textarea"
+          value={draft}
+          placeholder={q.placeholder}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+      )}
+      <div className="question-actions single">
+        <button
+          type="button"
+          className="primary-action"
+          onClick={onSubmit}
+          disabled={busy || draft === "" || draft === null}
+        >
+          {busy ? "Saving..." : "Next"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DepthChoiceCard({ busy, onChoose }) {
+  return (
+    <div className="question-card">
+      <h3>How deep do you want to go?</h3>
+      <div className="depth-options">
+        <button
+          type="button"
+          className="depth-card"
+          onClick={() => onChoose("short")}
+          disabled={Boolean(busy)}
+        >
+          <p className="depth-title">Short</p>
+          <p className="depth-meta">20 questions • 3–5 minutes</p>
+        </button>
+        <button
+          type="button"
+          className="depth-card"
+          onClick={() => onChoose("deep")}
+          disabled={Boolean(busy)}
+        >
+          <p className="depth-title">Deep</p>
+          <p className="depth-meta">50 questions • 8–12 minutes</p>
+        </button>
+      </div>
+      {busy && <p className="depth-loading">Generating items…</p>}
+    </div>
+  );
+}
+
+function BigFiveQuestionCard({ q, draft, setDraft, busy, onSubmit, progress }) {
+  return (
+    <div className="question-card">
+      <p className="question-category">
+        {progress ? `Item ${progress.answered + 1} of ${progress.total}` : "Personality"}
+      </p>
+      <h3>{q.text}</h3>
+      <div className="likert-row">
+        {LIKERT.map((l) => (
+          <button
+            key={l.value}
+            type="button"
+            className={`option-button likert-button ${draft === l.value ? "selected" : ""}`}
+            onClick={() => setDraft(l.value)}
+            disabled={busy}
+          >
+            <span className="likert-value">{l.value}</span>
+            <span className="likert-label">{l.label}</span>
+          </button>
+        ))}
+      </div>
+      <div className="question-actions single">
+        <button
+          type="button"
+          className="primary-action"
+          onClick={() => onSubmit(draft)}
+          disabled={busy || !draft}
+        >
+          {busy ? "Saving..." : "Next"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ValuesQuestionCard({ q, busy, onChoose, progress }) {
+  return (
+    <div className="question-card values-card">
+      <p className="dimension-header">
+        <span className="dimension-emoji">{q.dimensionEmoji}</span>{" "}
+        <span className="dimension-label">{q.dimensionLabel}</span>{" "}
+        <span className="dimension-counter">({q.indexInGroup + 1} / 5)</span>
+      </p>
+      <p className="question-category">
+        {progress ? `Question ${progress.answered + 1} of ${progress.total}` : ""}
+      </p>
+      <h3>Which feels more like you?</h3>
+      <div className="ab-pair">
+        <button
+          type="button"
+          className="ab-option"
+          onClick={() => onChoose("A")}
+          disabled={busy}
+        >
+          <span className="ab-tag">A</span>
+          <span className="ab-text">{q.optionA}</span>
+        </button>
+        <button
+          type="button"
+          className="ab-option"
+          onClick={() => onChoose("B")}
+          disabled={busy}
+        >
+          <span className="ab-tag">B</span>
+          <span className="ab-text">{q.optionB}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function TreeNode({ data, selected }) {
   if (data.isRoot) {
@@ -137,17 +321,11 @@ function App() {
   const [dreamAnswer, setDreamAnswer] = useState("");
 
   const [sessionId, setSessionId] = useState("");
-  const [premiumDepth, setPremiumDepthState] = useState(false);
-
-  const [currentQuestion, setCurrentQuestion] = useState(null);
-  const [draftAnswer, setDraftAnswer] = useState("");
-  const [progress, setProgress] = useState({
-    answered: 0,
-    target: 14,
-    remaining: 14,
-    canFinish: false,
-    done: false,
-  });
+  const [step, setStep] = useState("entry");
+  const [nextQuestion, setNextQuestion] = useState(null);
+  const [demoDraft, setDemoDraft] = useState("");
+  const [bigFiveDraft, setBigFiveDraft] = useState(0);
+  const [progress, setProgress] = useState(null);
 
   const [branches, setBranches] = useState([]);
   const [themes, setThemes] = useState([]);
@@ -160,8 +338,10 @@ function App() {
 
   const [busy, setBusy] = useState({
     start: false,
-    answer: false,
-    premium: false,
+    demo: false,
+    depth: "",
+    bigFive: false,
+    values: false,
     initialBranch: false,
     unlockThemeId: "",
     createThemeId: "",
@@ -170,13 +350,7 @@ function App() {
 
   const [error, setError] = useState("");
 
-  const nodeTypes = useMemo(
-    () => ({
-      treeNode: TreeNode,
-    }),
-    []
-  );
-
+  const nodeTypes = useMemo(() => ({ treeNode: TreeNode }), []);
   const graph = useMemo(() => buildGraph(branches), [branches]);
 
   const selected = useMemo(
@@ -214,180 +388,172 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [stage, graphInstance, branches]);
 
+  const applySessionSnapshot = (data) => {
+    setSessionId(data.sessionId);
+    setStep(data.step);
+    setNextQuestion(data.nextQuestion || null);
+    setProgress(data.progress || null);
+    setBranches(data.branches || []);
+    setThemes(data.themes || []);
+    setUnlockedThemes(data.unlockedThemes || []);
+  };
+
   const handleStartSession = async () => {
     if (!entryChoice || !dreamAnswer.trim()) {
       return;
     }
-
     setError("");
-    setBusy((prev) => ({ ...prev, start: true }));
-
+    setBusy((p) => ({ ...p, start: true }));
     try {
       const data = await startSession({
         entryChoice,
         dreamAnswer: dreamAnswer.trim(),
-        premiumDepth,
       });
-
-      setSessionId(data.sessionId);
-      setPremiumDepthState(data.premiumDepth);
-      setCurrentQuestion(data.nextQuestion);
-      setDraftAnswer("");
-      setProgress(data.progress);
-      setThemes(data.themes || []);
-      setUnlockedThemes(data.unlockedThemes || []);
-      setBranches(data.branches || []);
-      setStage("questions");
-    } catch (requestError) {
-      setError(requestError.message || "Could not start session.");
+      applySessionSnapshot(data);
+      setStage("survey");
+      setDemoDraft("");
+    } catch (e) {
+      setError(e.message || "Could not start.");
     } finally {
-      setBusy((prev) => ({ ...prev, start: false }));
+      setBusy((p) => ({ ...p, start: false }));
     }
   };
 
-  const handleTogglePremium = async () => {
-    if (!sessionId) {
+  const handleSubmitDemographic = async () => {
+    if (!sessionId || !nextQuestion) return;
+    const q = nextQuestion.question;
+    const value = q.kind === "number" ? Number(demoDraft) : demoDraft;
+    if (value === "" || value === null || (typeof value === "number" && Number.isNaN(value))) {
       return;
     }
-
-    const nextValue = !premiumDepth;
-
     setError("");
-    setBusy((prev) => ({ ...prev, premium: true }));
-
+    setBusy((p) => ({ ...p, demo: true }));
     try {
-      const data = await setPremiumDepth({
+      const data = await submitDemographics({
         sessionId,
-        premiumDepth: nextValue,
+        questionId: q.id,
+        value,
       });
-
-      setPremiumDepthState(data.premiumDepth);
-      setProgress(data.progress);
-      setCurrentQuestion(data.nextQuestion);
-      setDraftAnswer("");
-    } catch (requestError) {
-      setError(requestError.message || "Could not update premium depth.");
+      applySessionSnapshot(data);
+      setDemoDraft("");
+    } catch (e) {
+      setError(e.message || "Could not save.");
     } finally {
-      setBusy((prev) => ({ ...prev, premium: false }));
+      setBusy((p) => ({ ...p, demo: false }));
     }
   };
 
-  const handleAnswerQuestion = async () => {
-    if (!sessionId || !currentQuestion) {
-      return;
-    }
-
-    const answer =
-      currentQuestion.kind === "text" ? draftAnswer.trim() : draftAnswer || "";
-
-    if (!answer) {
-      return;
-    }
-
+  const handleChooseDepth = async (depth) => {
+    if (!sessionId) return;
     setError("");
-    setBusy((prev) => ({ ...prev, answer: true }));
-
+    setBusy((p) => ({ ...p, depth }));
     try {
-      const data = await answerQuestion({
-        sessionId,
-        questionId: currentQuestion.id,
-        answer,
-      });
-
-      setProgress(data.progress);
-      setCurrentQuestion(data.nextQuestion);
-      setDraftAnswer("");
-    } catch (requestError) {
-      setError(requestError.message || "Could not save answer.");
+      const data = await chooseBigFiveDepth({ sessionId, depth });
+      applySessionSnapshot(data);
+      setBigFiveDraft(0);
+    } catch (e) {
+      setError(e.message || "Could not start Big Five.");
     } finally {
-      setBusy((prev) => ({ ...prev, answer: false }));
+      setBusy((p) => ({ ...p, depth: "" }));
+    }
+  };
+
+  const handleSubmitBigFive = async (value) => {
+    if (!sessionId || !nextQuestion) return;
+    setError("");
+    setBusy((p) => ({ ...p, bigFive: true }));
+    try {
+      const data = await submitBigFiveAnswer({
+        sessionId,
+        itemId: nextQuestion.question.id,
+        value,
+      });
+      applySessionSnapshot(data);
+      setBigFiveDraft(0);
+    } catch (e) {
+      setError(e.message || "Could not save.");
+    } finally {
+      setBusy((p) => ({ ...p, bigFive: false }));
+    }
+  };
+
+  const handleSubmitValues = async (choice) => {
+    if (!sessionId || !nextQuestion) return;
+    setError("");
+    setBusy((p) => ({ ...p, values: true }));
+    try {
+      const data = await submitValuesAnswer({
+        sessionId,
+        questionId: nextQuestion.question.id,
+        choice,
+      });
+      applySessionSnapshot(data);
+    } catch (e) {
+      setError(e.message || "Could not save.");
+    } finally {
+      setBusy((p) => ({ ...p, values: false }));
     }
   };
 
   const handleGenerateInitialBranch = async () => {
-    if (!sessionId) {
-      return;
-    }
-
+    if (!sessionId) return;
     setError("");
-    setBusy((prev) => ({ ...prev, initialBranch: true }));
-
+    setBusy((p) => ({ ...p, initialBranch: true }));
     try {
       const data = await generateInitialBranch({ sessionId });
-
-      setBranches(data.branches || []);
-      setThemes(data.themes || []);
-      setUnlockedThemes(data.unlockedThemes || []);
+      applySessionSnapshot(data);
 
       const primary = data.branches?.find((branch) => branch.theme === "primary");
-
       if (primary && primary.nodes[0]) {
         setSelectedNodeId(`${primary.id}::${primary.nodes[0].id}`);
-        setBranchAnswer("");
       } else {
         setSelectedNodeId(ROOT_NODE_ID);
-        setBranchAnswer("");
       }
-
+      setBranchAnswer("");
       setStage("tree");
-    } catch (requestError) {
-      setError(requestError.message || "Could not generate first branch.");
+    } catch (e) {
+      setError(e.message || "Could not generate first branch.");
     } finally {
-      setBusy((prev) => ({ ...prev, initialBranch: false }));
+      setBusy((p) => ({ ...p, initialBranch: false }));
     }
   };
 
   const handleUnlockTheme = async (themeId) => {
-    if (!sessionId || !themeId) {
-      return;
-    }
-
+    if (!sessionId || !themeId) return;
     setError("");
-    setBusy((prev) => ({ ...prev, unlockThemeId: themeId }));
-
+    setBusy((p) => ({ ...p, unlockThemeId: themeId }));
     try {
       const data = await unlockTheme({ sessionId, themeId });
       setUnlockedThemes(data.unlockedThemes || []);
-    } catch (requestError) {
-      setError(requestError.message || "Could not unlock theme.");
+    } catch (e) {
+      setError(e.message || "Could not unlock theme.");
     } finally {
-      setBusy((prev) => ({ ...prev, unlockThemeId: "" }));
+      setBusy((p) => ({ ...p, unlockThemeId: "" }));
     }
   };
 
   const handleCreateThemeBranch = async (themeId) => {
-    if (!sessionId || !themeId) {
-      return;
-    }
-
+    if (!sessionId || !themeId) return;
     setError("");
-    setBusy((prev) => ({ ...prev, createThemeId: themeId }));
-
+    setBusy((p) => ({ ...p, createThemeId: themeId }));
     try {
       const data = await createThematicBranch({ sessionId, themeId });
-      setBranches(data.branches || []);
-      setThemes(data.themes || []);
-      setUnlockedThemes(data.unlockedThemes || []);
-
+      applySessionSnapshot(data);
       if (data.branch?.nodes?.[0]) {
         setSelectedNodeId(`${data.branch.id}::${data.branch.nodes[0].id}`);
         setBranchAnswer("");
       }
-    } catch (requestError) {
-      setError(requestError.message || "Could not create branch.");
+    } catch (e) {
+      setError(e.message || "Could not create branch.");
     } finally {
-      setBusy((prev) => ({ ...prev, createThemeId: "" }));
+      setBusy((p) => ({ ...p, createThemeId: "" }));
     }
   };
 
   const handleEvolveBranch = async () => {
-    if (!selected || !sessionId || !branchAnswer) {
-      return;
-    }
-
+    if (!selected || !sessionId || !branchAnswer) return;
     setError("");
-    setBusy((prev) => ({ ...prev, evolve: true }));
-
+    setBusy((p) => ({ ...p, evolve: true }));
     try {
       const data = await evolveBranch({
         sessionId,
@@ -395,17 +561,15 @@ function App() {
         nodeId: selected.node.id,
         answer: branchAnswer,
       });
-
       setBranches(data.branches || []);
-
       if (data.nextNode?.id) {
         setSelectedNodeId(`${selected.branch.id}::${data.nextNode.id}`);
         setBranchAnswer("");
       }
-    } catch (requestError) {
-      setError(requestError.message || "Could not evolve branch.");
+    } catch (e) {
+      setError(e.message || "Could not evolve branch.");
     } finally {
-      setBusy((prev) => ({ ...prev, evolve: false }));
+      setBusy((p) => ({ ...p, evolve: false }));
     }
   };
 
@@ -414,16 +578,11 @@ function App() {
     setEntryChoice("");
     setDreamAnswer("");
     setSessionId("");
-    setPremiumDepthState(false);
-    setCurrentQuestion(null);
-    setDraftAnswer("");
-    setProgress({
-      answered: 0,
-      target: 14,
-      remaining: 14,
-      canFinish: false,
-      done: false,
-    });
+    setStep("entry");
+    setNextQuestion(null);
+    setDemoDraft("");
+    setBigFiveDraft(0);
+    setProgress(null);
     setBranches([]);
     setThemes([]);
     setUnlockedThemes([]);
@@ -432,8 +591,10 @@ function App() {
     setError("");
     setBusy({
       start: false,
-      answer: false,
-      premium: false,
+      demo: false,
+      depth: "",
+      bigFive: false,
+      values: false,
       initialBranch: false,
       unlockThemeId: "",
       createThemeId: "",
@@ -451,16 +612,14 @@ function App() {
     <main className="app-shell">
       {stage === "entry" && (
         <section className="entry-screen">
-          <h1>Why are you here?</h1>
+          <h1>Why are you Here?</h1>
 
           <div className="entry-options">
             {ENTRY_OPTIONS.map((option) => (
               <button
                 key={option.value}
                 type="button"
-                className={`entry-option ${
-                  entryChoice === option.value ? "selected" : ""
-                }`}
+                className={`entry-option ${entryChoice === option.value ? "selected" : ""}`}
                 onClick={() => setEntryChoice(option.value)}
               >
                 {option.label}
@@ -469,7 +628,7 @@ function App() {
           </div>
 
           <p className="entry-prompt">
-            If you knew that you would definitely succeed, what would you do?
+            What would you do if you knew you would definitely succeed?
           </p>
 
           <textarea
@@ -485,108 +644,64 @@ function App() {
             onClick={handleStartSession}
             disabled={busy.start || !entryChoice || !dreamAnswer.trim()}
           >
-            {busy.start ? "Entering..." : "Continue"}
+            {busy.start ? "Entering..." : "Help to explore my career"}
           </button>
 
           {error && <p className="error-text">{error}</p>}
         </section>
       )}
 
-      {stage === "questions" && (
+      {stage === "survey" && (
         <section className="questions-screen">
           <header className="screen-header">
-            <h2>Deep Analysis</h2>
-            <p>
-              {progress.answered} / {progress.target} questions answered
-            </p>
+            <h2>{stepHeading(step)}</h2>
+            <p>{stepProgressText(step, progress)}</p>
           </header>
 
-          <div className="premium-box">
-            <div>
-              <p className="premium-title">Premium depth modules</p>
-              <p>
-                Add personality, motivation, values mapping, and cognitive style
-                layers.
-              </p>
-            </div>
-            <button
-              type="button"
-              className={`toggle-button ${premiumDepth ? "active" : ""}`}
-              onClick={handleTogglePremium}
-              disabled={busy.premium}
-            >
-              {busy.premium ? "Updating..." : premiumDepth ? "Enabled" : "Enable"}
-            </button>
-          </div>
+          {step === "demographics" && nextQuestion?.question && (
+            <DemographicQuestionCard
+              q={nextQuestion.question}
+              draft={demoDraft}
+              setDraft={setDemoDraft}
+              busy={busy.demo}
+              onSubmit={handleSubmitDemographic}
+            />
+          )}
 
-          {currentQuestion ? (
+          {step === "depth_choice" && (
+            <DepthChoiceCard busy={busy.depth} onChoose={handleChooseDepth} />
+          )}
+
+          {step === "big_five" && nextQuestion?.question && (
+            <BigFiveQuestionCard
+              q={nextQuestion.question}
+              draft={bigFiveDraft}
+              setDraft={setBigFiveDraft}
+              busy={busy.bigFive}
+              onSubmit={handleSubmitBigFive}
+              progress={progress?.bigFive}
+            />
+          )}
+
+          {step === "values" && nextQuestion?.question && (
+            <ValuesQuestionCard
+              q={nextQuestion.question}
+              busy={busy.values}
+              onChoose={handleSubmitValues}
+              progress={progress?.values}
+            />
+          )}
+
+          {step === "complete" && (
             <div className="question-card">
-              <p className="question-category">
-                {currentQuestion.module === "premium" ? "Premium" : "Core"} •{" "}
-                {currentQuestion.category.replaceAll("_", " ")}
-              </p>
-              <h3>{currentQuestion.question}</h3>
-
-              {currentQuestion.kind === "single" && (
-                <div className="option-list">
-                  {currentQuestion.options.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={`option-button ${
-                        draftAnswer === option.value ? "selected" : ""
-                      }`}
-                      onClick={() => setDraftAnswer(option.value)}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {currentQuestion.kind === "text" && (
-                <textarea
-                  className="question-textarea"
-                  value={draftAnswer}
-                  onChange={(event) => setDraftAnswer(event.target.value)}
-                  placeholder={currentQuestion.placeholder || "Type your answer"}
-                />
-              )}
-
-              <div className="question-actions">
-                <button
-                  type="button"
-                  className="primary-action"
-                  onClick={handleAnswerQuestion}
-                  disabled={
-                    busy.answer ||
-                    (currentQuestion.kind === "text"
-                      ? !draftAnswer.trim()
-                      : !draftAnswer)
-                  }
-                >
-                  {busy.answer ? "Saving..." : "Next question"}
-                </button>
-
-                <button
-                  type="button"
-                  className="secondary-action"
-                  onClick={handleGenerateInitialBranch}
-                  disabled={!progress.canFinish || busy.initialBranch}
-                >
-                  {busy.initialBranch ? "Building..." : "Run Life Path Engine"}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="question-card">
-              <h3>You have enough signal to generate your first branch.</h3>
+              <h3>Assessment complete.</h3>
+              <p>You're ready to generate your first life path branch.</p>
               <div className="question-actions single">
                 <button
                   type="button"
                   className="primary-action"
                   onClick={handleGenerateInitialBranch}
-                  disabled={!progress.canFinish || busy.initialBranch}
+                  disabled={busy.initialBranch}
                 >
                   {busy.initialBranch ? "Building..." : "Run Life Path Engine"}
                 </button>
@@ -669,9 +784,7 @@ function App() {
                           <button
                             key={option.value}
                             type="button"
-                            className={`option-button ${
-                              branchAnswer === option.value ? "selected" : ""
-                            }`}
+                            className={`option-button ${branchAnswer === option.value ? "selected" : ""}`}
                             onClick={() => setBranchAnswer(option.value)}
                           >
                             {option.label}
