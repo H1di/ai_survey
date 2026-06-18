@@ -105,3 +105,5 @@ npm run dev
 - Additional branches are independent and do not modify existing branch chains.
 - If OpenAI fails, backend has a deterministic fallback branch generator so the flow still works.
 - Current payment flow is mocked for MVP. Replace with Stripe/Checkout for production.
+
+:)
