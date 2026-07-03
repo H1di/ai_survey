@@ -7,14 +7,15 @@ import {
   useEdgesState,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { MeNode, PathNode, VariationNode, LoadingNode } from './NodeComponent';
+import { MeNode, DirectionNode, ProfessionNode, RoadmapNode, LoadingNode } from './NodeComponent';
 import BranchEdge from './BranchEdge';
 import './GraphView.css';
 
 const nodeTypes = {
   me: MeNode,
-  path: PathNode,
-  variation: VariationNode,
+  direction: DirectionNode,
+  profession: ProfessionNode,
+  roadmap: RoadmapNode,
   loading: LoadingNode,
 };
 

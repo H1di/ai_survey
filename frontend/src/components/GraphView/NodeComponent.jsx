@@ -15,59 +15,54 @@ export function MeNode() {
   );
 }
 
-export function PathNode({ data }) {
-  const { title, archetype, locked, onExpand, isExpanding } = data;
+export function DirectionNode({ data }) {
+  const { label } = data;
 
   return (
-    <div className={`node node--path ${locked ? 'node--locked' : ''} ${isExpanding ? 'node--expanding' : ''}`}>
+    <div className="node node--direction">
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
-      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
-      <Handle type="target" position={Position.Right} style={{ opacity: 0 }} />
-
-      {locked ? (
-        <button className="node-locked-content" onClick={onExpand}>
-          <span className="node-lock">○</span>
-          <span className="node-locked-label">Unlock path</span>
-        </button>
-      ) : (
-        <>
-          <p className="node-archetype">{archetype}</p>
-          <h3 className="node-title">{title}</h3>
-          {!isExpanding && onExpand && (
-            <button className="node-expand-btn" onClick={onExpand}>
-              Explore deeper →
-            </button>
-          )}
-          {isExpanding && <p className="node-expanding-label">Exploring...</p>}
-        </>
-      )}
-
+      <p className="node-archetype">Your direction</p>
+      <h3 className="node-title">{label}</h3>
       <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
-      <Handle type="source" position={Position.Left} style={{ opacity: 0 }} />
-      <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
     </div>
   );
 }
 
-export function VariationNode({ data }) {
-  const { title, difference, onExpand } = data;
+export function ProfessionNode({ data }) {
+  const { title, summary, selected, onOpen } = data;
 
   return (
-    <div className="node node--variation">
+    <button
+      type="button"
+      className={`node node--profession ${selected ? 'node--profession-selected' : ''}`}
+      onClick={onOpen}
+    >
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
-      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
-      <Handle type="target" position={Position.Right} style={{ opacity: 0 }} />
-
-      <h4 className="node-var-title">{title}</h4>
-      <p className="node-var-diff">{difference}</p>
-      {onExpand && (
-        <button className="node-expand-btn node-expand-btn--sm" onClick={onExpand}>
-          Go deeper →
-        </button>
-      )}
-
+      <p className="node-archetype">Profession</p>
+      <h3 className="node-title">{title}</h3>
+      <p className="node-profession-summary">{summary}</p>
       <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
-    </div>
+    </button>
+  );
+}
+
+export function RoadmapNode({ data }) {
+  const { index, title, timeframe, last, onOpen } = data;
+
+  return (
+    <button
+      type="button"
+      className={`node node--roadmap ${last ? 'node--roadmap-last' : ''}`}
+      onClick={onOpen}
+    >
+      <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
+      <span className="node-roadmap-index">{index}</span>
+      <span className="node-roadmap-body">
+        <span className="node-roadmap-title">{title}</span>
+        {timeframe && <span className="node-roadmap-timeframe">{timeframe}</span>}
+      </span>
+      <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
+    </button>
   );
 }
 
