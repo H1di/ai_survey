@@ -3,7 +3,6 @@ const dotenv = require("dotenv");
 const express = require("express");
 const { createAiEngine } = require("./aiEngine");
 const {
-  BRANCH_THEMES,
   VALUES_DIMENSIONS,
   DEMOGRAPHIC_QUESTIONS,
 } = require("./questionPool");
@@ -18,6 +17,7 @@ const {
   buildProgress,
   summarizeAnswersForClient,
 } = require("./questionEngine");
+const { computeDirection } = require("./directions");
 const { SessionStore } = require("./sessionStore");
 
 dotenv.config();
@@ -207,179 +207,174 @@ app.post("/api/values/answer", (req, res) => {
   }
 });
 
-app.post("/api/branches/initial", async (req, res) => {
+function requireCompletedAssessment(session) {
+  if (session.step !== "complete") {
+    const error = new Error("Complete the assessment before this step.");
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+app.post("/api/direction/question", async (req, res) => {
   try {
     const { sessionId } = req.body || {};
     const session = store.require(sessionId);
+    requireCompletedAssessment(session);
 
-    if (session.step !== "complete") {
-      return res.status(400).json({
-        error: "Complete the assessment before generating the first branch.",
-      });
+    if (!session.directionQuestions.length) {
+      const questions = await aiEngine.generateDirectionQuestions({ session });
+      store.setDirectionQuestions(session, questions);
     }
 
-    const existingPrimary = session.branches.find((branch) => branch.theme === "primary");
-
-    if (existingPrimary) {
-      return sendSessionSnapshot(res, session, {
-        branch: existingPrimary,
-      });
-    }
-
-    const payload = await aiEngine.generateInitialBranch({
-      session,
-      themeId: "primary",
-    });
-
-    const branch = store.createBranch(session, {
-      themeId: "primary",
-      payload,
-    });
-
-    return sendSessionSnapshot(res, session, {
-      branch,
-    });
+    return sendSessionSnapshot(res, session);
   } catch (error) {
-    console.error("[branches/initial]", error);
-    return res.status(error.statusCode || 500).json({
-      error: "Failed to generate the initial branch.",
-    });
+    console.error("[direction/question]", error);
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.statusCode ? error.message : "Failed to load direction questions." });
   }
 });
 
-app.post("/api/payment/unlock-theme", (req, res) => {
+app.post("/api/direction/answer", (req, res) => {
   try {
-    const { sessionId, themeId } = req.body || {};
+    const { sessionId, questionId, value } = req.body || {};
     const session = store.require(sessionId);
+    requireCompletedAssessment(session);
 
-    const theme = BRANCH_THEMES.find((item) => item.id === themeId);
-
-    if (!theme) {
-      return res.status(400).json({ error: "Unknown theme." });
+    const question = session.directionQuestions.find((q) => q.id === questionId);
+    if (!question) {
+      return res.status(400).json({ error: "Unknown direction question." });
+    }
+    if (!question.options.some((o) => o.value === value)) {
+      return res.status(400).json({ error: "Invalid answer option." });
     }
 
-    const unlockedThemes = store.unlockTheme(session, themeId);
+    store.recordDirectionAnswer(session, questionId, value);
 
-    return res.json({
-      ok: true,
-      unlockedThemes,
-      receipt: {
-        id: `pay_${Date.now()}`,
-        themeId,
-        amount: 900,
-        currency: "usd",
-        status: "paid",
-        paidAt: new Date().toISOString(),
-      },
-    });
+    const allAnswered = session.directionQuestions.every(
+      (q) => session.directionAnswers[q.id] !== undefined
+    );
+    if (allAnswered) {
+      store.setProposedDirection(
+        session,
+        computeDirection(session.directionQuestions, session.directionAnswers)
+      );
+    }
+
+    return sendSessionSnapshot(res, session);
   } catch (error) {
     return res.status(error.statusCode || 500).json({ error: error.message });
   }
 });
 
-app.post("/api/branches/create", async (req, res) => {
+app.post("/api/direction/confirm", async (req, res) => {
   try {
-    const { sessionId, themeId } = req.body || {};
+    const { sessionId } = req.body || {};
     const session = store.require(sessionId);
+    requireCompletedAssessment(session);
 
-    if (!themeId || themeId === "primary") {
-      return res.status(400).json({ error: "themeId must be one paid thematic branch." });
+    if (!session.direction) {
+      if (!session.proposedDirection) {
+        return res.status(400).json({ error: "Answer the direction questions first." });
+      }
+      store.confirmDirection(session, session.proposedDirection);
     }
 
-    if (!store.isThemeUnlocked(session, themeId)) {
-      return res.status(402).json({
-        error: "Theme is locked. Unlock it first.",
-      });
+    if (!session.narrowingQuestions.length) {
+      const questions = await aiEngine.generateNarrowingQuestions({ session });
+      store.setNarrowingQuestions(session, questions);
     }
 
-    const existing = session.branches.find((branch) => branch.theme === themeId);
-
-    if (existing) {
-      return sendSessionSnapshot(res, session, { branch: existing });
-    }
-
-    const payload = await aiEngine.generateInitialBranch({
-      session,
-      themeId,
-    });
-
-    const branch = store.createBranch(session, {
-      themeId,
-      payload,
-    });
-
-    return sendSessionSnapshot(res, session, {
-      branch,
-    });
+    return sendSessionSnapshot(res, session);
   } catch (error) {
-    console.error("[branches/create]", error);
-    return res.status(error.statusCode || 500).json({
-      error: "Failed to create branch.",
-    });
+    console.error("[direction/confirm]", error);
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.statusCode ? error.message : "Failed to confirm direction." });
   }
 });
 
-app.post("/api/branches/evolve", async (req, res) => {
+app.post("/api/professions/narrow", async (req, res) => {
   try {
-    const { sessionId, branchId, nodeId, answer } = req.body || {};
+    const { sessionId, questionId, value } = req.body || {};
     const session = store.require(sessionId);
-    const branch = store.getBranch(session, branchId);
 
-    if (!branch) {
-      return res.status(404).json({ error: "Branch not found." });
+    if (!session.direction) {
+      return res.status(400).json({ error: "Confirm a direction first." });
     }
 
-    const node = branch.nodes.find((item) => item.id === nodeId);
-
-    if (!node) {
-      return res.status(404).json({ error: "Node not found." });
+    const question = session.narrowingQuestions.find((q) => q.id === questionId);
+    if (!question) {
+      return res.status(400).json({ error: "Unknown narrowing question." });
+    }
+    if (!question.options.some((o) => o.value === value)) {
+      return res.status(400).json({ error: "Invalid answer option." });
     }
 
-    if (!node.question) {
-      return res.status(400).json({ error: "This node has no further question." });
+    store.recordNarrowingAnswer(session, questionId, value);
+
+    const allAnswered = session.narrowingQuestions.every(
+      (q) => session.narrowingAnswers[q.id] !== undefined
+    );
+    if (allAnswered && !session.professionOptions.length) {
+      const professions = await aiEngine.generateProfessions({ session });
+      store.setProfessionOptions(session, professions);
     }
 
-    if (node.answeredChoice) {
-      return res.status(400).json({ error: "This node was already answered." });
-    }
-
-    const option = node.question.options.find((item) => item.value === answer);
-
-    if (!option) {
-      return res.status(400).json({ error: "Invalid branch answer option." });
-    }
-
-    const evolution = await aiEngine.evolveBranch({
-      session,
-      branch,
-      node,
-      answerLabel: option.label,
-    });
-
-    const nextNode = store.appendNode(session, branch, {
-      parentNodeId: nodeId,
-      parentAnswer: answer,
-      parentAnswerLabel: option.label,
-      nextNodeTitle: evolution.nextNodeTitle,
-      nextNodeSummary: evolution.nextNodeSummary,
-      clarityGain: evolution.clarityGain,
-      riskNote: evolution.riskNote,
-      question: evolution.question,
-      shouldStop: evolution.shouldStop,
-    });
-
-    return sendSessionSnapshot(res, session, {
-      branch,
-      nextNode,
-    });
+    return sendSessionSnapshot(res, session);
   } catch (error) {
-    console.error("[branches/evolve]", error);
-    return res.status(error.statusCode || 500).json({
-      error: "Failed to evolve branch.",
-    });
+    console.error("[professions/narrow]", error);
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.statusCode ? error.message : "Failed to narrow professions." });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Working Name API listening on http://localhost:${PORT}`);
+app.post("/api/professions/select", (req, res) => {
+  try {
+    const { sessionId, professionId } = req.body || {};
+    const session = store.require(sessionId);
+
+    const profession = session.professionOptions.find((p) => p.id === professionId);
+    if (!profession) {
+      return res.status(400).json({ error: "Unknown profession." });
+    }
+
+    store.selectProfession(session, profession);
+
+    return sendSessionSnapshot(res, session);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ error: error.message });
+  }
 });
+
+app.post("/api/roadmap/generate", async (req, res) => {
+  try {
+    const { sessionId } = req.body || {};
+    const session = store.require(sessionId);
+
+    if (!session.selectedProfession) {
+      return res.status(400).json({ error: "Select a profession first." });
+    }
+
+    if (!session.roadmap || session.roadmap.professionId !== session.selectedProfession.id) {
+      const roadmap = await aiEngine.generateRoadmap({ session });
+      store.setRoadmap(session, roadmap);
+    }
+
+    return sendSessionSnapshot(res, session);
+  } catch (error) {
+    console.error("[roadmap/generate]", error);
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.statusCode ? error.message : "Failed to generate roadmap." });
+  }
+});
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Working Name API listening on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = { app };
