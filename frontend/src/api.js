@@ -78,3 +78,45 @@ export function evolveBranch(payload) {
     body: JSON.stringify(payload),
   });
 }
+
+export function fetchDirectionQuestions(payload) {
+  return request("/api/direction/question", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function answerDirectionQuestion(payload) {
+  return request("/api/direction/answer", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function confirmDirection(payload) {
+  return request("/api/direction/confirm", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function answerNarrowingQuestion(payload) {
+  return request("/api/professions/narrow", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function selectProfession(payload) {
+  return request("/api/professions/select", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function generateRoadmap(payload) {
+  return request("/api/roadmap/generate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
