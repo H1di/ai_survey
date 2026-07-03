@@ -2,10 +2,14 @@ const OpenAI = require("openai");
 const {
   buildProfileDigest,
   buildBigFiveItemsPrompt,
-  buildInitialBranchPrompts,
-  buildEvolutionPrompts,
+  buildAnswersDigest,
+  buildDirectionQuestionsPrompt,
+  buildNarrowingQuestionsPrompt,
+  buildProfessionsPrompt,
+  buildRoadmapPrompt,
 } = require("./prompts");
-const { BRANCH_THEMES, VALUES_DIMENSIONS } = require("./questionPool");
+const { VALUES_DIMENSIONS } = require("./questionPool");
+const { DIRECTIONS, DIRECTION_IDS, getDirection } = require("./directions");
 const { getFallbackItems } = require("./bigFiveItems");
 
 function cleanText(value, fallback = "") {
@@ -52,38 +56,6 @@ function parseJsonObject(content) {
   throw new Error("Could not parse model JSON output.");
 }
 
-function normalizeOptions(options, fallbackPrefix) {
-  const normalized = Array.isArray(options)
-    ? options
-        .map((option, index) => {
-          if (typeof option === "string") {
-            return {
-              value: `option_${index + 1}`,
-              label: cleanText(option, `Option ${index + 1}`),
-            };
-          }
-
-          return {
-            value: cleanText(option?.value, `option_${index + 1}`)
-              .toLowerCase()
-              .replace(/[^a-z0-9_]+/g, "_"),
-            label: cleanText(option?.label, `Option ${index + 1}`),
-          };
-        })
-        .filter((option) => option.label.length > 0)
-    : [];
-
-  while (normalized.length < 4) {
-    const index = normalized.length + 1;
-    normalized.push({
-      value: `option_${index}`,
-      label: `${fallbackPrefix} option ${index}`,
-    });
-  }
-
-  return normalized.slice(0, 4);
-}
-
 function buildSessionDigest(session) {
   return buildProfileDigest({
     entryChoice: session.entryChoice,
@@ -96,104 +68,231 @@ function buildSessionDigest(session) {
   });
 }
 
-function getTheme(themeId) {
-  if (!themeId || themeId === "primary") {
-    return null;
-  }
+// ---------------------------------------------------------------------------
+// Deterministic fallbacks (used when there is no API key or the AI call fails)
+// ---------------------------------------------------------------------------
 
-  return BRANCH_THEMES.find((theme) => theme.id === themeId) || null;
-}
-
-function inferPrimaryTitle(session) {
-  const v = session.valuesScores || {};
-  const sorted = Object.entries(v).sort((a, b) => b[1] - a[1]);
-  const top = sorted[0];
-
-  if (session.entryChoice === "change") {
-    if (top?.[0] === "economic_return") return "Strategic Career Pivot Path";
-    if (top?.[0] === "intellectual_stimulation") return "Creative Repositioning Path";
-    return "Deliberate Reinvention Path";
-  }
-  if (top?.[0] === "independence") return "Autonomy-First Career Discovery Path";
-  if (top?.[0] === "structure") return "Stability-Optimized Career Direction Path";
-  return "High-Fit Career Discovery Path";
-}
-
-function fallbackInitialBranch(session, themeId) {
-  const theme = getTheme(themeId);
-
-  const title =
-    themeId === "safe"
-      ? "Stability-First Professional Path"
-      : themeId === "high_income"
-        ? "Income Acceleration Path"
-        : themeId === "meaning"
-          ? "Purpose-Led Contribution Path"
-          : themeId === "creative"
-            ? "Creative Independence Path"
-            : themeId === "freedom"
-              ? "Freedom-by-Design Path"
-              : inferPrimaryTitle(session);
-
-  const profileDigest = buildSessionDigest(session);
-
-  return {
-    title,
-    thesis: "A realistic first path that balances aspiration and constraints.",
-    whyFit:
-      "This path reflects your stated motivation and current tradeoff tolerance, without assuming ideal conditions.",
-    firstMilestone:
-      "Define a 90-day transition plan: target roles, skill gaps, and one measurable weekly action.",
-    constraintsNote:
-      cleanText(
-        theme
-          ? `${theme.label} emphasis applied while preserving real-world feasibility.`
-          : "Built around your immediate constraints, not generic career advice.",
-        "Built around your immediate constraints, not generic career advice."
-      ),
-    question: {
-      text: "Which tradeoff are you most willing to accept first to make this path real?",
+function fallbackDirectionQuestions() {
+  return [
+    {
+      id: "dir_q1",
+      text: "Which kind of problem would you happily spend a whole day on?",
       options: [
-        { value: "lower_short_term_income", label: "Lower income for 12-18 months" },
-        { value: "slower_pace", label: "Slower progress for lower stress" },
-        { value: "higher_intensity", label: "Higher intensity for faster momentum" },
-        { value: "identity_shift", label: "Identity shift and beginner discomfort" },
+        { value: "opt_1", label: "Building or fixing a system until it works", directionId: "tech" },
+        { value: "opt_2", label: "Helping one person through a difficult situation", directionId: "healthcare" },
+        { value: "opt_3", label: "Shaping how something looks, feels, and reads", directionId: "design" },
+        { value: "opt_4", label: "Closing a deal or growing a number that matters", directionId: "business" },
       ],
     },
-    _fallback: true,
-    _debugProfileDigest: profileDigest,
+    {
+      id: "dir_q2",
+      text: "Which work setting drains you the least?",
+      options: [
+        { value: "opt_1", label: "Quiet focus with numbers, models, and precision", directionId: "finance" },
+        { value: "opt_2", label: "A workshop or site, building with my hands", directionId: "trades" },
+        { value: "opt_3", label: "A room where I explain things and people learn", directionId: "education" },
+        { value: "opt_4", label: "A fast feed of content, campaigns, and reactions", directionId: "media" },
+      ],
+    },
+    {
+      id: "dir_q3",
+      text: "Which result would make you proudest at the end of a year?",
+      options: [
+        { value: "opt_1", label: "Something beautiful I designed is out in the world", directionId: "design" },
+        { value: "opt_2", label: "A tangible thing I built that people rely on", directionId: "trades" },
+        { value: "opt_3", label: "Clear, measurable growth I personally drove", directionId: "business" },
+        { value: "opt_4", label: "Someone's health or life is concretely better", directionId: "healthcare" },
+      ],
+    },
+  ];
+}
+
+function fallbackNarrowingQuestions() {
+  return [
+    {
+      id: "nar_q1",
+      text: "Day to day, which working mode fits you best?",
+      options: [
+        { value: "opt_1", label: "Deep solo focus with few interruptions" },
+        { value: "opt_2", label: "Constant collaboration inside a team" },
+        { value: "opt_3", label: "A mix of craft work and client contact" },
+        { value: "opt_4", label: "Coordinating people and decisions" },
+      ],
+    },
+    {
+      id: "nar_q2",
+      text: "What pace of environment do you want?",
+      options: [
+        { value: "opt_1", label: "Calm and structured, few surprises" },
+        { value: "opt_2", label: "Fast and changing, new problems weekly" },
+        { value: "opt_3", label: "Project-based bursts with recovery time" },
+        { value: "opt_4", label: "Steady rhythm with clear routines" },
+      ],
+    },
+  ];
+}
+
+function fallbackProfessions(direction) {
+  const catalogDirection = getDirection(direction?.id) || DIRECTIONS[0];
+
+  return catalogDirection.professionSeeds.map((seed, index) => ({
+    id: `prof_${index + 1}`,
+    title: seed.title,
+    summary: seed.summary,
+    whyFit: `Fits your confirmed ${catalogDirection.label} direction and the preferences you expressed in your answers.`,
+    dayToDay: `A typical day centers on the core work of a ${seed.title.toLowerCase()}, at a pace matching your stated preferences.`,
+  }));
+}
+
+function fallbackRoadmap(profession) {
+  const title = profession.title;
+
+  const stages = [
+    {
+      title: "Foundations",
+      description: `Learn the core skills every ${title} uses daily. Pick one reputable beginner course and finish it end to end.`,
+      timeframe: "2-3 months",
+      milestone: "Core concepts applied in small exercises without help.",
+    },
+    {
+      title: "First real projects",
+      description: "Build 2-3 small but complete projects that mirror real work, and document them publicly as a portfolio.",
+      timeframe: "2-3 months",
+      milestone: "A portfolio you can walk a stranger through in 10 minutes.",
+    },
+    {
+      title: "Entry-level readiness",
+      description: "Translate the portfolio into a focused CV, practice common interview formats, and apply consistently every week.",
+      timeframe: "1-2 months",
+      milestone: "First interviews scheduled.",
+    },
+    {
+      title: "First role",
+      description: `Land an entry-level or junior ${title} position — prioritize learning environment over salary at this stage.`,
+      timeframe: "0-3 months of searching",
+      milestone: "Signed offer and first 90 days completed.",
+    },
+    {
+      title: "Credibility milestone",
+      description: "Earn the one certification or visible achievement most recognized in this field, chosen with input from seniors around you.",
+      timeframe: "3-6 months",
+      milestone: "Credential earned and added to your profile.",
+    },
+    {
+      title: `Established ${title}`,
+      description: "Deepen a specialization, take ownership of larger pieces of work, and build the track record that defines the target role.",
+      timeframe: "12-24 months",
+      milestone: "Operating independently at the level you set out to reach.",
+    },
+  ];
+
+  return {
+    professionId: profession.id,
+    stages: stages.map((stage, index) => ({ id: `stage_${index + 1}`, ...stage })),
   };
 }
 
-function fallbackEvolution({ branch, answerLabel }) {
-  const shouldStop = branch.nodes.length >= 6;
+// ---------------------------------------------------------------------------
+// Normalizers — throw on structurally invalid AI payloads so the caller
+// falls back deterministically.
+// ---------------------------------------------------------------------------
+
+function normalizeQuestionOption(option, index, { requireDirectionId }) {
+  const normalized = {
+    value: cleanText(option?.value, `opt_${index + 1}`)
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, "_"),
+    label: cleanText(option?.label),
+  };
+
+  if (!normalized.label) {
+    throw new Error("Question option missing label.");
+  }
+
+  if (requireDirectionId) {
+    if (!DIRECTION_IDS.includes(option?.directionId)) {
+      throw new Error(`Invalid directionId: ${option?.directionId}`);
+    }
+    normalized.directionId = option.directionId;
+  }
+
+  return normalized;
+}
+
+function normalizeQuestionsPayload(payload, { count, idPrefix, requireDirectionId }) {
+  const questions = Array.isArray(payload?.questions) ? payload.questions : [];
+
+  if (questions.length !== count) {
+    throw new Error(`Expected ${count} questions, got ${questions.length}.`);
+  }
+
+  return questions.map((question, index) => {
+    const text = cleanText(question?.text);
+    if (!text) {
+      throw new Error("Question missing text.");
+    }
+    const rawOptions = Array.isArray(question?.options) ? question.options : [];
+    if (rawOptions.length !== 4) {
+      throw new Error(`Question needs exactly 4 options, got ${rawOptions.length}.`);
+    }
+    return {
+      id: `${idPrefix}${index + 1}`,
+      text,
+      options: rawOptions.map((option, optionIndex) =>
+        normalizeQuestionOption(option, optionIndex, { requireDirectionId })
+      ),
+    };
+  });
+}
+
+function normalizeProfessionsPayload(payload) {
+  const professions = Array.isArray(payload?.professions) ? payload.professions : [];
+
+  if (professions.length !== 3) {
+    throw new Error(`Expected exactly 3 professions, got ${professions.length}.`);
+  }
+
+  return professions.map((profession, index) => {
+    const title = cleanText(profession?.title);
+    if (!title) {
+      throw new Error("Profession missing title.");
+    }
+    return {
+      id: `prof_${index + 1}`,
+      title,
+      summary: cleanText(profession?.summary, "A realistic role within your confirmed direction."),
+      whyFit: cleanText(profession?.whyFit, "Aligned with your profile and answers."),
+      dayToDay: cleanText(profession?.dayToDay, "Day-to-day work typical for this role."),
+    };
+  });
+}
+
+function normalizeRoadmapPayload(payload, profession) {
+  let stages = Array.isArray(payload?.stages) ? payload.stages : [];
+
+  if (stages.length > 8) {
+    stages = stages.slice(0, 8);
+  }
+  if (stages.length < 4) {
+    throw new Error(`Expected at least 4 roadmap stages, got ${stages.length}.`);
+  }
 
   return {
-    nextNodeTitle: shouldStop
-      ? "Clarity Consolidation"
-      : `${branch.title}: ${cleanText(answerLabel, "Next")}`,
-    nextNodeSummary: shouldStop
-      ? "You now have enough signal to choose and commit to one focused 90-day path experiment."
-      : "This step narrows uncertainty by converting preferences into concrete operating constraints.",
-    clarityGain: shouldStop
-      ? "High"
-      : "Medium-high: clearer boundaries and more realistic expectations.",
-    riskNote: shouldStop
-      ? "Main risk is over-analysis. Move to action and review after real-world feedback."
-      : "Main risk is carrying old identity assumptions into a new environment.",
-    question: shouldStop
-      ? null
-      : {
-          text: "What should this path optimize next?",
-          options: [
-            { value: "cash_flow", label: "Cash flow reliability" },
-            { value: "skill_compounding", label: "Skill compounding speed" },
-            { value: "lifestyle_fit", label: "Lifestyle compatibility" },
-            { value: "long_term_optionality", label: "Long-term optionality" },
-          ],
-        },
-    shouldStop,
-    _fallback: true,
+    professionId: profession.id,
+    stages: stages.map((stage, index) => {
+      const title = cleanText(stage?.title);
+      const description = cleanText(stage?.description);
+      if (!title || !description) {
+        throw new Error("Roadmap stage missing title or description.");
+      }
+      return {
+        id: `stage_${index + 1}`,
+        title,
+        description,
+        timeframe: cleanText(stage?.timeframe, ""),
+        milestone: cleanText(stage?.milestone, ""),
+      };
+    }),
   };
 }
 
@@ -212,113 +311,111 @@ async function runJsonCompletion(client, { model, system, user, temperature = 0.
   return parseJsonObject(content);
 }
 
-function normalizeInitialPayload(payload) {
-  return {
-    title: cleanText(payload?.title, "Personalized Path"),
-    thesis: cleanText(payload?.thesis, "A realistic path shaped by your psychology and constraints."),
-    whyFit: cleanText(
-      payload?.whyFit,
-      "This path aligns with your stated motivations and tradeoff tolerance."
-    ),
-    firstMilestone: cleanText(
-      payload?.firstMilestone,
-      "Run one concrete 30-day experiment to test fit and viability."
-    ),
-    constraintsNote: cleanText(
-      payload?.constraintsNote,
-      "This path remains bounded by your current life constraints."
-    ),
-    question: {
-      text: cleanText(
-        payload?.question?.text,
-        "Which tradeoff are you most ready to accept first?"
-      ),
-      options: normalizeOptions(payload?.question?.options, "Tradeoff"),
-    },
-  };
-}
-
-function normalizeEvolutionPayload(payload) {
-  const shouldStop = Boolean(payload?.shouldStop);
-
-  return {
-    nextNodeTitle: cleanText(payload?.nextNodeTitle, "Next Decision Point"),
-    nextNodeSummary: cleanText(
-      payload?.nextNodeSummary,
-      "Your branch has become more specific and testable."
-    ),
-    clarityGain: cleanText(payload?.clarityGain, "More signal around what is realistic."),
-    riskNote: cleanText(payload?.riskNote, "Watch for overcommitting before testing assumptions."),
-    question: shouldStop
-      ? null
-      : {
-          text: cleanText(
-            payload?.question?.text,
-            "What should this branch optimize next?"
-          ),
-          options: normalizeOptions(payload?.question?.options, "Direction"),
-        },
-    shouldStop,
-  };
-}
-
 function createAiEngine({ apiKey, model }) {
   const client = apiKey ? new OpenAI({ apiKey }) : null;
 
-  async function generateInitialBranch({ session, themeId }) {
-    const theme = getTheme(themeId);
-    const profileDigest = buildSessionDigest(session);
-
+  async function generateDirectionQuestions({ session }) {
     if (!client) {
-      return fallbackInitialBranch(session, themeId);
+      return fallbackDirectionQuestions();
     }
 
     try {
-      const prompts = buildInitialBranchPrompts({
-        profileDigest,
-        theme,
+      const prompts = buildDirectionQuestionsPrompt({
+        profileDigest: buildSessionDigest(session),
       });
-
       const parsed = await runJsonCompletion(client, {
         model,
         system: prompts.system,
         user: prompts.user,
         temperature: 0.8,
       });
-
-      return normalizeInitialPayload(parsed);
+      return normalizeQuestionsPayload(parsed, {
+        count: 3,
+        idPrefix: "dir_q",
+        requireDirectionId: true,
+      });
     } catch (error) {
-      console.error("[AI initial branch fallback]", error.message);
-      return fallbackInitialBranch(session, themeId);
+      console.error("[AI direction questions fallback]", error.message);
+      return fallbackDirectionQuestions();
     }
   }
 
-  async function evolveBranch({ session, branch, node, answerLabel }) {
-    const profileDigest = buildSessionDigest(session);
-
+  async function generateNarrowingQuestions({ session }) {
     if (!client) {
-      return fallbackEvolution({ branch, answerLabel });
+      return fallbackNarrowingQuestions();
     }
 
     try {
-      const prompts = buildEvolutionPrompts({
-        profileDigest,
-        branch,
-        node,
-        answerLabel,
+      const prompts = buildNarrowingQuestionsPrompt({
+        profileDigest: buildSessionDigest(session),
+        direction: session.direction,
       });
-
       const parsed = await runJsonCompletion(client, {
         model,
         system: prompts.system,
         user: prompts.user,
-        temperature: 0.75,
+        temperature: 0.8,
       });
-
-      return normalizeEvolutionPayload(parsed);
+      return normalizeQuestionsPayload(parsed, {
+        count: 2,
+        idPrefix: "nar_q",
+        requireDirectionId: false,
+      });
     } catch (error) {
-      console.error("[AI evolve branch fallback]", error.message);
-      return fallbackEvolution({ branch, answerLabel });
+      console.error("[AI narrowing questions fallback]", error.message);
+      return fallbackNarrowingQuestions();
+    }
+  }
+
+  async function generateProfessions({ session }) {
+    if (!client) {
+      return fallbackProfessions(session.direction);
+    }
+
+    try {
+      const prompts = buildProfessionsPrompt({
+        profileDigest: buildSessionDigest(session),
+        direction: session.direction,
+        directionDigest: buildAnswersDigest(session.directionQuestions, session.directionAnswers),
+        narrowingDigest: buildAnswersDigest(session.narrowingQuestions, session.narrowingAnswers),
+      });
+      const parsed = await runJsonCompletion(client, {
+        model,
+        system: prompts.system,
+        user: prompts.user,
+        temperature: 0.8,
+      });
+      return normalizeProfessionsPayload(parsed);
+    } catch (error) {
+      console.error("[AI professions fallback]", error.message);
+      return fallbackProfessions(session.direction);
+    }
+  }
+
+  async function generateRoadmap({ session }) {
+    const profession = session.selectedProfession;
+
+    if (!client) {
+      return fallbackRoadmap(profession);
+    }
+
+    try {
+      const prompts = buildRoadmapPrompt({
+        profileDigest: buildSessionDigest(session),
+        direction: session.direction,
+        profession,
+        narrowingDigest: buildAnswersDigest(session.narrowingQuestions, session.narrowingAnswers),
+      });
+      const parsed = await runJsonCompletion(client, {
+        model,
+        system: prompts.system,
+        user: prompts.user,
+        temperature: 0.7,
+      });
+      return normalizeRoadmapPayload(parsed, profession);
+    } catch (error) {
+      console.error("[AI roadmap fallback]", error.message);
+      return fallbackRoadmap(profession);
     }
   }
 
@@ -359,8 +456,10 @@ function createAiEngine({ apiKey, model }) {
   }
 
   return {
-    generateInitialBranch,
-    evolveBranch,
+    generateDirectionQuestions,
+    generateNarrowingQuestions,
+    generateProfessions,
+    generateRoadmap,
     generateBigFiveItems,
   };
 }
