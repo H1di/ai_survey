@@ -51,34 +51,6 @@ export function submitValuesAnswer(payload) {
   });
 }
 
-export function generateInitialBranch(payload) {
-  return request("/api/branches/initial", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-export function unlockTheme(payload) {
-  return request("/api/payment/unlock-theme", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-export function createThematicBranch(payload) {
-  return request("/api/branches/create", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-export function evolveBranch(payload) {
-  return request("/api/branches/evolve", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
 export function fetchDirectionQuestions(payload) {
   return request("/api/direction/question", {
     method: "POST",

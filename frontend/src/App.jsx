@@ -1,18 +1,20 @@
 import { useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import GraphView from "./components/GraphView";
-import TradeoffModal from "./components/GraphView/TradeoffModal";
+import ConfirmModal from "./components/GraphView/ConfirmModal";
 import { DetailPanel } from "./components/GraphView/NodeComponent";
 import {
+  answerDirectionQuestion,
+  answerNarrowingQuestion,
   chooseBigFiveDepth,
-  createThematicBranch,
-  evolveBranch,
-  generateInitialBranch,
+  confirmDirection,
+  fetchDirectionQuestions,
+  generateRoadmap,
+  selectProfession,
   startSession,
   submitBigFiveAnswer,
   submitDemographics,
   submitValuesAnswer,
-  unlockTheme,
 } from "./api";
 import "./App.css";
 import "./components/GraphView/GraphPage.css";
@@ -206,166 +208,140 @@ function ValuesQuestionCard({ q, busy, onChoose, progress }) {
 
 const ME_NODE = { id: "me", type: "me", position: { x: 0, y: 0 }, data: {} };
 
-// Layout: primary in center, unlockable themes spread on a row below "Me".
-const BRANCH_COLUMN_GAP = 340;
-const BRANCH_Y = 260;
-const CHILD_VSPACING = 240;
+// Vertical story: Me -> Direction -> 3 professions -> roadmap chain.
+const DIRECTION_Y = 240;
+const PROFESSION_Y = 500;
+const PROFESSION_GAP = 340;
+const ROADMAP_START_Y = 760;
+const ROADMAP_GAP = 200;
 
-function branchColumnX(branchIndex, branchCount) {
-  return (branchIndex - (branchCount - 1) / 2) * BRANCH_COLUMN_GAP;
+function professionX(index, count) {
+  return (index - (count - 1) / 2) * PROFESSION_GAP;
 }
 
-function buildGraphFromState({
-  branches,
-  themes,
-  unlockedThemes,
-  expandingBranchId,
-  evolvingBranchId,
-  onExpandBranch,
-  onUnlockTheme,
-  onCreateTheme,
-  onSelectVariation,
+function buildLifePathGraph({
+  direction,
+  professionOptions,
+  selectedProfessionId,
+  roadmap,
+  roadmapPending,
+  onProfessionOpen,
+  onStageOpen,
 }) {
-  // Order: primary first, then any other created branches, then locked theme slots.
-  const createdById = new Map(branches.map((b) => [b.theme, b]));
-  const themeOrder = [
-    "primary",
-    ...themes.filter((t) => t.id !== "primary").map((t) => t.id),
-  ];
-
-  // Render slots only for themes that are created OR available to unlock.
-  const slots = themeOrder.map((themeId) => {
-    if (themeId === "primary") {
-      return { kind: "primary", themeId, branch: createdById.get("primary") || null };
-    }
-    const theme = themes.find((t) => t.id === themeId);
-    const branch = createdById.get(themeId) || null;
-    const unlocked = unlockedThemes.includes(themeId);
-    return { kind: "theme", themeId, theme, branch, unlocked };
-  });
-
-  const visibleSlots = slots.filter((slot) => {
-    if (slot.kind === "primary") return Boolean(slot.branch);
-    return true; // show all theme slots (locked or unlocked)
-  });
-
   const nodes = [ME_NODE];
   const edges = [];
 
-  visibleSlots.forEach((slot, index) => {
-    const x = branchColumnX(index, visibleSlots.length);
+  if (!direction) {
+    return { nodes, edges };
+  }
 
-    if (slot.kind === "primary" || slot.branch) {
-      const branch = slot.branch;
-      const rootBranchNode = branch.nodes[0];
-      const isExpanding = expandingBranchId === branch.id;
-
-      nodes.push({
-        id: branch.id,
-        type: "path",
-        position: { x, y: BRANCH_Y },
-        draggable: true,
-        data: {
-          archetype: branch.themeLabel,
-          title: branch.title,
-          locked: false,
-          isExpanding,
-          onExpand: rootBranchNode.question
-            ? () => onExpandBranch(branch, rootBranchNode)
-            : undefined,
-        },
-      });
-      edges.push({
-        id: `me-${branch.id}`,
-        source: "me",
-        target: branch.id,
-        type: "branch",
-        data: { delay: index * 180 },
-      });
-
-      // Render evolved variation children in sequence below the path node.
-      const childNodes = branch.nodes.slice(1);
-      childNodes.forEach((child, childIdx) => {
-        const childId = `${branch.id}::${child.id}`;
-        const parentId =
-          childIdx === 0
-            ? branch.id
-            : `${branch.id}::${branch.nodes[childIdx].id}`; // previous child
-        const childX = x;
-        const childY = BRANCH_Y + (childIdx + 1) * CHILD_VSPACING;
-
-        nodes.push({
-          id: childId,
-          type: "variation",
-          position: { x: childX, y: childY },
-          draggable: true,
-          data: {
-            title: child.title,
-            difference: child.summary,
-            onExpand: child.question
-              ? () => onExpandBranch(branch, child)
-              : () => onSelectVariation(branch, child),
-          },
-        });
-        edges.push({
-          id: `${parentId}-${childId}`,
-          source: parentId,
-          target: childId,
-          type: "branch",
-          data: { delay: childIdx * 120 },
-        });
-      });
-
-      // Loading placeholder while evolve is in flight on this branch.
-      if (evolvingBranchId === branch.id) {
-        const loadingId = `${branch.id}::__loading__`;
-        const lastChildIdx = childNodes.length;
-        const parentForLoading =
-          lastChildIdx === 0
-            ? branch.id
-            : `${branch.id}::${branch.nodes[lastChildIdx].id}`;
-        nodes.push({
-          id: loadingId,
-          type: "loading",
-          position: { x, y: BRANCH_Y + (lastChildIdx + 1) * CHILD_VSPACING },
-          data: {},
-        });
-        edges.push({
-          id: `${parentForLoading}-${loadingId}`,
-          source: parentForLoading,
-          target: loadingId,
-          type: "branch",
-        });
-      }
-    } else if (slot.kind === "theme") {
-      // Locked theme card (or unlocked but no branch yet)
-      const id = `theme_${slot.themeId}`;
-      nodes.push({
-        id,
-        type: "path",
-        position: { x, y: BRANCH_Y },
-        draggable: true,
-        data: {
-          archetype: slot.theme.label,
-          title: slot.unlocked ? "Create this branch" : slot.theme.description,
-          locked: !slot.unlocked,
-          isExpanding: false,
-          onExpand: slot.unlocked
-            ? () => onCreateTheme(slot.themeId)
-            : () => onUnlockTheme(slot.themeId),
-        },
-      });
-      edges.push({
-        id: `me-${id}`,
-        source: "me",
-        target: id,
-        type: "branch",
-        data: { delay: index * 180 },
-      });
-    }
+  nodes.push({
+    id: "direction",
+    type: "direction",
+    position: { x: 0, y: DIRECTION_Y },
+    draggable: true,
+    data: { label: direction.label },
+  });
+  edges.push({
+    id: "me-direction",
+    source: "me",
+    target: "direction",
+    type: "branch",
+    data: { delay: 0 },
   });
 
+  professionOptions.forEach((profession, index) => {
+    nodes.push({
+      id: profession.id,
+      type: "profession",
+      position: { x: professionX(index, professionOptions.length), y: PROFESSION_Y },
+      draggable: true,
+      data: {
+        title: profession.title,
+        summary: profession.summary,
+        selected: profession.id === selectedProfessionId,
+        onOpen: () => onProfessionOpen(profession),
+      },
+    });
+    edges.push({
+      id: `direction-${profession.id}`,
+      source: "direction",
+      target: profession.id,
+      type: "branch",
+      data: { delay: index * 180 },
+    });
+  });
+
+  const anchorIndex = professionOptions.findIndex((p) => p.id === selectedProfessionId);
+  const anchor = anchorIndex === -1 ? null : professionOptions[anchorIndex];
+  const anchorX = anchor ? professionX(anchorIndex, professionOptions.length) : 0;
+
+  if (roadmapPending && anchor) {
+    nodes.push({
+      id: "roadmap-loading",
+      type: "loading",
+      position: { x: anchorX, y: ROADMAP_START_Y },
+      data: {},
+    });
+    edges.push({
+      id: `${anchor.id}-roadmap-loading`,
+      source: anchor.id,
+      target: "roadmap-loading",
+      type: "branch",
+    });
+  }
+
+  if (roadmap && anchor && roadmap.professionId === anchor.id) {
+    roadmap.stages.forEach((stage, index) => {
+      const nodeId = `stage-${stage.id}`;
+      const parentId = index === 0 ? anchor.id : `stage-${roadmap.stages[index - 1].id}`;
+      nodes.push({
+        id: nodeId,
+        type: "roadmap",
+        position: { x: anchorX, y: ROADMAP_START_Y + index * ROADMAP_GAP },
+        draggable: true,
+        data: {
+          index: index + 1,
+          title: stage.title,
+          timeframe: stage.timeframe,
+          last: index === roadmap.stages.length - 1,
+          onOpen: () => onStageOpen(stage, index),
+        },
+      });
+      edges.push({
+        id: `${parentId}-${nodeId}`,
+        source: parentId,
+        target: nodeId,
+        type: "branch",
+        data: { delay: index * 120 },
+      });
+    });
+  }
+
   return { nodes, edges };
+}
+
+function GraphQuestionCard({ heading, question, busy, busyLabel, onChoose }) {
+  return (
+    <div className="question-card dock-card">
+      <p className="question-category">{heading}</p>
+      <h3>{question.text}</h3>
+      <div className="option-list">
+        {question.options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            className="option-button"
+            onClick={() => onChoose(option.value)}
+            disabled={busy}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      {busy && <p className="dock-busy">{busyLabel || "Working…"}</p>}
+    </div>
+  );
 }
 
 function App() {
@@ -381,15 +357,19 @@ function App() {
   const [bigFiveDraft, setBigFiveDraft] = useState(0);
   const [progress, setProgress] = useState(null);
 
-  const [branches, setBranches] = useState([]);
-  const [themes, setThemes] = useState([]);
-  const [unlockedThemes, setUnlockedThemes] = useState([]);
+  const [directionQuestions, setDirectionQuestions] = useState([]);
+  const [directionAnswers, setDirectionAnswers] = useState({});
+  const [proposedDirection, setProposedDirection] = useState(null);
+  const [direction, setDirection] = useState(null);
+  const [narrowingQuestions, setNarrowingQuestions] = useState([]);
+  const [narrowingAnswers, setNarrowingAnswers] = useState({});
+  const [professionOptions, setProfessionOptions] = useState([]);
+  const [selectedProfession, setSelectedProfession] = useState(null);
+  const [roadmap, setRoadmap] = useState(null);
 
-  const [tradeoffContext, setTradeoffContext] = useState(null);
-  const [detailContext, setDetailContext] = useState(null);
-  const [evolvingBranchId, setEvolvingBranchId] = useState("");
-  const [expandingBranchId, setExpandingBranchId] = useState("");
-  const [graphStatus, setGraphStatus] = useState("");
+  const [narrowIntent, setNarrowIntent] = useState(false);
+  const [confirmContext, setConfirmContext] = useState(null);
+  const [stageDetail, setStageDetail] = useState(null);
 
   const [busy, setBusy] = useState({
     start: false,
@@ -397,23 +377,29 @@ function App() {
     depth: "",
     bigFive: false,
     values: false,
-    initialBranch: false,
-    unlockThemeId: "",
-    createThemeId: "",
-    evolve: false,
+    enterTree: false,
+    direction: false,
+    confirmDirection: false,
+    narrowing: false,
+    roadmap: false,
   });
 
   const [error, setError] = useState("");
-
 
   const applySessionSnapshot = (data) => {
     setSessionId(data.sessionId);
     setStep(data.step);
     setNextQuestion(data.nextQuestion || null);
     setProgress(data.progress || null);
-    setBranches(data.branches || []);
-    setThemes(data.themes || []);
-    setUnlockedThemes(data.unlockedThemes || []);
+    setDirectionQuestions(data.directionQuestions || []);
+    setDirectionAnswers(data.directionAnswers || {});
+    setProposedDirection(data.proposedDirection || null);
+    setDirection(data.direction || null);
+    setNarrowingQuestions(data.narrowingQuestions || []);
+    setNarrowingAnswers(data.narrowingAnswers || {});
+    setProfessionOptions(data.professionOptions || []);
+    setSelectedProfession(data.selectedProfession || null);
+    setRoadmap(data.roadmap || null);
   };
 
   const handleStartSession = async () => {
@@ -513,97 +499,105 @@ function App() {
     }
   };
 
-  const handleGenerateInitialBranch = async () => {
+  const handleEnterLifePath = async () => {
     if (!sessionId) return;
     setError("");
-    setBusy((p) => ({ ...p, initialBranch: true }));
+    setBusy((p) => ({ ...p, enterTree: true }));
     try {
-      const data = await generateInitialBranch({ sessionId });
+      const data = await fetchDirectionQuestions({ sessionId });
       applySessionSnapshot(data);
       setStage("tree");
     } catch (e) {
-      setError(e.message || "Could not generate first branch.");
+      setError(e.message || "Could not start the Life Path Engine.");
     } finally {
-      setBusy((p) => ({ ...p, initialBranch: false }));
+      setBusy((p) => ({ ...p, enterTree: false }));
     }
   };
 
-  const handleUnlockTheme = async (themeId) => {
-    if (!sessionId || !themeId) return;
+  const currentDirectionQuestion =
+    directionQuestions.find((q) => directionAnswers[q.id] === undefined) || null;
+  const currentNarrowingQuestion =
+    narrowingQuestions.find((q) => narrowingAnswers[q.id] === undefined) || null;
+
+  const handleAnswerDirection = async (value) => {
+    if (!sessionId || !currentDirectionQuestion) return;
     setError("");
-    setBusy((p) => ({ ...p, unlockThemeId: themeId }));
-    setGraphStatus("Unlocking…");
+    setBusy((p) => ({ ...p, direction: true }));
     try {
-      const data = await unlockTheme({ sessionId, themeId });
-      setUnlockedThemes(data.unlockedThemes || []);
-      setGraphStatus("");
-    } catch (e) {
-      setError(e.message || "Could not unlock theme.");
-      setGraphStatus("");
-    } finally {
-      setBusy((p) => ({ ...p, unlockThemeId: "" }));
-    }
-  };
-
-  const handleCreateThemeBranch = async (themeId) => {
-    if (!sessionId || !themeId) return;
-    setError("");
-    setBusy((p) => ({ ...p, createThemeId: themeId }));
-    setGraphStatus("Mapping new direction…");
-    try {
-      const data = await createThematicBranch({ sessionId, themeId });
-      applySessionSnapshot(data);
-      setGraphStatus("");
-    } catch (e) {
-      setError(e.message || "Could not create branch.");
-      setGraphStatus("");
-    } finally {
-      setBusy((p) => ({ ...p, createThemeId: "" }));
-    }
-  };
-
-  const handleOpenTradeoff = (branch, node) => {
-    if (!branch || !node?.question) return;
-    setExpandingBranchId(branch.id);
-    setTradeoffContext({ branch, node });
-  };
-
-  const handleTradeoffClose = () => {
-    setTradeoffContext(null);
-    setExpandingBranchId("");
-  };
-
-  const handleTradeoffSubmit = async (answers) => {
-    if (!tradeoffContext) return;
-    const { branch, node } = tradeoffContext;
-    const picked = answers[0];
-    if (!picked) return;
-    const option = node.question.options.find((o) => o.label === picked.answer);
-    if (!option) return;
-
-    setTradeoffContext(null);
-    setExpandingBranchId("");
-    setEvolvingBranchId(branch.id);
-    setError("");
-    setBusy((p) => ({ ...p, evolve: true }));
-    try {
-      const data = await evolveBranch({
+      const data = await answerDirectionQuestion({
         sessionId,
-        branchId: branch.id,
-        nodeId: node.id,
-        answer: option.value,
+        questionId: currentDirectionQuestion.id,
+        value,
       });
       applySessionSnapshot(data);
     } catch (e) {
-      setError(e.message || "Could not evolve branch.");
+      setError(e.message || "Could not save.");
     } finally {
-      setBusy((p) => ({ ...p, evolve: false }));
-      setEvolvingBranchId("");
+      setBusy((p) => ({ ...p, direction: false }));
     }
   };
 
-  const handleSelectVariation = (branch, node) => {
-    setDetailContext({ branch, node });
+  const handleConfirmDirection = async () => {
+    if (!sessionId) return;
+    setError("");
+    setBusy((p) => ({ ...p, confirmDirection: true }));
+    try {
+      const data = await confirmDirection({ sessionId });
+      applySessionSnapshot(data);
+    } catch (e) {
+      setError(e.message || "Could not confirm direction.");
+    } finally {
+      setBusy((p) => ({ ...p, confirmDirection: false }));
+    }
+  };
+
+  const handleAnswerNarrowing = async (value) => {
+    if (!sessionId || !currentNarrowingQuestion) return;
+    setError("");
+    setBusy((p) => ({ ...p, narrowing: true }));
+    try {
+      const data = await answerNarrowingQuestion({
+        sessionId,
+        questionId: currentNarrowingQuestion.id,
+        value,
+      });
+      applySessionSnapshot(data);
+    } catch (e) {
+      setError(e.message || "Could not save.");
+    } finally {
+      setBusy((p) => ({ ...p, narrowing: false }));
+    }
+  };
+
+  const handleProfessionOpen = async (profession) => {
+    if (busy.roadmap) return;
+    setError("");
+    try {
+      const data = await selectProfession({ sessionId, professionId: profession.id });
+      applySessionSnapshot(data);
+      setConfirmContext(profession);
+    } catch (e) {
+      setError(e.message || "Could not select profession.");
+    }
+  };
+
+  const handleConfirmRoadmap = async () => {
+    if (!sessionId || !confirmContext) return;
+    setError("");
+    setBusy((p) => ({ ...p, roadmap: true }));
+    try {
+      const data = await generateRoadmap({ sessionId });
+      applySessionSnapshot(data);
+      setConfirmContext(null);
+    } catch (e) {
+      setError(e.message || "Could not generate roadmap.");
+    } finally {
+      setBusy((p) => ({ ...p, roadmap: false }));
+    }
+  };
+
+  const handleStageOpen = (stageItem, index) => {
+    setStageDetail({ stage: stageItem, index });
   };
 
   const resetAll = () => {
@@ -616,14 +610,18 @@ function App() {
     setDemoDraft("");
     setBigFiveDraft(0);
     setProgress(null);
-    setBranches([]);
-    setThemes([]);
-    setUnlockedThemes([]);
-    setTradeoffContext(null);
-    setDetailContext(null);
-    setEvolvingBranchId("");
-    setExpandingBranchId("");
-    setGraphStatus("");
+    setDirectionQuestions([]);
+    setDirectionAnswers({});
+    setProposedDirection(null);
+    setDirection(null);
+    setNarrowingQuestions([]);
+    setNarrowingAnswers({});
+    setProfessionOptions([]);
+    setSelectedProfession(null);
+    setRoadmap(null);
+    setNarrowIntent(false);
+    setConfirmContext(null);
+    setStageDetail(null);
     setError("");
     setBusy({
       start: false,
@@ -631,24 +629,31 @@ function App() {
       depth: "",
       bigFive: false,
       values: false,
-      initialBranch: false,
-      unlockThemeId: "",
-      createThemeId: "",
-      evolve: false,
+      enterTree: false,
+      direction: false,
+      confirmDirection: false,
+      narrowing: false,
+      roadmap: false,
     });
   };
 
-  const graph = buildGraphFromState({
-    branches,
-    themes,
-    unlockedThemes,
-    expandingBranchId,
-    evolvingBranchId,
-    onExpandBranch: handleOpenTradeoff,
-    onUnlockTheme: handleUnlockTheme,
-    onCreateTheme: handleCreateThemeBranch,
-    onSelectVariation: handleSelectVariation,
+  const graph = buildLifePathGraph({
+    direction,
+    professionOptions,
+    selectedProfessionId: selectedProfession?.id || null,
+    roadmap,
+    roadmapPending: busy.roadmap,
+    onProfessionOpen: handleProfessionOpen,
+    onStageOpen: handleStageOpen,
   });
+
+  const treeHint = !direction
+    ? "Answer the questions to find your direction"
+    : professionOptions.length === 0
+      ? "Direction locked — now narrow it down"
+      : roadmap
+        ? "Your roadmap — click any step for details"
+        : "Click a profession to continue";
 
   return (
     <main className="app-shell">
@@ -742,10 +747,10 @@ function App() {
                 <button
                   type="button"
                   className="primary-action"
-                  onClick={handleGenerateInitialBranch}
-                  disabled={busy.initialBranch}
+                  onClick={handleEnterLifePath}
+                  disabled={busy.enterTree}
                 >
-                  {busy.initialBranch ? "Building..." : "Run Life Path Engine"}
+                  {busy.enterTree ? "Preparing..." : "Run Life Path Engine"}
                 </button>
               </div>
             </div>
@@ -768,39 +773,96 @@ function App() {
               ← Restart
             </button>
             <span className="graph-logo">Life Path Explorer</span>
-            <span className="graph-hint">Click a path to explore deeper</span>
+            <span className="graph-hint">{treeHint}</span>
           </div>
-
-          {graphStatus && <div className="graph-status">{graphStatus}</div>}
 
           <div className="graph-canvas">
             <GraphView nodes={graph.nodes} edges={graph.edges} />
           </div>
 
+          {!direction && currentDirectionQuestion && (
+            <div className="graph-question-dock">
+              <GraphQuestionCard
+                heading={`Direction · Question ${Object.keys(directionAnswers).length + 1} of ${directionQuestions.length}`}
+                question={currentDirectionQuestion}
+                busy={busy.direction}
+                busyLabel="Reading your answer…"
+                onChoose={handleAnswerDirection}
+              />
+            </div>
+          )}
+
+          {!direction && !currentDirectionQuestion && proposedDirection && (
+            <div className="graph-question-dock">
+              <div className="question-card dock-card">
+                <p className="question-category">Direction found</p>
+                <h3>{proposedDirection.label}</h3>
+                <p className="dock-subtext">
+                  Based on your profile and answers, this is your strongest broad direction.
+                </p>
+                <div className="question-actions single">
+                  <button
+                    type="button"
+                    className="primary-action"
+                    onClick={handleConfirmDirection}
+                    disabled={busy.confirmDirection}
+                  >
+                    {busy.confirmDirection ? "Confirming…" : "Confirm this direction"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {direction && professionOptions.length === 0 && !narrowIntent && (
+            <div className="graph-question-dock">
+              <div className="question-card dock-card">
+                <p className="question-category">Direction confirmed</p>
+                <h3>{direction.label}</h3>
+                <p className="dock-subtext">
+                  Want to narrow it down to specific professions?
+                </p>
+                <div className="question-actions single">
+                  <button
+                    type="button"
+                    className="primary-action"
+                    onClick={() => setNarrowIntent(true)}
+                  >
+                    Yes, narrow it down
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {direction && professionOptions.length === 0 && narrowIntent && currentNarrowingQuestion && (
+            <div className="graph-question-dock">
+              <GraphQuestionCard
+                heading={`Narrowing · Question ${Object.keys(narrowingAnswers).length + 1} of ${narrowingQuestions.length}`}
+                question={currentNarrowingQuestion}
+                busy={busy.narrowing}
+                busyLabel="Finding your professions…"
+                onChoose={handleAnswerNarrowing}
+              />
+            </div>
+          )}
+
           <AnimatePresence>
-            {tradeoffContext && (
-              <TradeoffModal
-                key="tradeoff"
-                questions={[
-                  {
-                    id: tradeoffContext.node.id,
-                    text: tradeoffContext.node.question.text,
-                    options: tradeoffContext.node.question.options.map(
-                      (o) => o.label
-                    ),
-                  },
-                ]}
-                pathTitle={tradeoffContext.node.title || tradeoffContext.branch.title}
-                onSubmit={handleTradeoffSubmit}
-                onClose={handleTradeoffClose}
+            {confirmContext && (
+              <ConfirmModal
+                key="confirm"
+                professionTitle={confirmContext.title}
+                busy={busy.roadmap}
+                onConfirm={handleConfirmRoadmap}
+                onDismiss={() => !busy.roadmap && setConfirmContext(null)}
               />
             )}
           </AnimatePresence>
 
           <AnimatePresence>
-            {detailContext && (
+            {stageDetail && (
               <Motion.div
-                key="detail"
+                key="stage-detail"
                 initial={{ x: 20, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
                 exit={{ x: 20, opacity: 0 }}
@@ -809,18 +871,12 @@ function App() {
                 <DetailPanel
                   data={{
                     path: {
-                      archetype: detailContext.branch.themeLabel,
-                      title: detailContext.node.title,
-                      description: detailContext.node.summary,
-                      lifestyle: detailContext.node.clarityGain,
-                      careerTrajectory: detailContext.node.milestone,
-                      financialOutlook: detailContext.node.constraintsNote,
-                      whyItFits: detailContext.node.whyFit,
-                      risks: detailContext.node.riskNote
-                        ? [detailContext.node.riskNote]
-                        : null,
+                      archetype: `Step ${stageDetail.index + 1}${stageDetail.stage.timeframe ? ` · ${stageDetail.stage.timeframe}` : ""}`,
+                      title: stageDetail.stage.title,
+                      description: stageDetail.stage.description,
+                      careerTrajectory: stageDetail.stage.milestone || null,
                     },
-                    onClose: () => setDetailContext(null),
+                    onClose: () => setStageDetail(null),
                   }}
                 />
               </Motion.div>
