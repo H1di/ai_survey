@@ -107,11 +107,13 @@
   transform: translateX(-50%);
   z-index: 150;
   width: min(560px, calc(100vw - 48px));
+  pointer-events: none;
 }
 
 .graph-question-dock .question-card {
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.08);
   margin: 0;
+  pointer-events: auto;
 }
 
 .dock-subtext {

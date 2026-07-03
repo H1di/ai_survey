@@ -220,6 +220,10 @@ const EDGE_DRAW_MS = 600;
 const PROFESSION_STAGGER_MS = 180;
 const ROADMAP_STEP_MS = 600;
 
+const REDUCED_MOTION =
+  typeof window !== "undefined" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 function professionX(index, count) {
   return (index - (count - 1) / 2) * PROFESSION_GAP;
 }
@@ -687,6 +691,82 @@ function App() {
     focusNodeIds = ["me", "direction"];
   }
 
+  let dockCard = null;
+  if (stage === "tree") {
+    if (!direction && currentDirectionQuestion) {
+      dockCard = {
+        key: `dir-${currentDirectionQuestion.id}`,
+        content: (
+          <GraphQuestionCard
+            heading={`Direction · Question ${Object.keys(directionAnswers).length + 1} of ${directionQuestions.length}`}
+            question={currentDirectionQuestion}
+            busy={busy.direction}
+            busyLabel="Reading your answer…"
+            onChoose={handleAnswerDirection}
+          />
+        ),
+      };
+    } else if (!direction && proposedDirection) {
+      dockCard = {
+        key: "proposal",
+        content: (
+          <div className="question-card dock-card">
+            <p className="question-category">Direction found</p>
+            <h3>{proposedDirection.label}</h3>
+            <p className="dock-subtext">
+              Based on your profile and answers, this is your strongest broad direction.
+            </p>
+            <div className="question-actions single">
+              <button
+                type="button"
+                className="primary-action"
+                onClick={handleConfirmDirection}
+                disabled={busy.confirmDirection}
+              >
+                {busy.confirmDirection ? "Confirming…" : "Confirm this direction"}
+              </button>
+            </div>
+          </div>
+        ),
+      };
+    } else if (direction && professionOptions.length === 0 && !narrowIntent) {
+      dockCard = {
+        key: "narrow-prompt",
+        content: (
+          <div className="question-card dock-card">
+            <p className="question-category">Direction confirmed</p>
+            <h3>{direction.label}</h3>
+            <p className="dock-subtext">
+              Want to narrow it down to specific professions?
+            </p>
+            <div className="question-actions single">
+              <button
+                type="button"
+                className="primary-action"
+                onClick={() => setNarrowIntent(true)}
+              >
+                Yes, narrow it down
+              </button>
+            </div>
+          </div>
+        ),
+      };
+    } else if (direction && professionOptions.length === 0 && narrowIntent && currentNarrowingQuestion) {
+      dockCard = {
+        key: `nar-${currentNarrowingQuestion.id}`,
+        content: (
+          <GraphQuestionCard
+            heading={`Narrowing · Question ${Object.keys(narrowingAnswers).length + 1} of ${narrowingQuestions.length}`}
+            question={currentNarrowingQuestion}
+            busy={busy.narrowing}
+            busyLabel="Finding your professions…"
+            onChoose={handleAnswerNarrowing}
+          />
+        ),
+      };
+    }
+  }
+
   return (
     <main className="app-shell">
       {stage === "entry" && (
@@ -817,72 +897,29 @@ function App() {
             />
           </div>
 
-          {!direction && currentDirectionQuestion && (
-            <div className="graph-question-dock">
-              <GraphQuestionCard
-                heading={`Direction · Question ${Object.keys(directionAnswers).length + 1} of ${directionQuestions.length}`}
-                question={currentDirectionQuestion}
-                busy={busy.direction}
-                busyLabel="Reading your answer…"
-                onChoose={handleAnswerDirection}
-              />
-            </div>
-          )}
-
-          {!direction && !currentDirectionQuestion && proposedDirection && (
-            <div className="graph-question-dock">
-              <div className="question-card dock-card">
-                <p className="question-category">Direction found</p>
-                <h3>{proposedDirection.label}</h3>
-                <p className="dock-subtext">
-                  Based on your profile and answers, this is your strongest broad direction.
-                </p>
-                <div className="question-actions single">
-                  <button
-                    type="button"
-                    className="primary-action"
-                    onClick={handleConfirmDirection}
-                    disabled={busy.confirmDirection}
-                  >
-                    {busy.confirmDirection ? "Confirming…" : "Confirm this direction"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {direction && professionOptions.length === 0 && !narrowIntent && (
-            <div className="graph-question-dock">
-              <div className="question-card dock-card">
-                <p className="question-category">Direction confirmed</p>
-                <h3>{direction.label}</h3>
-                <p className="dock-subtext">
-                  Want to narrow it down to specific professions?
-                </p>
-                <div className="question-actions single">
-                  <button
-                    type="button"
-                    className="primary-action"
-                    onClick={() => setNarrowIntent(true)}
-                  >
-                    Yes, narrow it down
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {direction && professionOptions.length === 0 && narrowIntent && currentNarrowingQuestion && (
-            <div className="graph-question-dock">
-              <GraphQuestionCard
-                heading={`Narrowing · Question ${Object.keys(narrowingAnswers).length + 1} of ${narrowingQuestions.length}`}
-                question={currentNarrowingQuestion}
-                busy={busy.narrowing}
-                busyLabel="Finding your professions…"
-                onChoose={handleAnswerNarrowing}
-              />
-            </div>
-          )}
+          <div className="graph-question-dock">
+            <AnimatePresence mode="wait">
+              {dockCard && (
+                <Motion.div
+                  key={dockCard.key}
+                  initial={{ y: 12, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{
+                    y: 12,
+                    opacity: 0,
+                    transition: { duration: REDUCED_MOTION ? 0 : 0.25 },
+                  }}
+                  transition={
+                    REDUCED_MOTION
+                      ? { duration: 0 }
+                      : { duration: 0.35, ease: [0.22, 1, 0.36, 1] }
+                  }
+                >
+                  {dockCard.content}
+                </Motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
           <AnimatePresence>
             {confirmContext && (
