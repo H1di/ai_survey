@@ -37,7 +37,8 @@
   fill: none;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
-  animation: branch-draw 800ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  /* duration must equal EDGE_DRAW_MS in App.jsx */
+  animation: branch-draw 600ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @keyframes branch-draw {

@@ -215,6 +215,11 @@ const PROFESSION_GAP = 340;
 const ROADMAP_START_Y = 760;
 const ROADMAP_GAP = 200;
 
+// Cascade timing: a node appears exactly when its edge finishes drawing.
+const EDGE_DRAW_MS = 600;
+const PROFESSION_STAGGER_MS = 180;
+const ROADMAP_STEP_MS = 600;
+
 function professionX(index, count) {
   return (index - (count - 1) / 2) * PROFESSION_GAP;
 }
@@ -240,6 +245,7 @@ function buildLifePathGraph({
     type: "direction",
     position: { x: 0, y: DIRECTION_Y },
     draggable: true,
+    style: { "--appear-delay": `${EDGE_DRAW_MS}ms` },
     data: { label: direction.label },
   });
   edges.push({
@@ -251,11 +257,13 @@ function buildLifePathGraph({
   });
 
   professionOptions.forEach((profession, index) => {
+    const edgeDelay = index * PROFESSION_STAGGER_MS;
     nodes.push({
       id: profession.id,
       type: "profession",
       position: { x: professionX(index, professionOptions.length), y: PROFESSION_Y },
       draggable: true,
+      style: { "--appear-delay": `${edgeDelay + EDGE_DRAW_MS}ms` },
       data: {
         title: profession.title,
         summary: profession.summary,
@@ -268,7 +276,7 @@ function buildLifePathGraph({
       source: "direction",
       target: profession.id,
       type: "branch",
-      data: { delay: index * 180 },
+      data: { delay: edgeDelay },
     });
   });
 
@@ -295,11 +303,13 @@ function buildLifePathGraph({
     roadmap.stages.forEach((stage, index) => {
       const nodeId = `stage-${stage.id}`;
       const parentId = index === 0 ? anchor.id : `stage-${roadmap.stages[index - 1].id}`;
+      const edgeDelay = index * ROADMAP_STEP_MS;
       nodes.push({
         id: nodeId,
         type: "roadmap",
         position: { x: anchorX, y: ROADMAP_START_Y + index * ROADMAP_GAP },
         draggable: true,
+        style: { "--appear-delay": `${edgeDelay + EDGE_DRAW_MS}ms` },
         data: {
           index: index + 1,
           title: stage.title,
@@ -313,7 +323,7 @@ function buildLifePathGraph({
         source: parentId,
         target: nodeId,
         type: "branch",
-        data: { delay: index * 120 },
+        data: { delay: edgeDelay },
       });
     });
   }
