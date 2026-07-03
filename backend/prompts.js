@@ -76,62 +76,112 @@ function buildBigFiveItemsPrompt(depth) {
   return { system, user };
 }
 
-function buildInitialBranchPrompts({ profileDigest, theme }) {
-  const themeLine =
-    theme && theme !== "primary"
-      ? `Thematic emphasis: ${theme.label}. ${theme.aiDirective}`
-      : "Thematic emphasis: Primary baseline branch that best fits the user right now.";
+const { DIRECTIONS } = require("./directions");
 
+function buildAnswersDigest(questions, answers) {
+  const lines = [];
+  for (const question of questions) {
+    const chosen = answers[question.id];
+    if (chosen === undefined) continue;
+    const option = question.options.find((o) => o.value === chosen);
+    if (!option) continue;
+    lines.push(`- ${question.text} → ${option.label}`);
+  }
+  return lines.join("\n");
+}
+
+function directionCatalogLines() {
+  return DIRECTIONS.map((d) => `- ${d.id}: ${d.label} (${d.examples})`).join("\n");
+}
+
+function buildDirectionQuestionsPrompt({ profileDigest }) {
   const system = [
     BASE_SYSTEM,
-    "Generate one initial life path branch.",
-    "Integrate demographics, Big Five personality scores, derived traits, and the 8-dimension values inventory.",
-    "Reflect the user's strongest values dimensions (highest scores) in the path's tradeoffs.",
+    "Generate exactly 3 questions (multiple-choice) whose only job is to converge on ONE broad professional direction for this user.",
     "Return valid JSON only and no extra keys.",
-    'JSON schema: {"title":"","thesis":"","whyFit":"","firstMilestone":"","constraintsNote":"","question":{"text":"","options":[{"value":"","label":""}]}}',
-    "question.options must have exactly 4 options.",
-    "The question must be a realistic tradeoff question about this path.",
-  ].join(" ");
+    'JSON schema: {"questions":[{"text":"","options":[{"value":"","label":"","directionId":""}]}]}',
+    "Each question has exactly 4 options.",
+    "Every option MUST set directionId to exactly one id from this catalog:",
+    directionCatalogLines(),
+    "Across the 3 questions the options must collectively cover at least 6 different directionIds.",
+    "Option labels are concrete day-to-day preferences (under 80 characters), never direction names.",
+    "Questions must be sharp and specific to this profile, not generic career-quiz filler.",
+  ].join("\n");
 
   const user = [
-    themeLine,
-    "Build the first branch node.",
+    "Generate the 3 direction-finding questions now.",
     "Profile:",
     profileDigest,
-    "Constraints:",
-    "- Keep the branch realistic and grounded in labor-market reality.",
-    "- Avoid generic motivational language.",
-    "- Reflect the dominant values dimensions in the whyFit copy.",
-    "- The branch should feel immediately actionable.",
   ].join("\n\n");
 
   return { system, user };
 }
 
-function buildEvolutionPrompts({ profileDigest, branch, node, answerLabel }) {
+function buildNarrowingQuestionsPrompt({ profileDigest, direction }) {
   const system = [
     BASE_SYSTEM,
-    "Evolve one branch step after the user answered a tradeoff question.",
+    "The user confirmed a broad professional direction. Generate exactly 2 questions to narrow toward specific professions inside that direction.",
+    "Ask about work style, environment, or day-to-day preference within the direction.",
     "Return valid JSON only and no extra keys.",
-    'JSON schema: {"nextNodeTitle":"","nextNodeSummary":"","clarityGain":"","riskNote":"","question":{"text":"","options":[{"value":"","label":""}]},"shouldStop":false}',
-    "question.options must have exactly 4 options.",
-    "Continue to reflect the user's values dimensions and personality scores in the tradeoff design.",
-    "If clarity is already high, you may set shouldStop true.",
-  ].join(" ");
+    'JSON schema: {"questions":[{"text":"","options":[{"value":"","label":""}]}]}',
+    "Each question has exactly 4 options. Option labels under 80 characters.",
+  ].join("\n");
 
   const user = [
-    `Branch theme: ${branch.themeLabel}`,
-    `Current branch title: ${branch.title}`,
-    `Current node title: ${node.title}`,
-    `Current node summary: ${node.summary}`,
-    `User answered: ${answerLabel}`,
-    "Generate the next node that logically follows from this answer.",
+    `Confirmed direction: ${direction.label}`,
     "Profile:",
     profileDigest,
-    "Requirements:",
-    "- Keep it concrete and realistic.",
-    "- Explicitly reflect tradeoffs.",
-    "- The next question must pressure-test feasibility or life satisfaction.",
+  ].join("\n\n");
+
+  return { system, user };
+}
+
+function buildProfessionsPrompt({ profileDigest, direction, directionDigest, narrowingDigest }) {
+  const system = [
+    BASE_SYSTEM,
+    "Generate exactly 3 specific, realistic professions that fit the user's confirmed direction and answers.",
+    "Return valid JSON only and no extra keys.",
+    'JSON schema: {"professions":[{"title":"","summary":"","whyFit":"","dayToDay":""}]}',
+    "title: a real, recognizable job title. summary: one sentence, what the job is.",
+    "whyFit: one or two sentences tying THIS user's profile and answers to the job.",
+    "dayToDay: one sentence about a typical working day.",
+    "The 3 professions must be meaningfully different from each other (role, seniority path, or work mode).",
+    "Stay grounded in labor-market reality. No fantasy titles.",
+  ].join("\n");
+
+  const user = [
+    `Confirmed direction: ${direction.label}`,
+    "Direction-finding answers:",
+    directionDigest || "(none)",
+    "Narrowing answers:",
+    narrowingDigest || "(none)",
+    "Profile:",
+    profileDigest,
+  ].join("\n\n");
+
+  return { system, user };
+}
+
+function buildRoadmapPrompt({ profileDigest, direction, profession, narrowingDigest }) {
+  const system = [
+    BASE_SYSTEM,
+    "Generate a personalized, ordered, step-by-step career roadmap toward one target profession.",
+    "Return valid JSON only and no extra keys.",
+    'JSON schema: {"stages":[{"title":"","description":"","timeframe":"","milestone":""}]}',
+    "Produce 5-7 stages, strictly in chronological order: foundations → first practice → entry-level role → key credential or milestone → mid-level growth → target role.",
+    "title: short (under 40 characters), one main idea. description: 1-2 actionable sentences saying exactly what to learn, build, or gain.",
+    "timeframe: rough duration like '2-3 months'. milestone: the concrete checkpoint that proves the stage is done.",
+    "Personalize using the profile (age, country, personality, values) — adjust pace, entry point, and credential choices accordingly.",
+  ].join("\n");
+
+  const user = [
+    `Target profession: ${profession.title}`,
+    `Profession summary: ${profession.summary}`,
+    `Direction: ${direction.label}`,
+    "Narrowing answers:",
+    narrowingDigest || "(none)",
+    "Profile:",
+    profileDigest,
   ].join("\n\n");
 
   return { system, user };
@@ -140,6 +190,9 @@ function buildEvolutionPrompts({ profileDigest, branch, node, answerLabel }) {
 module.exports = {
   buildProfileDigest,
   buildBigFiveItemsPrompt,
-  buildInitialBranchPrompts,
-  buildEvolutionPrompts,
+  buildAnswersDigest,
+  buildDirectionQuestionsPrompt,
+  buildNarrowingQuestionsPrompt,
+  buildProfessionsPrompt,
+  buildRoadmapPrompt,
 };
