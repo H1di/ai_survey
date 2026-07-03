@@ -15,16 +15,12 @@ Premium minimal web app for exploring realistic career and life directions throu
 - Optional premium depth modules: motivation profile, personality style, values conflict, cognitive style, etc.
 - Questions adapt to previous answers and constraints
 
-3. **Page 3 - Life Path Engine**
+3. **Page 3 - Life Path Engine** (free for every session)
 - React Flow graph with centered root node: `Me`
-- First branch generated free
-- Click branch nodes to answer tradeoff prompts and evolve that branch
-- Unlock additional thematic branches (mock payment lock):
-  - Safe Path
-  - High Income Path
-  - Meaning Path
-  - Creative Path
-  - Freedom Path
+- **Direction finding**: 2-3 sharp AI-generated questions converge on one broad professional direction (e.g. Programming, Healthcare, Design), rendered as a confirmed Direction node
+- **Narrowing**: 1-2 follow-up questions about work style and environment, then exactly 3 realistic professions fork off the Direction node
+- **Confirm**: clicking a profession asks "Would you like to see how to reach this profession?"
+- **Roadmap**: on confirmation, a personalized ordered step-by-step roadmap (foundations → first projects → entry role → credential → established role) renders as a vertical chain under the chosen profession; click any step for details
 
 ## Tech Stack
 
@@ -42,9 +38,10 @@ Key backend modules:
 - `backend/server.js` API routes
 - `backend/questionPool.js` question bank + themes
 - `backend/questionEngine.js` adaptive selection + validation
-- `backend/aiEngine.js` initial branch + branch evolution generation
+- `backend/aiEngine.js` direction questions, profession narrowing, roadmap generation
 - `backend/prompts.js` AI prompt templates
-- `backend/sessionStore.js` in-memory session and branch state
+- `backend/directions.js` broad-direction catalog + deterministic direction tally
+- `backend/sessionStore.js` in-memory session, direction, profession, and roadmap state
 
 ## Run Locally
 
@@ -87,23 +84,23 @@ npm run dev
 - `POST /api/questions/answer`
   - body: `{ "sessionId": "...", "questionId": "...", "answer": "..." }`
 
-### Branch Engine
-- `POST /api/branches/initial`
-  - body: `{ "sessionId": "..." }`
-- `POST /api/branches/evolve`
-  - body: `{ "sessionId": "...", "branchId": "...", "nodeId": "...", "answer": "..." }`
-- `POST /api/branches/create`
-  - body: `{ "sessionId": "...", "themeId": "safe|high_income|meaning|creative|freedom" }`
-
-### Payment Lock (MVP mock)
-- `POST /api/payment/unlock-theme`
-  - body: `{ "sessionId": "...", "themeId": "..." }`
-  - returns mock paid receipt and unlocked state
+### Life Path Engine
+- `POST /api/direction/question`
+  - body: `{ "sessionId": "..." }` — generates/returns the direction-finding questions
+- `POST /api/direction/answer`
+  - body: `{ "sessionId": "...", "questionId": "...", "value": "..." }`
+- `POST /api/direction/confirm`
+  - body: `{ "sessionId": "..." }` — locks the proposed direction, returns narrowing questions
+- `POST /api/professions/narrow`
+  - body: `{ "sessionId": "...", "questionId": "...", "value": "..." }` — after the last answer, returns exactly 3 profession options
+- `POST /api/professions/select`
+  - body: `{ "sessionId": "...", "professionId": "..." }`
+- `POST /api/roadmap/generate`
+  - body: `{ "sessionId": "..." }` — personalized ordered roadmap for the selected profession
 
 ## Notes
 
-- Additional branches are independent and do not modify existing branch chains.
-- If OpenAI fails, backend has a deterministic fallback branch generator so the flow still works.
-- Current payment flow is mocked for MVP. Replace with Stripe/Checkout for production.
+- Every feature is free — there is no payment flow.
+- If OpenAI fails or no API key is set, deterministic fallback generators cover direction questions, narrowing questions, professions, and roadmaps, so the flow never breaks.
 
 :)
