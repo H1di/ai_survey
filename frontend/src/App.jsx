@@ -253,7 +253,7 @@ function buildLifePathGraph({
     source: "me",
     target: "direction",
     type: "branch",
-    data: { delay: 0 },
+    data: { delay: 0, active: true },
   });
 
   professionOptions.forEach((profession, index) => {
@@ -276,7 +276,7 @@ function buildLifePathGraph({
       source: "direction",
       target: profession.id,
       type: "branch",
-      data: { delay: edgeDelay },
+      data: { delay: edgeDelay, active: profession.id === selectedProfessionId },
     });
   });
 
@@ -323,7 +323,7 @@ function buildLifePathGraph({
         source: parentId,
         target: nodeId,
         type: "branch",
-        data: { delay: edgeDelay },
+        data: { delay: edgeDelay, active: true },
       });
     });
   }
