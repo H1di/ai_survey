@@ -65,13 +65,13 @@
   font-size: 13px;
   font-weight: 500;
   color: var(--color-bg);
-  background: var(--color-text);
+  background: var(--color-accent);
   padding: 12px 20px;
   border-radius: 2px;
-  transition: opacity var(--transition);
+  transition: background var(--transition);
 }
 
-.confirm-yes:hover:not(:disabled) { opacity: 0.85; }
+.confirm-yes:hover:not(:disabled) { background: var(--color-accent-strong); }
 .confirm-yes:disabled { opacity: 0.5; cursor: default; }
 
 .confirm-later {

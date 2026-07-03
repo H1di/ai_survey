@@ -15,6 +15,9 @@
   --color-border-strong: #b0b0b0;
   --color-surface: #f7f7f7;
   --color-locked: #d0d0d0;
+  --color-accent: #863bff;
+  --color-accent-strong: #7326e6;
+  --color-accent-soft: rgba(134, 59, 255, 0.12);
   --transition: 0.2s ease;
   --transition-slow: 0.5s ease;
 }

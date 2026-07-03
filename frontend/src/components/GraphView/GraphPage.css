@@ -127,3 +127,20 @@
   font-style: italic;
   margin-top: 12px;
 }
+
+/* Page 3 accent — scoped so Pages 1-2 buttons stay monochrome */
+.graph-page .primary-action {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #ffffff;
+}
+
+.graph-page .primary-action:hover:enabled {
+  background: var(--color-accent-strong);
+  border-color: var(--color-accent-strong);
+  color: #ffffff;
+}
+
+.graph-question-dock .question-category {
+  color: var(--color-accent);
+}
