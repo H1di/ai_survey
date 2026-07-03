@@ -1,7 +1,4 @@
 const { randomUUID } = require("node:crypto");
-const { BRANCH_THEMES } = require("./questionPool");
-
-const THEME_LOOKUP = new Map(BRANCH_THEMES.map((theme) => [theme.id, theme]));
 
 class SessionStore {
   constructor() {
@@ -25,11 +22,19 @@ class SessionStore {
       derivedTraits: null,
       valuesAnswers: {},
       valuesScores: null,
-      branches: [],
-      unlockedThemes: [],
+      // Page 3 — Life Path Engine
+      pathStage: "direction",
+      directionQuestions: [],
+      directionAnswers: {},
+      proposedDirection: null,
+      direction: null,
+      narrowingQuestions: [],
+      narrowingAnswers: {},
+      professionOptions: [],
+      selectedProfession: null,
+      roadmap: null,
       createdAt: now,
       updatedAt: now,
-      branchCounter: 0,
     };
 
     this.sessions.set(id, session);
@@ -96,134 +101,55 @@ class SessionStore {
     this.touch(session);
   }
 
-  unlockTheme(session, themeId) {
-    if (!THEME_LOOKUP.has(themeId)) {
-      const error = new Error("Theme not found.");
-      error.statusCode = 400;
-      throw error;
-    }
-
-    if (!session.unlockedThemes.includes(themeId)) {
-      session.unlockedThemes.push(themeId);
-      this.touch(session);
-    }
-
-    return [...session.unlockedThemes];
-  }
-
-  isThemeUnlocked(session, themeId) {
-    return session.unlockedThemes.includes(themeId);
-  }
-
-  hasBranchForTheme(session, themeId) {
-    return session.branches.some((branch) => branch.theme === themeId);
-  }
-
-  getBranch(session, branchId) {
-    return session.branches.find((branch) => branch.id === branchId) || null;
-  }
-
-  createBranch(session, { themeId, payload }) {
-    const existing = session.branches.find((branch) => branch.theme === themeId);
-
-    if (existing) {
-      return existing;
-    }
-
-    session.branchCounter += 1;
-
-    const branchId = `branch_${session.branchCounter}`;
-    const now = new Date().toISOString();
-    const theme = THEME_LOOKUP.get(themeId);
-
-    const firstNode = {
-      id: `${branchId}_node_1`,
-      parentNodeId: null,
-      title: payload.title,
-      summary: payload.thesis,
-      milestone: payload.firstMilestone,
-      whyFit: payload.whyFit,
-      constraintsNote: payload.constraintsNote,
-      clarityGain: "Initial branch",
-      riskNote: "Unvalidated assumptions remain.",
-      question: payload.question,
-      answeredChoice: null,
-      answeredChoiceLabel: null,
-      shouldStop: false,
-      createdAt: now,
-    };
-
-    const branch = {
-      id: branchId,
-      theme: themeId,
-      themeLabel: theme ? theme.label : "Primary Path",
-      title: payload.title,
-      thesis: payload.thesis,
-      whyFit: payload.whyFit,
-      firstMilestone: payload.firstMilestone,
-      constraintsNote: payload.constraintsNote,
-      nodes: [firstNode],
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    session.branches.push(branch);
+  setDirectionQuestions(session, questions) {
+    session.directionQuestions = questions;
+    session.directionAnswers = {};
+    session.proposedDirection = null;
     this.touch(session);
-
-    return branch;
   }
 
-  appendNode(
-    session,
-    branch,
-    {
-      parentNodeId,
-      parentAnswer,
-      parentAnswerLabel,
-      nextNodeTitle,
-      nextNodeSummary,
-      clarityGain,
-      riskNote,
-      question,
-      shouldStop,
-    }
-  ) {
-    const parentNode = branch.nodes.find((node) => node.id === parentNodeId);
-
-    if (!parentNode) {
-      const error = new Error("Parent node not found.");
-      error.statusCode = 404;
-      throw error;
-    }
-
-    parentNode.answeredChoice = parentAnswer;
-    parentNode.answeredChoiceLabel = parentAnswerLabel;
-
-    const index = branch.nodes.length + 1;
-    const now = new Date().toISOString();
-
-    const nextNode = {
-      id: `${branch.id}_node_${index}`,
-      parentNodeId,
-      title: nextNodeTitle,
-      summary: nextNodeSummary,
-      milestone: "",
-      whyFit: "",
-      constraintsNote: "",
-      clarityGain,
-      riskNote,
-      question: shouldStop ? null : question,
-      answeredChoice: null,
-      answeredChoiceLabel: null,
-      shouldStop: Boolean(shouldStop),
-      createdAt: now,
-    };
-
-    branch.nodes.push(nextNode);
-    branch.updatedAt = now;
+  recordDirectionAnswer(session, questionId, value) {
+    session.directionAnswers[questionId] = value;
     this.touch(session);
+  }
 
-    return nextNode;
+  setProposedDirection(session, direction) {
+    session.proposedDirection = direction;
+    this.touch(session);
+  }
+
+  confirmDirection(session, direction) {
+    session.direction = direction;
+    session.pathStage = "narrowing";
+    this.touch(session);
+  }
+
+  setNarrowingQuestions(session, questions) {
+    session.narrowingQuestions = questions;
+    session.narrowingAnswers = {};
+    this.touch(session);
+  }
+
+  recordNarrowingAnswer(session, questionId, value) {
+    session.narrowingAnswers[questionId] = value;
+    this.touch(session);
+  }
+
+  setProfessionOptions(session, professions) {
+    session.professionOptions = professions;
+    session.pathStage = "professions";
+    this.touch(session);
+  }
+
+  selectProfession(session, profession) {
+    session.selectedProfession = profession;
+    this.touch(session);
+  }
+
+  setRoadmap(session, roadmap) {
+    session.roadmap = roadmap;
+    session.pathStage = "roadmap";
+    this.touch(session);
   }
 
   serializeSessionState(session, progress, summary) {
@@ -239,9 +165,16 @@ class SessionStore {
       valuesScores: session.valuesScores,
       progress,
       summary,
-      branches: session.branches,
-      unlockedThemes: [...session.unlockedThemes],
-      themes: BRANCH_THEMES,
+      pathStage: session.pathStage,
+      directionQuestions: session.directionQuestions,
+      directionAnswers: session.directionAnswers,
+      proposedDirection: session.proposedDirection,
+      direction: session.direction,
+      narrowingQuestions: session.narrowingQuestions,
+      narrowingAnswers: session.narrowingAnswers,
+      professionOptions: session.professionOptions,
+      selectedProfession: session.selectedProfession,
+      roadmap: session.roadmap,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
     };
