@@ -662,13 +662,30 @@ function App() {
     onStageOpen: handleStageOpen,
   });
 
+  const roadmapVisible = Boolean(
+    roadmap && selectedProfession && roadmap.professionId === selectedProfession.id
+  );
+
   const treeHint = !direction
     ? "Answer the questions to find your direction"
     : professionOptions.length === 0
       ? "Direction locked — now narrow it down"
-      : roadmap && selectedProfession && roadmap.professionId === selectedProfession.id
+      : roadmapVisible
         ? "Your roadmap — click any step for details"
         : "Click a profession to continue";
+
+  let focusKey = "start";
+  let focusNodeIds = ["me"];
+  if (roadmapVisible) {
+    focusKey = `roadmap-${roadmap.professionId}`;
+    focusNodeIds = [selectedProfession.id, ...roadmap.stages.map((s) => `stage-${s.id}`)];
+  } else if (professionOptions.length > 0) {
+    focusKey = "professions";
+    focusNodeIds = ["direction", ...professionOptions.map((p) => p.id)];
+  } else if (direction) {
+    focusKey = "direction";
+    focusNodeIds = ["me", "direction"];
+  }
 
   return (
     <main className="app-shell">
@@ -792,7 +809,12 @@ function App() {
           </div>
 
           <div className="graph-canvas">
-            <GraphView nodes={graph.nodes} edges={graph.edges} />
+            <GraphView
+              nodes={graph.nodes}
+              edges={graph.edges}
+              focusKey={focusKey}
+              focusNodeIds={focusNodeIds}
+            />
           </div>
 
           {!direction && currentDirectionQuestion && (
