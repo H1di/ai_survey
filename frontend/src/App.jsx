@@ -381,6 +381,7 @@ function App() {
     direction: false,
     confirmDirection: false,
     narrowing: false,
+    select: false,
     roadmap: false,
   });
 
@@ -570,14 +571,17 @@ function App() {
   };
 
   const handleProfessionOpen = async (profession) => {
-    if (busy.roadmap) return;
+    if (busy.roadmap || busy.select) return;
     setError("");
+    setBusy((p) => ({ ...p, select: true }));
     try {
       const data = await selectProfession({ sessionId, professionId: profession.id });
       applySessionSnapshot(data);
       setConfirmContext(profession);
     } catch (e) {
       setError(e.message || "Could not select profession.");
+    } finally {
+      setBusy((p) => ({ ...p, select: false }));
     }
   };
 
@@ -633,6 +637,7 @@ function App() {
       direction: false,
       confirmDirection: false,
       narrowing: false,
+      select: false,
       roadmap: false,
     });
   };
@@ -651,7 +656,7 @@ function App() {
     ? "Answer the questions to find your direction"
     : professionOptions.length === 0
       ? "Direction locked — now narrow it down"
-      : roadmap
+      : roadmap && selectedProfession && roadmap.professionId === selectedProfession.id
         ? "Your roadmap — click any step for details"
         : "Click a profession to continue";
 
