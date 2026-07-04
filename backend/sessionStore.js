@@ -1,5 +1,9 @@
 const { randomUUID } = require("node:crypto");
 
+const { DIRECTIONS } = require("./directions");
+
+const DIRECTION_CATALOG = DIRECTIONS.map(({ id, label }) => ({ id, label }));
+
 class SessionStore {
   constructor() {
     this.sessions = new Map();
@@ -32,7 +36,9 @@ class SessionStore {
       narrowingAnswers: {},
       professionOptions: [],
       selectedProfession: null,
-      roadmap: null,
+      roadmaps: {},
+      rejectedDirections: [],
+      refineNotes: [],
       createdAt: now,
       updatedAt: now,
     };
@@ -147,8 +153,20 @@ class SessionStore {
   }
 
   setRoadmap(session, roadmap) {
-    session.roadmap = roadmap;
+    session.roadmaps[roadmap.professionId] = roadmap;
     session.pathStage = "roadmap";
+    this.touch(session);
+  }
+
+  rejectProposedDirection(session, note) {
+    if (session.proposedDirection) {
+      session.rejectedDirections.push({
+        id: session.proposedDirection.id,
+        label: session.proposedDirection.label,
+      });
+    }
+    session.refineNotes.push(note);
+    session.proposedDirection = null;
     this.touch(session);
   }
 
@@ -174,7 +192,9 @@ class SessionStore {
       narrowingAnswers: session.narrowingAnswers,
       professionOptions: session.professionOptions,
       selectedProfession: session.selectedProfession,
-      roadmap: session.roadmap,
+      roadmaps: session.roadmaps,
+      rejectedDirections: session.rejectedDirections,
+      directionCatalog: DIRECTION_CATALOG,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
     };

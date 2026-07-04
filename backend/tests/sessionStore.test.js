@@ -26,7 +26,10 @@ test("createSession initializes Page 3 fields and keeps Page 1/2 fields", () => 
   assert.deepEqual(s.narrowingAnswers, {});
   assert.deepEqual(s.professionOptions, []);
   assert.equal(s.selectedProfession, null);
-  assert.equal(s.roadmap, null);
+  assert.deepEqual(s.roadmaps, {});
+  assert.deepEqual(s.rejectedDirections, []);
+  assert.deepEqual(s.refineNotes, []);
+  assert.equal("roadmap" in s, false);
   // Old model gone
   assert.equal("branches" in s, false);
   assert.equal("unlockedThemes" in s, false);
@@ -85,7 +88,11 @@ test("narrowing, professions, selection, roadmap setters advance pathStage", () 
 
   store.setRoadmap(s, { professionId: "prof_1", stages: [{ id: "stage_1", title: "t", description: "d", timeframe: "", milestone: "" }] });
   assert.equal(s.pathStage, "roadmap");
-  assert.equal(s.roadmap.professionId, "prof_1");
+  assert.equal(s.roadmaps.prof_1.professionId, "prof_1");
+
+  store.setRoadmap(s, { professionId: "prof_2", stages: [{ id: "stage_1", title: "t2", description: "d", timeframe: "", milestone: "" }] });
+  assert.equal(Object.keys(s.roadmaps).length, 2, "second roadmap must not evict the first");
+  assert.equal(s.roadmaps.prof_1.stages[0].title, "t");
 });
 
 test("serializeSessionState exposes Page 3 fields and hides the old model", () => {
@@ -101,7 +108,13 @@ test("serializeSessionState exposes Page 3 fields and hides the old model", () =
   assert.deepEqual(snapshot.narrowingAnswers, {});
   assert.deepEqual(snapshot.professionOptions, []);
   assert.equal(snapshot.selectedProfession, null);
-  assert.equal(snapshot.roadmap, null);
+  assert.deepEqual(snapshot.roadmaps, {});
+  assert.deepEqual(snapshot.rejectedDirections, []);
+  assert.equal(snapshot.directionCatalog.length, 8);
+  for (const entry of snapshot.directionCatalog) {
+    assert.deepEqual(Object.keys(entry).sort(), ["id", "label"]);
+  }
+  assert.equal("roadmap" in snapshot, false);
   assert.equal("branches" in snapshot, false);
   assert.equal("unlockedThemes" in snapshot, false);
   assert.equal("themes" in snapshot, false);
@@ -109,6 +122,16 @@ test("serializeSessionState exposes Page 3 fields and hides the old model", () =
   assert.equal(snapshot.step, "demographics");
   assert.ok(snapshot.progress);
   assert.ok(snapshot.summary !== undefined);
+});
+
+test("rejectProposedDirection records the rejection and clears the proposal", () => {
+  const store = new SessionStore();
+  const s = makeSession(store);
+  store.setProposedDirection(s, { id: "tech", label: "Programming & Technology", reason: "r" });
+  store.rejectProposedDirection(s, { reasonChoice: "interests", feedbackText: "people work" });
+  assert.deepEqual(s.rejectedDirections, [{ id: "tech", label: "Programming & Technology" }]);
+  assert.deepEqual(s.refineNotes, [{ reasonChoice: "interests", feedbackText: "people work" }]);
+  assert.equal(s.proposedDirection, null);
 });
 
 test("old branch/theme methods are gone", () => {
