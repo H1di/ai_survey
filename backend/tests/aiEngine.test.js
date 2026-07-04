@@ -88,3 +88,33 @@ test("old branch methods are gone", () => {
   assert.equal(engine.generateInitialBranch, undefined);
   assert.equal(engine.evolveBranch, undefined);
 });
+
+test("refineDirection fallback: excludes rejected ids and carries a reason", async () => {
+  const session = fakeSession({
+    directionQuestions: [
+      { id: "dir_q1", text: "q", options: [
+        { value: "a", label: "A", directionId: "tech" },
+        { value: "b", label: "B", directionId: "design" },
+      ]},
+    ],
+    directionAnswers: { dir_q1: "a" },
+    rejectedDirections: [{ id: "tech", label: "Programming & Technology" }],
+  });
+  const refined = await engine.refineDirection({ session, reasonChoice: "interests", feedbackText: "" });
+  assert.notEqual(refined.id, "tech");
+  assert.ok(DIRECTION_IDS.includes(refined.id));
+  assert.equal(refined.reason, "Based on your quiz answers, this is your next strongest match.");
+});
+
+test("refineDirection fallback: all quiz votes rejected -> first non-rejected catalog direction", async () => {
+  const session = fakeSession({
+    directionQuestions: [],
+    directionAnswers: {},
+    rejectedDirections: [
+      { id: "tech", label: "x" },
+      { id: "healthcare", label: "y" },
+    ],
+  });
+  const refined = await engine.refineDirection({ session, reasonChoice: "environment", feedbackText: "" });
+  assert.equal(refined.id, "design");
+});

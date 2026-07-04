@@ -7,9 +7,10 @@ const {
   buildNarrowingQuestionsPrompt,
   buildProfessionsPrompt,
   buildRoadmapPrompt,
+  buildDirectionRefinePrompt,
 } = require("./prompts");
 const { VALUES_DIMENSIONS } = require("./questionPool");
-const { DIRECTIONS, DIRECTION_IDS, getDirection } = require("./directions");
+const { DIRECTIONS, DIRECTION_IDS, getDirection, computeDirection } = require("./directions");
 const { getFallbackItems } = require("./bigFiveItems");
 
 function cleanText(value, fallback = "") {
@@ -192,6 +193,15 @@ function fallbackRoadmap(profession) {
   };
 }
 
+function fallbackRefineDirection(session) {
+  const rejectedIds = session.rejectedDirections.map((d) => d.id);
+  const next = computeDirection(session.directionQuestions, session.directionAnswers, rejectedIds);
+  return {
+    ...next,
+    reason: "Based on your quiz answers, this is your next strongest match.",
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Normalizers — throw on structurally invalid AI payloads so the caller
 // falls back deterministically.
@@ -293,6 +303,19 @@ function normalizeRoadmapPayload(payload, profession) {
         milestone: cleanText(stage?.milestone, ""),
       };
     }),
+  };
+}
+
+function normalizeRefinePayload(payload, rejectedIds) {
+  const directionId = payload?.directionId;
+  if (!DIRECTION_IDS.includes(directionId) || rejectedIds.includes(directionId)) {
+    throw new Error(`Invalid refined directionId: ${directionId}`);
+  }
+  const dir = getDirection(directionId);
+  return {
+    id: dir.id,
+    label: dir.label,
+    reason: cleanText(payload?.reason, "This direction better matches what you described."),
   };
 }
 
@@ -419,6 +442,32 @@ function createAiEngine({ apiKey, model }) {
     }
   }
 
+  async function refineDirection({ session, reasonChoice, feedbackText }) {
+    if (!client) {
+      return fallbackRefineDirection(session);
+    }
+
+    try {
+      const prompts = buildDirectionRefinePrompt({
+        profileDigest: buildSessionDigest(session),
+        directionDigest: buildAnswersDigest(session.directionQuestions, session.directionAnswers),
+        rejectedDirections: session.rejectedDirections,
+        reasonChoice,
+        feedbackText,
+      });
+      const parsed = await runJsonCompletion(client, {
+        model,
+        system: prompts.system,
+        user: prompts.user,
+        temperature: 0.7,
+      });
+      return normalizeRefinePayload(parsed, session.rejectedDirections.map((d) => d.id));
+    } catch (error) {
+      console.error("[AI refine direction fallback]", error.message);
+      return fallbackRefineDirection(session);
+    }
+  }
+
   async function generateBigFiveItems({ depth }) {
     if (!client) {
       return getFallbackItems(depth);
@@ -460,6 +509,7 @@ function createAiEngine({ apiKey, model }) {
     generateNarrowingQuestions,
     generateProfessions,
     generateRoadmap,
+    refineDirection,
     generateBigFiveItems,
   };
 }
