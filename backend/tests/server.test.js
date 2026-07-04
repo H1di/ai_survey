@@ -96,17 +96,26 @@ test("full Page 3 flow: direction -> narrowing -> professions -> select -> roadm
   assert.equal(status, 200);
   assert.equal(data.selectedProfession.id, chosen.id);
 
-  // Stage D: roadmap
+  // Stage D: roadmap (map keyed by professionId)
   ({ status, data } = await post("/api/roadmap/generate", { sessionId }));
   assert.equal(status, 200);
   assert.equal(data.pathStage, "roadmap");
-  assert.equal(data.roadmap.professionId, chosen.id);
-  assert.ok(data.roadmap.stages.length >= 4);
+  assert.ok(data.roadmaps[chosen.id], "roadmap stored under its professionId");
+  assert.ok(data.roadmaps[chosen.id].stages.length >= 4);
 
-  // cached: same roadmap object on repeat call
-  const firstStageTitle = data.roadmap.stages[0].title;
+  // cached: repeat call returns the same stages
+  const firstStageTitle = data.roadmaps[chosen.id].stages[0].title;
   ({ data } = await post("/api/roadmap/generate", { sessionId }));
-  assert.equal(data.roadmap.stages[0].title, firstStageTitle);
+  assert.equal(data.roadmaps[chosen.id].stages[0].title, firstStageTitle);
+
+  // second profession: selecting + generating keeps the first roadmap
+  const other = data.professionOptions.find((p) => p.id !== chosen.id);
+  ({ data } = await post("/api/professions/select", { sessionId, professionId: other.id }));
+  assert.ok(data.roadmaps[chosen.id], "first roadmap survives selecting another profession");
+  ({ data } = await post("/api/roadmap/generate", { sessionId }));
+  assert.ok(data.roadmaps[other.id], "second roadmap generated");
+  assert.ok(data.roadmaps[chosen.id], "first roadmap still present");
+  assert.equal(Object.keys(data.roadmaps).length, 2);
 });
 
 test("guards: ordering and validation", async () => {
@@ -151,4 +160,64 @@ test("monetization and branch routes are gone", async () => {
     const res = await post(path, {});
     assert.equal(res.status, 404, `${path} should be removed`);
   }
+});
+
+test("direction refinement: reject twice, then manual choose", async () => {
+  const { sessionId } = await completeAssessment();
+  let { data } = await post("/api/direction/question", { sessionId });
+  for (const q of data.directionQuestions) {
+    ({ data } = await post("/api/direction/answer", { sessionId, questionId: q.id, value: q.options[0].value }));
+  }
+  assert.ok(data.proposedDirection.reason, "tally proposal carries a reason");
+  const first = data.proposedDirection.id;
+
+  // guards
+  let res = await post("/api/direction/refine", { sessionId, reasonChoice: "nope", feedbackText: "" });
+  assert.equal(res.status, 400, "invalid reason rejected");
+
+  // reject #1
+  ({ data } = await post("/api/direction/refine", { sessionId, reasonChoice: "interests", feedbackText: "I want to work with people" }));
+  assert.equal(data.rejectedDirections.length, 1);
+  assert.equal(data.rejectedDirections[0].id, first);
+  assert.notEqual(data.proposedDirection.id, first);
+  assert.ok(data.proposedDirection.reason);
+  const second = data.proposedDirection.id;
+
+  // reject #2
+  ({ data } = await post("/api/direction/refine", { sessionId, reasonChoice: "environment", feedbackText: "" }));
+  assert.equal(data.rejectedDirections.length, 2);
+  assert.notEqual(data.proposedDirection.id, first);
+  assert.notEqual(data.proposedDirection.id, second);
+
+  // choose: rejected id -> 400; valid -> proposal "Chosen by you."
+  res = await post("/api/direction/choose", { sessionId, directionId: first });
+  assert.equal(res.status, 400);
+  const pick = data.directionCatalog.find(
+    (d) => ![first, second].includes(d.id)
+  );
+  ({ data } = await post("/api/direction/choose", { sessionId, directionId: pick.id }));
+  assert.equal(data.proposedDirection.id, pick.id);
+  assert.equal(data.proposedDirection.reason, "Chosen by you.");
+
+  // confirm still works after choose
+  ({ data } = await post("/api/direction/confirm", { sessionId }));
+  assert.equal(data.direction.id, pick.id);
+});
+
+test("refine guards: no proposal and confirmed direction", async () => {
+  const { sessionId } = await completeAssessment();
+  // no proposal yet
+  let res = await post("/api/direction/refine", { sessionId, reasonChoice: "interests", feedbackText: "" });
+  assert.equal(res.status, 400);
+
+  // confirm a direction, then refine/choose must 400
+  let { data } = await post("/api/direction/question", { sessionId });
+  for (const q of data.directionQuestions) {
+    ({ data } = await post("/api/direction/answer", { sessionId, questionId: q.id, value: q.options[0].value }));
+  }
+  await post("/api/direction/confirm", { sessionId });
+  res = await post("/api/direction/refine", { sessionId, reasonChoice: "interests", feedbackText: "" });
+  assert.equal(res.status, 400);
+  res = await post("/api/direction/choose", { sessionId, directionId: "media" });
+  assert.equal(res.status, 400);
 });

@@ -17,7 +17,7 @@ const {
   buildProgress,
   summarizeAnswersForClient,
 } = require("./questionEngine");
-const { computeDirection } = require("./directions");
+const { computeDirection, getDirection, REFINE_REASON_VALUES } = require("./directions");
 const { SessionStore } = require("./sessionStore");
 
 dotenv.config();
@@ -255,10 +255,10 @@ app.post("/api/direction/answer", (req, res) => {
       (q) => session.directionAnswers[q.id] !== undefined
     );
     if (allAnswered) {
-      store.setProposedDirection(
-        session,
-        computeDirection(session.directionQuestions, session.directionAnswers)
-      );
+      store.setProposedDirection(session, {
+        ...computeDirection(session.directionQuestions, session.directionAnswers),
+        reason: "Your answers across the quiz point most strongly to this direction.",
+      });
     }
 
     return sendSessionSnapshot(res, session);
@@ -291,6 +291,74 @@ app.post("/api/direction/confirm", async (req, res) => {
     return res
       .status(error.statusCode || 500)
       .json({ error: error.statusCode ? error.message : "Failed to confirm direction." });
+  }
+});
+
+app.post("/api/direction/refine", async (req, res) => {
+  try {
+    const { sessionId, reasonChoice, feedbackText } = req.body || {};
+    const session = store.require(sessionId);
+    requireCompletedAssessment(session);
+
+    if (session.direction) {
+      return res.status(400).json({ error: "Direction already confirmed." });
+    }
+    if (!session.proposedDirection) {
+      return res.status(400).json({ error: "No proposed direction to refine." });
+    }
+    if (!REFINE_REASON_VALUES.includes(reasonChoice)) {
+      return res.status(400).json({ error: "Invalid reason." });
+    }
+
+    const note = {
+      reasonChoice,
+      feedbackText: typeof feedbackText === "string" ? feedbackText.trim().slice(0, 500) : "",
+    };
+
+    store.rejectProposedDirection(session, note);
+
+    const refined = await aiEngine.refineDirection({
+      session,
+      reasonChoice: note.reasonChoice,
+      feedbackText: note.feedbackText,
+    });
+    store.setProposedDirection(session, refined);
+
+    return sendSessionSnapshot(res, session);
+  } catch (error) {
+    console.error("[direction/refine]", error);
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.statusCode ? error.message : "Failed to refine direction." });
+  }
+});
+
+app.post("/api/direction/choose", (req, res) => {
+  try {
+    const { sessionId, directionId } = req.body || {};
+    const session = store.require(sessionId);
+    requireCompletedAssessment(session);
+
+    if (session.direction) {
+      return res.status(400).json({ error: "Direction already confirmed." });
+    }
+    const chosen = getDirection(directionId);
+    if (!chosen) {
+      return res.status(400).json({ error: "Unknown direction." });
+    }
+    if (session.rejectedDirections.some((d) => d.id === directionId)) {
+      return res.status(400).json({ error: "You already rejected this direction." });
+    }
+
+    store.setProposedDirection(session, {
+      id: chosen.id,
+      label: chosen.label,
+      reason: "Chosen by you.",
+    });
+
+    return sendSessionSnapshot(res, session);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ error: error.message });
   }
 });
 
@@ -357,7 +425,7 @@ app.post("/api/roadmap/generate", async (req, res) => {
       return res.status(400).json({ error: "Select a profession first." });
     }
 
-    if (!session.roadmap || session.roadmap.professionId !== session.selectedProfession.id) {
+    if (!session.roadmaps[session.selectedProfession.id]) {
       const roadmap = await aiEngine.generateRoadmap({ session });
       store.setRoadmap(session, roadmap);
     }
