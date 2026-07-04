@@ -7,9 +7,11 @@ import {
   answerDirectionQuestion,
   answerNarrowingQuestion,
   chooseBigFiveDepth,
+  chooseDirection,
   confirmDirection,
   fetchDirectionQuestions,
   generateRoadmap,
+  refineDirection,
   selectProfession,
   startSession,
   submitBigFiveAnswer,
@@ -224,6 +226,14 @@ const REDUCED_MOTION =
   typeof window !== "undefined" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+// Values must match REFINE_REASON_VALUES on the backend.
+const REFINE_REASONS = [
+  { value: "environment", label: "Wrong day-to-day environment" },
+  { value: "interests", label: "Doesn't match my real interests" },
+  { value: "too_technical", label: "Too technical / not my style" },
+  { value: "prospects", label: "Worried about pay & prospects" },
+];
+
 function professionX(index, count) {
   return (index - (count - 1) / 2) * PROFESSION_GAP;
 }
@@ -393,6 +403,12 @@ function App() {
   const [selectedProfession, setSelectedProfession] = useState(null);
   const [roadmaps, setRoadmaps] = useState({});
 
+  const [rejectedDirections, setRejectedDirections] = useState([]);
+  const [directionCatalog, setDirectionCatalog] = useState([]);
+  const [refineMode, setRefineMode] = useState(false);
+  const [refineReason, setRefineReason] = useState("");
+  const [refineText, setRefineText] = useState("");
+
   const [narrowIntent, setNarrowIntent] = useState(false);
   const [confirmContext, setConfirmContext] = useState(null);
   const [stageDetail, setStageDetail] = useState(null);
@@ -409,6 +425,7 @@ function App() {
     narrowing: false,
     select: false,
     roadmap: false,
+    refine: false,
   });
 
   const [error, setError] = useState("");
@@ -427,6 +444,8 @@ function App() {
     setProfessionOptions(data.professionOptions || []);
     setSelectedProfession(data.selectedProfession || null);
     setRoadmaps(data.roadmaps || {});
+    setRejectedDirections(data.rejectedDirections || []);
+    setDirectionCatalog(data.directionCatalog || []);
   };
 
   const handleStartSession = async () => {
@@ -578,6 +597,48 @@ function App() {
     }
   };
 
+  const handleOpenRefine = () => {
+    setRefineMode(true);
+    setRefineReason("");
+    setRefineText("");
+  };
+
+  const handleRefineDirection = async () => {
+    if (!sessionId || !refineReason) return;
+    setError("");
+    setBusy((p) => ({ ...p, refine: true }));
+    try {
+      const data = await refineDirection({
+        sessionId,
+        reasonChoice: refineReason,
+        feedbackText: refineText.trim(),
+      });
+      applySessionSnapshot(data);
+      setRefineMode(false);
+      setRefineReason("");
+      setRefineText("");
+    } catch (e) {
+      setError(e.message || "Could not refine direction.");
+    } finally {
+      setBusy((p) => ({ ...p, refine: false }));
+    }
+  };
+
+  const handleChooseDirection = async (directionId) => {
+    if (!sessionId) return;
+    setError("");
+    setBusy((p) => ({ ...p, refine: true }));
+    try {
+      const data = await chooseDirection({ sessionId, directionId });
+      applySessionSnapshot(data);
+      setRefineMode(false);
+    } catch (e) {
+      setError(e.message || "Could not choose direction.");
+    } finally {
+      setBusy((p) => ({ ...p, refine: false }));
+    }
+  };
+
   const handleAnswerNarrowing = async (value) => {
     if (!sessionId || !currentNarrowingQuestion) return;
     setError("");
@@ -649,6 +710,11 @@ function App() {
     setProfessionOptions([]);
     setSelectedProfession(null);
     setRoadmaps({});
+    setRejectedDirections([]);
+    setDirectionCatalog([]);
+    setRefineMode(false);
+    setRefineReason("");
+    setRefineText("");
     setNarrowIntent(false);
     setConfirmContext(null);
     setStageDetail(null);
@@ -665,6 +731,7 @@ function App() {
       narrowing: false,
       select: false,
       roadmap: false,
+      refine: false,
     });
   };
 
@@ -720,6 +787,74 @@ function App() {
           />
         ),
       };
+    } else if (!direction && refineMode && rejectedDirections.length < 2) {
+      dockCard = {
+        key: "refine",
+        content: (
+          <div className="question-card dock-card">
+            <p className="question-category">Let's get this right</p>
+            <h3>
+              What feels off about {proposedDirection ? proposedDirection.label : "this direction"}?
+            </h3>
+            <div className="option-list">
+              {REFINE_REASONS.map((r) => (
+                <button
+                  key={r.value}
+                  type="button"
+                  className={`option-button ${refineReason === r.value ? "selected" : ""}`}
+                  onClick={() => setRefineReason(r.value)}
+                  disabled={busy.refine}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            <textarea
+              className="dock-textarea"
+              value={refineText}
+              placeholder="Tell me what you actually want — interests, environment, anything…"
+              onChange={(e) => setRefineText(e.target.value)}
+              disabled={busy.refine}
+            />
+            <div className="question-actions single">
+              <button
+                type="button"
+                className="primary-action"
+                onClick={handleRefineDirection}
+                disabled={busy.refine || !refineReason}
+              >
+                {busy.refine ? "Thinking…" : "Suggest another direction"}
+              </button>
+            </div>
+          </div>
+        ),
+      };
+    } else if (!direction && refineMode && rejectedDirections.length >= 2) {
+      dockCard = {
+        key: "direction-pick",
+        content: (
+          <div className="question-card dock-card">
+            <p className="question-category">Pick your direction</p>
+            <h3>Choose the one that feels right</h3>
+            <p className="dock-subtext">Your roadmap will build from whichever you pick.</p>
+            <div className="option-list">
+              {directionCatalog
+                .filter((d) => !rejectedDirections.some((r) => r.id === d.id))
+                .map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    className="option-button"
+                    onClick={() => handleChooseDirection(d.id)}
+                    disabled={busy.refine}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+            </div>
+          </div>
+        ),
+      };
     } else if (!direction && proposedDirection) {
       dockCard = {
         key: "proposal",
@@ -728,9 +863,10 @@ function App() {
             <p className="question-category">Direction found</p>
             <h3>{proposedDirection.label}</h3>
             <p className="dock-subtext">
-              Based on your profile and answers, this is your strongest broad direction.
+              {proposedDirection.reason ||
+                "Based on your profile and answers, this is your strongest broad direction."}
             </p>
-            <div className="question-actions single">
+            <div className="question-actions">
               <button
                 type="button"
                 className="primary-action"
@@ -738,6 +874,14 @@ function App() {
                 disabled={busy.confirmDirection}
               >
                 {busy.confirmDirection ? "Confirming…" : "Confirm this direction"}
+              </button>
+              <button
+                type="button"
+                className="ghost-action"
+                onClick={handleOpenRefine}
+                disabled={busy.confirmDirection}
+              >
+                Not quite right
               </button>
             </div>
           </div>
