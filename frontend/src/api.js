@@ -92,3 +92,17 @@ export function generateRoadmap(payload) {
     body: JSON.stringify(payload),
   });
 }
+
+export function refineDirection(payload) {
+  return request("/api/direction/refine", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function chooseDirection(payload) {
+  return request("/api/direction/choose", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
