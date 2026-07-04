@@ -117,6 +117,40 @@ function buildDirectionQuestionsPrompt({ profileDigest }) {
   return { system, user };
 }
 
+function buildDirectionRefinePrompt({
+  profileDigest,
+  directionDigest,
+  rejectedDirections,
+  reasonChoice,
+  feedbackText,
+}) {
+  const rejectedIds = rejectedDirections.map((d) => d.id);
+  const allowed = DIRECTIONS.filter((d) => !rejectedIds.includes(d.id));
+
+  const system = [
+    BASE_SYSTEM,
+    "The user rejected the proposed professional direction. Pick ONE different direction from the catalog that better matches their feedback.",
+    "Return valid JSON only and no extra keys.",
+    'JSON schema: {"directionId":"","reason":""}',
+    "directionId MUST be one of:",
+    allowed.map((d) => `- ${d.id}: ${d.label} (${d.examples})`).join("\n"),
+    `directionId MUST NOT be any of: ${rejectedIds.join(", ") || "(none)"}.`,
+    "reason: 1-2 sentences in English, addressed directly to the user, explaining why this direction fits their feedback better.",
+  ].join("\n");
+
+  const user = [
+    `Rejected direction(s): ${rejectedDirections.map((d) => d.label).join(", ") || "(none)"}`,
+    `What felt off (user's choice): ${reasonChoice}`,
+    `What the user says they actually want: ${feedbackText || "(not provided)"}`,
+    "Direction quiz answers:",
+    directionDigest || "(none)",
+    "Profile:",
+    profileDigest,
+  ].join("\n\n");
+
+  return { system, user };
+}
+
 function buildNarrowingQuestionsPrompt({ profileDigest, direction }) {
   const system = [
     BASE_SYSTEM,
@@ -192,6 +226,7 @@ module.exports = {
   buildBigFiveItemsPrompt,
   buildAnswersDigest,
   buildDirectionQuestionsPrompt,
+  buildDirectionRefinePrompt,
   buildNarrowingQuestionsPrompt,
   buildProfessionsPrompt,
   buildRoadmapPrompt,

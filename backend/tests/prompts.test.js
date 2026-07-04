@@ -66,3 +66,21 @@ test("old branch templates are removed, Page 2 templates kept", () => {
   assert.equal(typeof prompts.buildProfileDigest, "function");
   assert.equal(typeof prompts.buildBigFiveItemsPrompt, "function");
 });
+
+test("refine prompt excludes rejected ids, includes feedback, and demands the refine schema", () => {
+  const { system, user } = prompts.buildDirectionRefinePrompt({
+    profileDigest: PROFILE,
+    directionDigest: "Q -> A",
+    rejectedDirections: [{ id: "tech", label: "Programming & Technology" }],
+    reasonChoice: "interests",
+    feedbackText: "I want to work with people",
+  });
+  assert.match(system, /"directionId"/);
+  assert.match(system, /"reason"/);
+  assert.match(system, /MUST NOT be any of: tech/);
+  assert.doesNotMatch(system, /- tech: Programming/);
+  assert.match(system, /- healthcare:/);
+  assert.match(user, /I want to work with people/);
+  assert.match(user, /interests/);
+  assert.match(user, /Programming & Technology/);
+});

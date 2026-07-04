@@ -5,6 +5,7 @@ const {
   DIRECTION_IDS,
   getDirection,
   computeDirection,
+  REFINE_REASON_VALUES,
 } = require("../directions");
 
 test("catalog has 8 directions, each with id/label/examples and 3 profession seeds", () => {
@@ -56,4 +57,20 @@ test("computeDirection: tie broken by DIRECTIONS catalog order", () => {
 test("computeDirection: no valid answers falls back to first catalog direction", () => {
   const result = computeDirection(QUESTIONS, {});
   assert.equal(result.id, DIRECTIONS[0].id);
+});
+
+test("computeDirection excludeIds: excluded direction gets no votes and cannot win", () => {
+  const result = computeDirection(QUESTIONS, { dir_q1: "a", dir_q2: "a", dir_q3: "b" }, ["tech"]);
+  assert.notEqual(result.id, "tech");
+  // remaining single votes tie -> catalog order among non-excluded voted dirs
+  assert.equal(result.id, "business");
+});
+
+test("computeDirection excludeIds: no votes left falls back to first non-excluded catalog direction", () => {
+  const result = computeDirection(QUESTIONS, {}, ["tech"]);
+  assert.equal(result.id, "healthcare");
+});
+
+test("REFINE_REASON_VALUES is the fixed four-value list", () => {
+  assert.deepEqual(REFINE_REASON_VALUES, ["environment", "interests", "too_technical", "prospects"]);
 });

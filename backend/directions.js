@@ -93,7 +93,9 @@ function getDirection(id) {
 // Deterministic Stage A resolution: each answered option votes for its
 // directionId; most votes wins; ties break by catalog order (strict > while
 // iterating DIRECTIONS keeps the earliest). No answers -> first direction.
-function computeDirection(questions, answers) {
+// excludeIds removes rejected directions from both voting and the fallback.
+function computeDirection(questions, answers, excludeIds = []) {
+  const excluded = new Set(excludeIds);
   const counts = new Map();
 
   for (const question of questions) {
@@ -101,11 +103,13 @@ function computeDirection(questions, answers) {
     if (chosen === undefined) continue;
     const option = question.options.find((o) => o.value === chosen);
     if (!option || !option.directionId) continue;
+    if (excluded.has(option.directionId)) continue;
     counts.set(option.directionId, (counts.get(option.directionId) || 0) + 1);
   }
 
   let best = null;
   for (const dir of DIRECTIONS) {
+    if (excluded.has(dir.id)) continue;
     const count = counts.get(dir.id) || 0;
     if (count > 0 && (best === null || count > best.count)) {
       best = { id: dir.id, label: dir.label, count };
@@ -113,14 +117,19 @@ function computeDirection(questions, answers) {
   }
 
   if (!best) {
-    return { id: DIRECTIONS[0].id, label: DIRECTIONS[0].label };
+    const firstAvailable = DIRECTIONS.find((dir) => !excluded.has(dir.id)) || DIRECTIONS[0];
+    return { id: firstAvailable.id, label: firstAvailable.label };
   }
   return { id: best.id, label: best.label };
 }
+
+// Validated server-side; display labels live in the frontend refine card.
+const REFINE_REASON_VALUES = ["environment", "interests", "too_technical", "prospects"];
 
 module.exports = {
   DIRECTIONS,
   DIRECTION_IDS,
   getDirection,
   computeDirection,
+  REFINE_REASON_VALUES,
 };
