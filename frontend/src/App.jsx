@@ -232,7 +232,7 @@ function buildLifePathGraph({
   direction,
   professionOptions,
   selectedProfessionId,
-  roadmap,
+  roadmaps,
   roadmapPending,
   onProfessionOpen,
   onStageOpen,
@@ -257,7 +257,7 @@ function buildLifePathGraph({
     source: "me",
     target: "direction",
     type: "branch",
-    data: { delay: 0, active: true },
+    data: { delay: 0, active: true, flowDelayMs: EDGE_DRAW_MS },
   });
 
   professionOptions.forEach((profession, index) => {
@@ -280,15 +280,19 @@ function buildLifePathGraph({
       source: "direction",
       target: profession.id,
       type: "branch",
-      data: { delay: edgeDelay, active: profession.id === selectedProfessionId },
+      data: {
+        delay: edgeDelay,
+        active: profession.id === selectedProfessionId || Boolean(roadmaps[profession.id]),
+        flowDelayMs: 150,
+      },
     });
   });
 
-  const anchorIndex = professionOptions.findIndex((p) => p.id === selectedProfessionId);
-  const anchor = anchorIndex === -1 ? null : professionOptions[anchorIndex];
-  const anchorX = anchor ? professionX(anchorIndex, professionOptions.length) : 0;
+  const selectedIndex = professionOptions.findIndex((p) => p.id === selectedProfessionId);
 
-  if (roadmapPending && anchor) {
+  if (roadmapPending && selectedIndex !== -1) {
+    const anchor = professionOptions[selectedIndex];
+    const anchorX = professionX(selectedIndex, professionOptions.length);
     nodes.push({
       id: "roadmap-loading",
       type: "loading",
@@ -303,22 +307,30 @@ function buildLifePathGraph({
     });
   }
 
-  if (roadmap && anchor && roadmap.professionId === anchor.id) {
-    roadmap.stages.forEach((stage, index) => {
-      const nodeId = `stage-${stage.id}`;
-      const parentId = index === 0 ? anchor.id : `stage-${roadmap.stages[index - 1].id}`;
+  // Every built roadmap stays on the graph, each under its own profession.
+  Object.entries(roadmaps).forEach(([professionId, professionRoadmap]) => {
+    const profIndex = professionOptions.findIndex((p) => p.id === professionId);
+    if (profIndex === -1) return;
+    const chainX = professionX(profIndex, professionOptions.length);
+
+    professionRoadmap.stages.forEach((stage, index) => {
+      const nodeId = `stage-${professionId}-${stage.id}`;
+      const parentId =
+        index === 0
+          ? professionId
+          : `stage-${professionId}-${professionRoadmap.stages[index - 1].id}`;
       const edgeDelay = index * ROADMAP_STEP_MS;
       nodes.push({
         id: nodeId,
         type: "roadmap",
-        position: { x: anchorX, y: ROADMAP_START_Y + index * ROADMAP_GAP },
+        position: { x: chainX, y: ROADMAP_START_Y + index * ROADMAP_GAP },
         draggable: true,
         style: { "--appear-delay": `${edgeDelay + EDGE_DRAW_MS}ms` },
         data: {
           index: index + 1,
           title: stage.title,
           timeframe: stage.timeframe,
-          last: index === roadmap.stages.length - 1,
+          last: index === professionRoadmap.stages.length - 1,
           onOpen: () => onStageOpen(stage, index),
         },
       });
@@ -327,10 +339,10 @@ function buildLifePathGraph({
         source: parentId,
         target: nodeId,
         type: "branch",
-        data: { delay: edgeDelay, active: true },
+        data: { delay: edgeDelay, active: true, flowDelayMs: edgeDelay + EDGE_DRAW_MS },
       });
     });
-  }
+  });
 
   return { nodes, edges };
 }
@@ -379,7 +391,7 @@ function App() {
   const [narrowingAnswers, setNarrowingAnswers] = useState({});
   const [professionOptions, setProfessionOptions] = useState([]);
   const [selectedProfession, setSelectedProfession] = useState(null);
-  const [roadmap, setRoadmap] = useState(null);
+  const [roadmaps, setRoadmaps] = useState({});
 
   const [narrowIntent, setNarrowIntent] = useState(false);
   const [confirmContext, setConfirmContext] = useState(null);
@@ -414,7 +426,7 @@ function App() {
     setNarrowingAnswers(data.narrowingAnswers || {});
     setProfessionOptions(data.professionOptions || []);
     setSelectedProfession(data.selectedProfession || null);
-    setRoadmap(data.roadmap || null);
+    setRoadmaps(data.roadmaps || {});
   };
 
   const handleStartSession = async () => {
@@ -636,7 +648,7 @@ function App() {
     setNarrowingAnswers({});
     setProfessionOptions([]);
     setSelectedProfession(null);
-    setRoadmap(null);
+    setRoadmaps({});
     setNarrowIntent(false);
     setConfirmContext(null);
     setStageDetail(null);
@@ -660,15 +672,14 @@ function App() {
     direction,
     professionOptions,
     selectedProfessionId: selectedProfession?.id || null,
-    roadmap,
+    roadmaps,
     roadmapPending: busy.roadmap,
     onProfessionOpen: handleProfessionOpen,
     onStageOpen: handleStageOpen,
   });
 
-  const roadmapVisible = Boolean(
-    roadmap && selectedProfession && roadmap.professionId === selectedProfession.id
-  );
+  const selectedRoadmap = selectedProfession ? roadmaps[selectedProfession.id] : null;
+  const roadmapVisible = Boolean(selectedRoadmap);
 
   const treeHint = !direction
     ? "Answer the questions to find your direction"
@@ -681,8 +692,11 @@ function App() {
   let focusKey = "start";
   let focusNodeIds = ["me"];
   if (roadmapVisible) {
-    focusKey = `roadmap-${roadmap.professionId}`;
-    focusNodeIds = [selectedProfession.id, ...roadmap.stages.map((s) => `stage-${s.id}`)];
+    focusKey = `roadmap-${selectedProfession.id}`;
+    focusNodeIds = [
+      selectedProfession.id,
+      ...selectedRoadmap.stages.map((s) => `stage-${selectedProfession.id}-${s.id}`),
+    ];
   } else if (professionOptions.length > 0) {
     focusKey = "professions";
     focusNodeIds = ["direction", ...professionOptions.map((p) => p.id)];

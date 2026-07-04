@@ -1,8 +1,5 @@
 import { getBezierPath } from '@xyflow/react';
 
-// Keep in sync with EDGE_DRAW_MS (App.jsx) and .branch-edge duration (GraphView.css).
-const EDGE_DRAW_MS = 600;
-
 export default function BranchEdge({
   id,
   sourceX, sourceY,
@@ -21,6 +18,7 @@ export default function BranchEdge({
 
   const delay = data?.delay ?? 0;
   const active = Boolean(data?.active);
+  const flowDelay = data?.flowDelayMs ?? 600;
 
   return (
     <g>
@@ -36,7 +34,7 @@ export default function BranchEdge({
         <path
           d={edgePath}
           className="branch-edge-flow"
-          style={{ '--flow-delay': `${delay + EDGE_DRAW_MS}ms`, fill: 'none' }}
+          style={{ '--flow-delay': `${flowDelay}ms`, fill: 'none' }}
         />
       )}
     </g>
