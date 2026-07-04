@@ -91,6 +91,10 @@ npm run dev
   - body: `{ "sessionId": "...", "questionId": "...", "value": "..." }`
 - `POST /api/direction/confirm`
   - body: `{ "sessionId": "..." }` — locks the proposed direction, returns narrowing questions
+- `POST /api/direction/refine`
+  - body: `{ "sessionId": "...", "reasonChoice": "environment|interests|too_technical|prospects", "feedbackText": "..." }` — rejects the proposed direction and suggests a different one
+- `POST /api/direction/choose`
+  - body: `{ "sessionId": "...", "directionId": "..." }` — manually pick a direction (offered after two rejections)
 - `POST /api/professions/narrow`
   - body: `{ "sessionId": "...", "questionId": "...", "value": "..." }` — after the last answer, returns exactly 3 profession options
 - `POST /api/professions/select`

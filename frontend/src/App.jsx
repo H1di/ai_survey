@@ -598,6 +598,7 @@ function App() {
   };
 
   const handleOpenRefine = () => {
+    setError("");
     setRefineMode(true);
     setRefineReason("");
     setRefineText("");
@@ -632,6 +633,8 @@ function App() {
       const data = await chooseDirection({ sessionId, directionId });
       applySessionSnapshot(data);
       setRefineMode(false);
+      setRefineReason("");
+      setRefineText("");
     } catch (e) {
       setError(e.message || "Could not choose direction.");
     } finally {
