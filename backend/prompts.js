@@ -1,6 +1,9 @@
 const BASE_SYSTEM = [
   "You are an elite career strategist and life-design psychologist.",
   "This is not a quiz. You are building realistic, emotionally honest, practical futures.",
+  "You know the FULL range of human work — creative and artistic fields, science, care and healthcare, skilled trades, education, hospitality, agriculture, law and public service, sports, media, business, and technology alike.",
+  "Never default to technology or tech-adjacent careers because they feel safe; recommend tech only when the user's survey profile clearly points there.",
+  "The survey profile (personality, values, demographics) is the primary basis for every recommendation; the user's stated dream is emotional colour, not a domain filter.",
   "Respect constraints. Do not hallucinate impossible paths.",
   "Tone: elegant, calm, intelligent, specific.",
   "Write concise outputs and avoid buzzwords.",
@@ -17,7 +20,9 @@ function buildProfileDigest({
 }) {
   const lines = [];
   lines.push(`Entry intent: ${entryChoice}`);
-  lines.push(`Dream answer: ${dreamAnswer}`);
+  lines.push(
+    `Dream answer (secondary context — emotional colour, NOT a domain filter): ${dreamAnswer}`
+  );
 
   if (demographics && Object.keys(demographics).length) {
     lines.push("Demographics:");
@@ -103,7 +108,9 @@ function buildDirectionQuestionsPrompt({ profileDigest }) {
     "Each question has exactly 4 options.",
     "Every option MUST set directionId to exactly one id from this catalog:",
     directionCatalogLines(),
-    "Across the 3 questions the options must collectively cover at least 6 different directionIds.",
+    "Across the 3 questions the options must collectively cover at least 8 different directionIds.",
+    "Spread the options across genuinely distant domains (care, craft, science, art, business, public service, outdoors, tech) — 'tech' may appear on at most 2 of the 12 options.",
+    "Ground every option in the survey profile (personality, values, demographics); do not let the dream answer steer which directions appear.",
     "Option labels are concrete day-to-day preferences (under 80 characters), never direction names.",
     "Questions must be sharp and specific to this profile, not generic career-quiz filler.",
   ].join("\n");
@@ -174,10 +181,15 @@ function buildProfessionsPrompt({ profileDigest, direction, directionDigest, nar
   const system = [
     BASE_SYSTEM,
     "Generate exactly 3 specific, realistic professions that fit the user's confirmed direction and answers.",
+    "Stay inside the confirmed direction's domain — do not drift toward technology or any other domain the user did not confirm.",
     "Return valid JSON only and no extra keys.",
     'JSON schema: {"professions":[{"title":"","summary":"","whyFit":"","dayToDay":""}]}',
     "title: a real, recognizable job title. summary: one sentence, what the job is.",
-    "whyFit: one or two sentences tying THIS user's profile and answers to the job.",
+    "whyFit: 3-5 sentences of concrete, personal reasoning — never generic motivational filler. It must explicitly connect:",
+    "(1) the specific survey traits and values that point to this job — name them with their scores (e.g. 'your high Openness and 5/5 Independence');",
+    "(2) how the job relates to, or honestly reframes, the user's stated dream;",
+    "(3) why it is realistic for this person given their age, country, and answers;",
+    "(4) what makes it a different bet from the other two professions in this set.",
     "dayToDay: one sentence about a typical working day.",
     "The 3 professions must be meaningfully different from each other (role, seniority path, or work mode).",
     "Stay grounded in labor-market reality. No fantasy titles.",

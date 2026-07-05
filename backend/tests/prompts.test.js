@@ -24,6 +24,8 @@ test("direction questions prompt lists every direction id and demands exactly 3 
   assert.match(system, /exactly 3 questions/i);
   assert.match(system, /directionId/);
   assert.match(system, /"questions"/);
+  assert.match(system, /at least 8 different directionIds/);
+  assert.match(system, /at most 2 of the 12 options/);
   assert.match(user, /build things/);
 });
 
@@ -43,6 +45,10 @@ test("professions prompt demands exactly 3 professions inside the direction", ()
   });
   assert.match(system, /exactly 3/i);
   assert.match(system, /"professions"/);
+  // whyFit must demand multi-part, survey-grounded reasoning
+  assert.match(system, /whyFit: 3-5 sentences/);
+  assert.match(system, /other two professions/);
+  assert.match(system, /Stay inside the confirmed direction/);
   assert.match(user, /Programming & Technology/);
   assert.match(user, /Q -> B/);
 });

@@ -73,6 +73,8 @@ function buildSessionDigest(session) {
 // Deterministic fallbacks (used when there is no API key or the AI call fails)
 // ---------------------------------------------------------------------------
 
+// 12 option slots cover 12 distinct directions — no domain repeats, so the
+// keyless flow can land anywhere in the catalog, not just knowledge work.
 function fallbackDirectionQuestions() {
   return [
     {
@@ -80,9 +82,9 @@ function fallbackDirectionQuestions() {
       text: "Which kind of problem would you happily spend a whole day on?",
       options: [
         { value: "opt_1", label: "Building or fixing a system until it works", directionId: "tech" },
-        { value: "opt_2", label: "Helping one person through a difficult situation", directionId: "healthcare" },
-        { value: "opt_3", label: "Shaping how something looks, feels, and reads", directionId: "design" },
-        { value: "opt_4", label: "Closing a deal or growing a number that matters", directionId: "business" },
+        { value: "opt_2", label: "Helping one person through a difficult situation", directionId: "social" },
+        { value: "opt_3", label: "Running an experiment to find out what's true", directionId: "science" },
+        { value: "opt_4", label: "Shaping how something looks, feels, and reads", directionId: "design" },
       ],
     },
     {
@@ -92,17 +94,17 @@ function fallbackDirectionQuestions() {
         { value: "opt_1", label: "Quiet focus with numbers, models, and precision", directionId: "finance" },
         { value: "opt_2", label: "A workshop or site, building with my hands", directionId: "trades" },
         { value: "opt_3", label: "A room where I explain things and people learn", directionId: "education" },
-        { value: "opt_4", label: "A fast feed of content, campaigns, and reactions", directionId: "media" },
+        { value: "opt_4", label: "A busy venue where guests leave happier than they came", directionId: "hospitality" },
       ],
     },
     {
       id: "dir_q3",
       text: "Which result would make you proudest at the end of a year?",
       options: [
-        { value: "opt_1", label: "Something beautiful I designed is out in the world", directionId: "design" },
-        { value: "opt_2", label: "A tangible thing I built that people rely on", directionId: "trades" },
-        { value: "opt_3", label: "Clear, measurable growth I personally drove", directionId: "business" },
-        { value: "opt_4", label: "Someone's health or life is concretely better", directionId: "healthcare" },
+        { value: "opt_1", label: "Someone's health or life is concretely better", directionId: "healthcare" },
+        { value: "opt_2", label: "A fairer outcome I argued for became real", directionId: "law" },
+        { value: "opt_3", label: "Work I created moved an audience", directionId: "arts" },
+        { value: "opt_4", label: "A team or athlete I trained hit their best season", directionId: "sports" },
       ],
     },
   ];

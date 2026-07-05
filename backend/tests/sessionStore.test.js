@@ -110,7 +110,7 @@ test("serializeSessionState exposes Page 3 fields and hides the old model", () =
   assert.equal(snapshot.selectedProfession, null);
   assert.deepEqual(snapshot.roadmaps, {});
   assert.deepEqual(snapshot.rejectedDirections, []);
-  assert.equal(snapshot.directionCatalog.length, 8);
+  assert.equal(snapshot.directionCatalog.length, 15);
   for (const entry of snapshot.directionCatalog) {
     assert.deepEqual(Object.keys(entry).sort(), ["id", "label"]);
   }

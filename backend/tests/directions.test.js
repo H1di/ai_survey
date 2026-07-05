@@ -8,8 +8,8 @@ const {
   REFINE_REASON_VALUES,
 } = require("../directions");
 
-test("catalog has 8 directions, each with id/label/examples and 3 profession seeds", () => {
-  assert.equal(DIRECTIONS.length, 8);
+test("catalog has 15 directions, each with id/label/examples and 3 profession seeds", () => {
+  assert.equal(DIRECTIONS.length, 15);
   for (const dir of DIRECTIONS) {
     assert.ok(dir.id && typeof dir.id === "string");
     assert.ok(dir.label && typeof dir.label === "string");
@@ -21,6 +21,12 @@ test("catalog has 8 directions, each with id/label/examples and 3 profession see
     }
   }
   assert.deepEqual(DIRECTION_IDS, DIRECTIONS.map((d) => d.id));
+});
+
+test("catalog order is alphabetical by label so ties never structurally favor tech", () => {
+  const labels = DIRECTIONS.map((d) => d.label);
+  assert.deepEqual(labels, [...labels].sort((a, b) => a.localeCompare(b)));
+  assert.notEqual(DIRECTIONS[0].id, "tech");
 });
 
 test("getDirection finds by id and returns null for unknown", () => {
@@ -49,9 +55,10 @@ test("computeDirection: majority of option votes wins", () => {
 });
 
 test("computeDirection: tie broken by DIRECTIONS catalog order", () => {
-  // tech gets 1 vote (q1), design gets 1 vote (q3): tech is earlier in the catalog
+  // tech gets 1 vote (q1), design gets 1 vote (q3): design is earlier in the
+  // alphabetical catalog — tech no longer wins ties by sitting first
   const result = computeDirection(QUESTIONS, { dir_q1: "a", dir_q3: "a" });
-  assert.equal(result.id, "tech");
+  assert.equal(result.id, "design");
 });
 
 test("computeDirection: no valid answers falls back to first catalog direction", () => {
@@ -67,8 +74,8 @@ test("computeDirection excludeIds: excluded direction gets no votes and cannot w
 });
 
 test("computeDirection excludeIds: no votes left falls back to first non-excluded catalog direction", () => {
-  const result = computeDirection(QUESTIONS, {}, ["tech"]);
-  assert.equal(result.id, "healthcare");
+  const result = computeDirection(QUESTIONS, {}, ["agriculture"]);
+  assert.equal(result.id, "arts");
 });
 
 test("REFINE_REASON_VALUES is the fixed four-value list", () => {

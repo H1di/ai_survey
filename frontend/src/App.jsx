@@ -3,6 +3,7 @@ import { AnimatePresence, motion as Motion } from "framer-motion";
 import GraphView from "./components/GraphView";
 import ConfirmModal from "./components/GraphView/ConfirmModal";
 import { DetailPanel } from "./components/GraphView/NodeComponent";
+import ProfilePanel from "./components/ProfileCharts";
 import {
   answerDirectionQuestion,
   answerNarrowingQuestion,
@@ -413,6 +414,9 @@ function App() {
   const [confirmContext, setConfirmContext] = useState(null);
   const [stageDetail, setStageDetail] = useState(null);
 
+  const [profile, setProfile] = useState(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+
   const [busy, setBusy] = useState({
     start: false,
     demo: false,
@@ -446,6 +450,11 @@ function App() {
     setRoadmaps(data.roadmaps || {});
     setRejectedDirections(data.rejectedDirections || []);
     setDirectionCatalog(data.directionCatalog || []);
+    setProfile({
+      bigFiveScores: data.bigFiveScores || null,
+      derivedTraits: data.derivedTraits || null,
+      valuesScores: data.valuesScores || null,
+    });
   };
 
   const handleStartSession = async () => {
@@ -721,6 +730,8 @@ function App() {
     setNarrowIntent(false);
     setConfirmContext(null);
     setStageDetail(null);
+    setProfile(null);
+    setProfileOpen(false);
     setError("");
     setBusy({
       start: false,
@@ -1046,7 +1057,16 @@ function App() {
               ← Restart
             </button>
             <span className="graph-logo">Life Path Explorer</span>
-            <span className="graph-hint">{treeHint}</span>
+            <span className="graph-header-side">
+              <button
+                type="button"
+                className={`graph-profile-toggle ${profileOpen ? "active" : ""}`}
+                onClick={() => setProfileOpen((open) => !open)}
+              >
+                {profileOpen ? "Hide profile" : "My profile"}
+              </button>
+              <span className="graph-hint">{treeHint}</span>
+            </span>
           </div>
 
           <div className="graph-canvas">
@@ -1056,6 +1076,9 @@ function App() {
               focusKey={focusKey}
               focusNodeIds={focusNodeIds}
             />
+            {profileOpen && (
+              <ProfilePanel profile={profile} onClose={() => setProfileOpen(false)} />
+            )}
           </div>
 
           <div className="graph-question-dock">
@@ -1086,7 +1109,7 @@ function App() {
             {confirmContext && (
               <ConfirmModal
                 key="confirm"
-                professionTitle={confirmContext.title}
+                profession={confirmContext}
                 busy={busy.roadmap}
                 onConfirm={handleConfirmRoadmap}
                 onDismiss={() => !busy.roadmap && setConfirmContext(null)}

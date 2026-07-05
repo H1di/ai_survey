@@ -72,13 +72,14 @@ test("full Page 3 flow: direction -> narrowing -> professions -> select -> roadm
     assert.equal(status, 200);
   }
   assert.ok(data.proposedDirection, "proposedDirection set after final answer");
-  // fallback q1/q2/q3 first options vote tech/finance/design -> tie broken by catalog order = tech
-  assert.equal(data.proposedDirection.id, "tech");
+  // fallback q1/q2/q3 first options vote tech/finance/healthcare -> tie broken
+  // by (alphabetical) catalog order = finance
+  assert.equal(data.proposedDirection.id, "finance");
 
   // Stage A confirm -> narrowing questions generated
   ({ status, data } = await post("/api/direction/confirm", { sessionId }));
   assert.equal(status, 200);
-  assert.equal(data.direction.id, "tech");
+  assert.equal(data.direction.id, "finance");
   assert.equal(data.pathStage, "narrowing");
   assert.equal(data.narrowingQuestions.length, 2);
 

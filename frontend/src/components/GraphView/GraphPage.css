@@ -39,6 +39,27 @@
   color: var(--color-text-faint);
 }
 
+.graph-header-side {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.graph-profile-toggle {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  padding: 5px 12px;
+  transition: all var(--transition);
+}
+
+.graph-profile-toggle:hover,
+.graph-profile-toggle.active {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
 .graph-canvas {
   flex: 1;
   position: relative;
@@ -115,6 +136,13 @@
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.08);
   margin: 0;
   pointer-events: auto;
+}
+
+/* The manual direction picker lists the whole 15-direction catalog —
+   scroll inside the dock instead of growing past the viewport. */
+.graph-question-dock .option-list {
+  max-height: 38vh;
+  overflow-y: auto;
 }
 
 .dock-subtext {

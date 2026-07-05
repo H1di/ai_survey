@@ -1,7 +1,7 @@
 import { motion as Motion } from 'framer-motion';
 import './ConfirmModal.css';
 
-export default function ConfirmModal({ professionTitle, busy, onConfirm, onDismiss }) {
+export default function ConfirmModal({ profession, busy, onConfirm, onDismiss }) {
   return (
     <Motion.div
       className="confirm-overlay"
@@ -19,7 +19,16 @@ export default function ConfirmModal({ professionTitle, busy, onConfirm, onDismi
       >
         <button className="confirm-close" onClick={onDismiss} disabled={busy}>×</button>
         <p className="confirm-label">Chosen profession</p>
-        <h2 className="confirm-title">{professionTitle}</h2>
+        <h2 className="confirm-title">{profession.title}</h2>
+        {profession.whyFit && (
+          <div className="confirm-whyfit">
+            <p className="confirm-whyfit-label">Why it fits you</p>
+            <p className="confirm-whyfit-text">{profession.whyFit}</p>
+            {profession.dayToDay && (
+              <p className="confirm-daytoday">{profession.dayToDay}</p>
+            )}
+          </div>
+        )}
         <p className="confirm-question">Would you like to see how to reach this profession?</p>
         <div className="confirm-actions">
           <button className="confirm-yes" onClick={onConfirm} disabled={busy}>

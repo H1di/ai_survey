@@ -24,7 +24,7 @@ function fakeSession(overrides = {}) {
   };
 }
 
-test("fallback direction questions: 3 questions, 4 options each, valid directionIds, >=6 directions covered", async () => {
+test("fallback direction questions: 3 questions, 4 options each, valid directionIds, >=10 directions covered", async () => {
   const questions = await engine.generateDirectionQuestions({ session: fakeSession() });
   assert.equal(questions.length, 3);
   const covered = new Set();
@@ -38,7 +38,7 @@ test("fallback direction questions: 3 questions, 4 options each, valid direction
       covered.add(o.directionId);
     }
   });
-  assert.ok(covered.size >= 6, `only ${covered.size} directions covered`);
+  assert.ok(covered.size >= 10, `only ${covered.size} directions covered`);
 });
 
 test("fallback narrowing questions: 2 questions, ids nar_q1/nar_q2, no directionId on options", async () => {
@@ -116,5 +116,5 @@ test("refineDirection fallback: all quiz votes rejected -> first non-rejected ca
     ],
   });
   const refined = await engine.refineDirection({ session, reasonChoice: "environment", feedbackText: "" });
-  assert.equal(refined.id, "design");
+  assert.equal(refined.id, "agriculture");
 });
