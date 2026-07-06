@@ -78,12 +78,17 @@ function isValidEntryChoice(value) {
   return value === "change" || value === "find";
 }
 
+const AI_ENABLED = Boolean(process.env.OPENAI_API_KEY);
+
 function sendSessionSnapshot(res, session, extras = {}) {
   const progress = buildProgress(session);
   const summary = summarizeAnswersForClient(session);
 
   return res.json({
     ...store.serializeSessionState(session, progress, summary),
+    // Lets the UI say honestly when suggestions come from fixed fallback
+    // rules rather than AI (no key configured).
+    aiEnabled: AI_ENABLED,
     ...extras,
   });
 }

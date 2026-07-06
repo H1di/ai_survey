@@ -22,6 +22,21 @@
   color: var(--color-text-muted, #555555);
 }
 
+.demo-notice {
+  margin: 0 0 14px;
+  padding: 6px 12px;
+  border: 1px dashed var(--color-border, #cccccc);
+  border-radius: 10px;
+  display: inline-block;
+  font-size: 0.82rem;
+  color: var(--color-text-muted, #555555);
+}
+
+.demo-notice-inline {
+  margin: 0;
+  white-space: nowrap;
+}
+
 .entry-screen {
   min-height: calc(100vh - 96px);
   display: flex;

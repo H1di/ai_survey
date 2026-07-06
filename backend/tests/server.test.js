@@ -272,3 +272,8 @@ test("dreamAnswer is capped at 500 chars before storage and prompts", async () =
   assert.equal(status, 200);
   assert.equal(data.dreamAnswer.length, 500);
 });
+
+test("snapshots expose aiEnabled so the UI can label demo mode", async () => {
+  const { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "honesty" });
+  assert.equal(data.aiEnabled, false, "keyless test run must report aiEnabled=false");
+});

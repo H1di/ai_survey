@@ -454,6 +454,7 @@ function App() {
 
   const [profile, setProfile] = useState(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(true);
 
   const [busy, setBusy] = useState({
     start: false,
@@ -499,6 +500,7 @@ function App() {
       derivedTraits: data.derivedTraits || null,
       valuesScores: data.valuesScores || null,
     });
+    if (data.aiEnabled !== undefined) setAiEnabled(Boolean(data.aiEnabled));
   };
 
   // Resume a stored session after reload; a dead/unknown id falls back to entry.
@@ -974,13 +976,20 @@ function App() {
                 </button>
               ))}
             </div>
-            <textarea
-              className="dock-textarea"
-              value={refineText}
-              placeholder="Tell me what you actually want — interests, environment, anything…"
-              onChange={(e) => setRefineText(e.target.value)}
-              disabled={busy.refine}
-            />
+            {aiEnabled ? (
+              <textarea
+                className="dock-textarea"
+                value={refineText}
+                placeholder="Tell me what you actually want — interests, environment, anything…"
+                onChange={(e) => setRefineText(e.target.value)}
+                disabled={busy.refine}
+              />
+            ) : (
+              <p className="dock-subtext">
+                Demo mode: the next suggestion comes from your quiz answers, so
+                written feedback isn't read here.
+              </p>
+            )}
             <div className="question-actions single">
               <button
                 type="button"
@@ -1149,6 +1158,12 @@ function App() {
             <p>{stepProgressText(step, progress)}</p>
           </header>
 
+          {!aiEnabled && (
+            <p className="demo-notice">
+              Demo mode — suggestions come from fixed rules, not AI.
+            </p>
+          )}
+
           {step === "demographics" && currentDemographicQuestion && (
             <DemographicQuestionCard
               q={currentDemographicQuestion}
@@ -1226,6 +1241,7 @@ function App() {
             </button>
             <span className="graph-logo">Life Path Explorer</span>
             <span className="graph-header-side">
+              {!aiEnabled && <span className="demo-notice demo-notice-inline">Demo mode</span>}
               <button
                 type="button"
                 className={`graph-profile-toggle ${profileOpen ? "active" : ""}`}
