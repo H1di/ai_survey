@@ -58,6 +58,19 @@ function stepProgressText(step, progress) {
   return "";
 }
 
+// One journey, one bar: demographics + Big Five + values combined. Before the
+// depth choice the Big Five length is unknown, so assume the short set — the
+// bar can only get more accurate, never jump backwards.
+function overallProgress(progress) {
+  if (!progress) return null;
+  const bigFiveTotal = progress.bigFive.total || 20;
+  const total = progress.demographics.total + bigFiveTotal + progress.values.total;
+  const answered =
+    progress.demographics.answered + progress.bigFive.answered + progress.values.answered;
+  if (!total) return null;
+  return { answered, total, percent: Math.round((answered / total) * 100) };
+}
+
 function DemographicQuestionCard({ q, savedValue, draft, setDraft, busy, onSubmit, onBack, canGoBack, progress }) {
   return (
     <div className="question-card">
@@ -134,7 +147,8 @@ function DepthChoiceCard({ busy, onChoose }) {
           disabled={Boolean(busy)}
         >
           <p className="depth-title">Short</p>
-          <p className="depth-meta">20 questions • 3–5 minutes</p>
+          <p className="depth-meta">20 personality questions • 3–5 minutes</p>
+          <p className="depth-meta">63 questions overall • ~10 minutes to your paths</p>
         </button>
         <button
           type="button"
@@ -143,7 +157,8 @@ function DepthChoiceCard({ busy, onChoose }) {
           disabled={Boolean(busy)}
         >
           <p className="depth-title">Deep</p>
-          <p className="depth-meta">50 questions • 8–12 minutes</p>
+          <p className="depth-meta">50 personality questions • 8–12 minutes</p>
+          <p className="depth-meta">93 questions overall • ~18 minutes to your paths</p>
         </button>
       </div>
       {busy && <p className="depth-loading">Generating items…</p>}
@@ -1172,6 +1187,22 @@ function App() {
             <h2>{stepHeading(step)}</h2>
             <p>{stepProgressText(step, progress)}</p>
           </header>
+
+          {step !== "complete" && (() => {
+            const overall = overallProgress(progress);
+            return overall ? (
+              <div
+                className="overall-progress"
+                role="progressbar"
+                aria-valuenow={overall.answered}
+                aria-valuemin={0}
+                aria-valuemax={overall.total}
+                aria-label={`Overall: ${overall.answered} of ${overall.total} questions`}
+              >
+                <div className="overall-progress-fill" style={{ width: `${overall.percent}%` }} />
+              </div>
+            ) : null;
+          })()}
 
           {!aiEnabled && (
             <p className="demo-notice">

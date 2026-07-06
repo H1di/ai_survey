@@ -22,6 +22,22 @@
   color: var(--color-text-muted, #555555);
 }
 
+.overall-progress {
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-accent-soft, #efe6ff);
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+
+.overall-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-accent);
+  transition: width 240ms ease;
+}
+
 .demo-notice {
   margin: 0 0 14px;
   padding: 6px 12px;
