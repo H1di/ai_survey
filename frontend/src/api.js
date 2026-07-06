@@ -1,19 +1,34 @@
+const REQUEST_TIMEOUT_MS = 45_000;
+
 async function request(path, options = {}) {
-  const response = await fetch(path, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  const data = await response.json().catch(() => ({}));
+  try {
+    const response = await fetch(path, {
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
+      signal: controller.signal,
+      ...options,
+    });
 
-  if (!response.ok) {
-    throw new Error(data.error || "Request failed.");
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data.error || "Request failed.");
+    }
+
+    return data;
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("The request timed out. Please try again.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
-
-  return data;
 }
 
 export function fetchSession(sessionId) {

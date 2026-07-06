@@ -472,6 +472,8 @@ function App() {
   });
 
   const [error, setError] = useState("");
+  // Re-runs the last failed AI-backed action; rendered next to the error text.
+  const [retryAction, setRetryAction] = useState(null);
 
   const applySessionSnapshot = (data) => {
     setSessionId(data.sessionId);
@@ -608,10 +610,12 @@ function App() {
     try {
       const data = await chooseBigFiveDepth({ sessionId, depth });
       applySessionSnapshot(data);
+      setRetryAction(null);
       setBigFiveIndex(0);
       setValuesIndex(0);
     } catch (e) {
       setError(e.message || "Could not start Big Five.");
+      setRetryAction(() => () => handleChooseDepth(depth));
     } finally {
       setBusy((p) => ({ ...p, depth: "" }));
     }
@@ -674,9 +678,11 @@ function App() {
     try {
       const data = await fetchDirectionQuestions({ sessionId });
       applySessionSnapshot(data);
+      setRetryAction(null);
       setStage("tree");
     } catch (e) {
       setError(e.message || "Could not start the Life Path Engine.");
+      setRetryAction(() => handleEnterLifePath);
     } finally {
       setBusy((p) => ({ ...p, enterTree: false }));
     }
@@ -741,11 +747,13 @@ function App() {
         feedbackText: refineText.trim(),
       });
       applySessionSnapshot(data);
+      setRetryAction(null);
       setRefineMode(false);
       setRefineReason("");
       setRefineText("");
     } catch (e) {
       setError(e.message || "Could not refine direction.");
+      setRetryAction(() => handleRefineDirection);
     } finally {
       setBusy((p) => ({ ...p, refine: false }));
     }
@@ -808,9 +816,11 @@ function App() {
     try {
       const data = await generateRoadmap({ sessionId });
       applySessionSnapshot(data);
+      setRetryAction(null);
       setConfirmContext(null);
     } catch (e) {
       setError(e.message || "Could not generate roadmap.");
+      setRetryAction(() => handleConfirmRoadmap);
     } finally {
       setBusy((p) => ({ ...p, roadmap: false }));
     }
@@ -860,6 +870,7 @@ function App() {
     setProfile(null);
     setProfileOpen(false);
     setError("");
+    setRetryAction(null);
     setBusy({
       start: false,
       demo: false,
@@ -1229,7 +1240,16 @@ function App() {
             </button>
           </div>
 
-          {error && <p className="error-text">{error}</p>}
+          {error && (
+            <div className="error-row">
+              <p className="error-text">{error}</p>
+              {retryAction && (
+                <button type="button" className="ghost-action" onClick={() => retryAction()}>
+                  Try again
+                </button>
+              )}
+            </div>
+          )}
         </section>
       )}
 
@@ -1325,7 +1345,16 @@ function App() {
             )}
           </AnimatePresence>
 
-          {error && <p className="error-text graph-error">{error}</p>}
+          {error && (
+            <div className="error-row graph-error">
+              <p className="error-text">{error}</p>
+              {retryAction && (
+                <button type="button" className="ghost-action" onClick={() => retryAction()}>
+                  Try again
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </main>

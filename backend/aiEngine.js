@@ -388,7 +388,9 @@ async function runJsonCompletion(client, { model, system, user, temperature = 0.
 }
 
 function createAiEngine({ apiKey, model }) {
-  const client = apiKey ? new OpenAI({ apiKey }) : null;
+  // A hung upstream call must fail fast into the deterministic fallback
+  // instead of pinning the request for the SDK's 10-minute default.
+  const client = apiKey ? new OpenAI({ apiKey, timeout: 30_000, maxRetries: 1 }) : null;
 
   async function generateDirectionQuestions({ session }) {
     if (!client) {
