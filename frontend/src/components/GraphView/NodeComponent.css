@@ -322,3 +322,11 @@
     animation: none;
   }
 }
+
+/* Small screens: bigger tap targets for the roadmap chain. */
+@media (max-width: 600px) {
+  .node--roadmap {
+    padding: 20px 22px;
+    min-width: 250px;
+  }
+}

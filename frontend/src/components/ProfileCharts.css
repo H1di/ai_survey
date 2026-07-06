@@ -62,3 +62,26 @@
   line-height: 1.5;
   color: var(--color-text-faint);
 }
+
+/* Small screens: the panel covers the graph, so pin a visible way back. */
+@media (max-width: 600px) {
+  .profile-panel {
+    top: 8px;
+    left: 12px;
+    width: calc(100vw - 24px);
+    max-height: calc(100% - 16px);
+  }
+
+  .profile-panel-header {
+    position: sticky;
+    top: -16px;
+    background: var(--color-bg);
+    padding: 8px 0;
+    z-index: 1;
+  }
+
+  .profile-panel-close {
+    font-size: 1.5rem;
+    padding: 4px 12px;
+  }
+}

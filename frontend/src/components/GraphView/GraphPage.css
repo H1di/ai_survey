@@ -193,3 +193,28 @@
   outline: none;
   border-color: var(--color-accent);
 }
+
+/* Small screens: the header stacks into two clean rows instead of a broken
+   grid, and the hint gets its own line. */
+@media (max-width: 600px) {
+  .graph-header {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    padding: 12px 16px;
+  }
+
+  .graph-header-side {
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+
+  .graph-hint {
+    flex: 1;
+    text-align: right;
+  }
+
+  .graph-question-dock {
+    bottom: 16px;
+    width: calc(100vw - 24px);
+  }
+}
