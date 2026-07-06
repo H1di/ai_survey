@@ -266,14 +266,6 @@ function firstUnansweredIndex(questions, answers) {
   return index === -1 ? Math.max(0, questions.length - 1) : index;
 }
 
-// Values must match REFINE_REASON_VALUES on the backend.
-const REFINE_REASONS = [
-  { value: "environment", label: "Wrong day-to-day environment" },
-  { value: "interests", label: "Doesn't match my real interests" },
-  { value: "too_technical", label: "Too technical / not my style" },
-  { value: "prospects", label: "Worried about pay & prospects" },
-];
-
 function professionX(index, count) {
   return (index - (count - 1) / 2) * PROFESSION_GAP;
 }
@@ -457,6 +449,10 @@ function App() {
 
   const [rejectedDirections, setRejectedDirections] = useState([]);
   const [directionCatalog, setDirectionCatalog] = useState([]);
+  // Served by the backend (single source): refine reason options and the
+  // values dimension metadata used by the profile charts.
+  const [refineReasons, setRefineReasons] = useState([]);
+  const [valuesDimensionsMeta, setValuesDimensionsMeta] = useState([]);
   const [refineMode, setRefineMode] = useState(false);
   const [refineReason, setRefineReason] = useState("");
   const [refineText, setRefineText] = useState("");
@@ -498,6 +494,8 @@ function App() {
     if (data.bigFiveItems) setBigFiveItems(data.bigFiveItems);
     if (data.valuesQuestions) setValuesQuestions(data.valuesQuestions);
     if (data.directionCatalog) setDirectionCatalog(data.directionCatalog);
+    if (data.refineReasons) setRefineReasons(data.refineReasons);
+    if (data.valuesDimensions) setValuesDimensionsMeta(data.valuesDimensions);
     setDemoAnswers(data.demographics || {});
     setBigFiveAnswers(data.bigFiveAnswers || {});
     setValuesAnswers(data.valuesAnswers || {});
@@ -876,6 +874,8 @@ function App() {
     setRoadmaps({});
     setRejectedDirections([]);
     setDirectionCatalog([]);
+    setRefineReasons([]);
+    setValuesDimensionsMeta([]);
     setRefineMode(false);
     setRefineReason("");
     setRefineText("");
@@ -990,7 +990,7 @@ function App() {
               What feels off about {proposedDirection ? proposedDirection.label : "this direction"}?
             </h3>
             <div className="option-list">
-              {REFINE_REASONS.map((r) => (
+              {refineReasons.map((r) => (
                 <button
                   key={r.value}
                   type="button"
@@ -1317,7 +1317,11 @@ function App() {
               focusNodeIds={focusNodeIds}
             />
             {profileOpen && (
-              <ProfilePanel profile={profile} onClose={() => setProfileOpen(false)} />
+              <ProfilePanel
+                profile={profile}
+                dimensions={valuesDimensionsMeta}
+                onClose={() => setProfileOpen(false)}
+              />
             )}
           </div>
 

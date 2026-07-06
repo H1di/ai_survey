@@ -28,18 +28,6 @@ const BIG_FIVE_AXES = [
   { key: "N", label: "Neuroticism" },
 ];
 
-// Must match VALUES_DIMENSIONS ids/labels in backend/questionPool.js.
-const VALUES_DIMENSIONS = [
-  { id: "economic_return", label: "Economic Return", emoji: "💰" },
-  { id: "lifestyle", label: "Lifestyle", emoji: "🧘" },
-  { id: "achievement", label: "Achievement", emoji: "🚀" },
-  { id: "intellectual_stimulation", label: "Intellectual Stimulation", emoji: "🧠" },
-  { id: "meaning_impact", label: "Meaning / Impact", emoji: "❤️" },
-  { id: "independence", label: "Independence", emoji: "🧭" },
-  { id: "structure", label: "Structure", emoji: "🏢" },
-  { id: "social_environment", label: "Social Environment", emoji: "👥" },
-];
-
 function RadarTick({ payload, x, y, textAnchor, highlighted }) {
   return (
     <text
@@ -92,10 +80,12 @@ export function PersonalityRadarChart({ scores, highlightKeys = [] }) {
   );
 }
 
-export function ValuesBarChart({ scores }) {
-  if (!scores) return null;
+// `dimensions` metadata (ids, labels, emoji) is served by the backend in the
+// session snapshot — the single source shared with scoring and prompts.
+export function ValuesBarChart({ scores, dimensions = [] }) {
+  if (!scores || !dimensions.length) return null;
 
-  const data = VALUES_DIMENSIONS.map((dim) => ({
+  const data = dimensions.map((dim) => ({
     id: dim.id,
     name: `${dim.emoji} ${dim.label}`,
     value: scores[dim.id] ?? 0,
@@ -127,7 +117,7 @@ export function ValuesBarChart({ scores }) {
   );
 }
 
-export default function ProfilePanel({ profile, onClose }) {
+export default function ProfilePanel({ profile, dimensions = [], onClose }) {
   const { bigFiveScores, derivedTraits, valuesScores, bigFiveDepth } = profile || {};
 
   if (!bigFiveScores && !valuesScores) return null;
@@ -146,7 +136,7 @@ export default function ProfilePanel({ profile, onClose }) {
           Based on a 20-item short screen — a rough sketch, not a measured verdict.
         </p>
       )}
-      <ValuesBarChart scores={valuesScores} />
+      <ValuesBarChart scores={valuesScores} dimensions={dimensions} />
       {derivedTraits?.summary && <p className="profile-panel-summary">{derivedTraits.summary}</p>}
       <p className="profile-panel-note">
         Directions and professions are picked from these survey scores — your dream answer only

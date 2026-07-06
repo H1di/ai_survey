@@ -1,41 +1,3 @@
-const BRANCH_THEMES = [
-  {
-    id: "safe",
-    label: "Safe Path",
-    description: "Predictable progress, lower downside, steady compounding.",
-    aiDirective:
-      "Design for stability, lower volatility, and realistic short-term cash-flow security.",
-  },
-  {
-    id: "high_income",
-    label: "High Income Path",
-    description: "Optimized for earning power and upside over comfort.",
-    aiDirective:
-      "Design for income acceleration and upside, while acknowledging pressure and tradeoffs.",
-  },
-  {
-    id: "meaning",
-    label: "Meaning Path",
-    description: "Purpose, contribution, and psychological alignment first.",
-    aiDirective:
-      "Design for purpose, contribution, and values congruence over pure status.",
-  },
-  {
-    id: "creative",
-    label: "Creative Path",
-    description: "Expression, originality, and autonomy in craft.",
-    aiDirective:
-      "Design for creative output, portfolio growth, and identity-based work.",
-  },
-  {
-    id: "freedom",
-    label: "Freedom Path",
-    description: "Flexibility, autonomy, and life-design optionality.",
-    aiDirective:
-      "Design for autonomy, schedule flexibility, and long-term optionality.",
-  },
-];
-
 const DEMOGRAPHIC_QUESTIONS = [
   {
     id: "sex",
@@ -152,7 +114,6 @@ const DEMOGRAPHIC_BY_ID = new Map(DEMOGRAPHIC_QUESTIONS.map((q) => [q.id, q]));
 const VALUES_BY_ID = new Map(VALUES_QUESTIONS.map((q) => [q.id, q]));
 
 module.exports = {
-  BRANCH_THEMES,
   DEMOGRAPHIC_QUESTIONS,
   DEMOGRAPHIC_BY_ID,
   VALUES_DIMENSIONS,

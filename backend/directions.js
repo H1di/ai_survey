@@ -205,13 +205,21 @@ function computeDirection(questions, answers, excludeIds = []) {
   return { tie: true, candidates: leaders };
 }
 
-// Validated server-side; display labels live in the frontend refine card.
-const REFINE_REASON_VALUES = ["environment", "interests", "too_technical", "prospects"];
+// Single source for the refine reasons: values are validated server-side and
+// the labels are served to the frontend in the static session snapshot.
+const REFINE_REASONS = [
+  { value: "environment", label: "Wrong day-to-day environment" },
+  { value: "interests", label: "Doesn't match my real interests" },
+  { value: "too_technical", label: "Too technical / not my style" },
+  { value: "prospects", label: "Worried about pay & prospects" },
+];
+const REFINE_REASON_VALUES = REFINE_REASONS.map((r) => r.value);
 
 module.exports = {
   DIRECTIONS,
   DIRECTION_IDS,
   getDirection,
   computeDirection,
+  REFINE_REASONS,
   REFINE_REASON_VALUES,
 };

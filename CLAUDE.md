@@ -67,7 +67,7 @@ After `complete`, a separate `pathStage` progression: `direction → narrowing �
 
 - `backend/server.js` — all routes, express-rate-limit, CORS allowlist
 - `backend/sessionStore.js` — in-memory `Map` sessions with TTL sweep; `serializeSessionState` is the single snapshot the frontend consumes
-- `backend/questionEngine.js` — step machine (`pickNextQuestion`), validation, all scoring
+- `backend/questionEngine.js` — answer validation and all scoring (Big Five, values, derived traits)
 - `backend/questionPool.js` — demographic + values question banks, dimension metadata
 - `backend/bigFiveItems.js` — IPIP-20/IPIP-50 item sets (public domain)
 - `backend/aiEngine.js` — one generator per AI artifact, each with normalizer + deterministic fallback

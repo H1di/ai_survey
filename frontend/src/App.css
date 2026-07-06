@@ -206,27 +206,6 @@
   color: var(--color-text-muted);
 }
 
-.premium-box {
-  border: 1px solid #111111;
-  border-radius: 20px;
-  padding: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  margin-bottom: 18px;
-}
-
-.premium-title {
-  margin: 0 0 6px;
-  font-weight: 600;
-}
-
-.premium-box p {
-  margin: 0;
-  color: #333333;
-}
-
 .question-card {
   border: 1px solid var(--color-border);
   border-radius: 26px;

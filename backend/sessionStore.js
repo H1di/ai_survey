@@ -1,7 +1,11 @@
 const { randomUUID } = require("node:crypto");
 
-const { DIRECTIONS } = require("./directions");
-const { DEMOGRAPHIC_QUESTIONS, VALUES_QUESTIONS } = require("./questionPool");
+const { DIRECTIONS, REFINE_REASONS } = require("./directions");
+const {
+  DEMOGRAPHIC_QUESTIONS,
+  VALUES_QUESTIONS,
+  VALUES_DIMENSIONS,
+} = require("./questionPool");
 const { serializeDemographic, serializeValueQuestion } = require("./questionEngine");
 
 const DIRECTION_CATALOG = DIRECTIONS.map(({ id, label }) => ({ id, label }));
@@ -225,6 +229,8 @@ class SessionStore {
           bigFiveItems: session.bigFiveItems.map((i) => ({ id: i.id, text: i.text })),
           valuesQuestions: SERIALIZED_VALUES_QUESTIONS,
           directionCatalog: DIRECTION_CATALOG,
+          valuesDimensions: VALUES_DIMENSIONS,
+          refineReasons: REFINE_REASONS,
         }
       : {};
 
