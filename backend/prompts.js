@@ -99,7 +99,12 @@ function directionCatalogLines() {
   return DIRECTIONS.map((d) => `- ${d.id}: ${d.label} (${d.examples})`).join("\n");
 }
 
-function buildDirectionQuestionsPrompt({ profileDigest }) {
+// riasecRanking: optional [{ id, score }] high-to-low from riasec.js. Passed
+// to the model as a data-derived interest signal (Holland/RIASEC) so the
+// direction options lean toward genuinely-fitting domains rather than a purely
+// free LLM guess. It is a hint, not a hard filter — every catalog id is still
+// allowed and coverage rules still apply.
+function buildDirectionQuestionsPrompt({ profileDigest, riasecRanking }) {
   const system = [
     BASE_SYSTEM,
     "Generate exactly 3 questions (multiple-choice) whose only job is to converge on ONE broad professional direction for this user.",
@@ -115,11 +120,21 @@ function buildDirectionQuestionsPrompt({ profileDigest }) {
     "Questions must be sharp and specific to this profile, not generic career-quiz filler.",
   ].join("\n");
 
+  const ranking = Array.isArray(riasecRanking) && riasecRanking.length
+    ? [
+        "Interest-profile signal (Holland/RIASEC, best fit first) — weight these directions more, but still cover the required spread:",
+        riasecRanking.map((r, i) => `${i + 1}. ${r.id}`).join(", "),
+      ].join("\n")
+    : null;
+
   const user = [
     "Generate the 3 direction-finding questions now.",
+    ranking,
     "Profile:",
     profileDigest,
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   return { system, user };
 }

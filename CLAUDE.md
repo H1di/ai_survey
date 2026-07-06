@@ -73,6 +73,7 @@ After `complete`, a separate `pathStage` progression: `direction → narrowing �
 - `backend/aiEngine.js` — one generator per AI artifact, each with normalizer + deterministic fallback
 - `backend/prompts.js` — prompt builders; `buildProfileDigest` is the profile every prompt receives
 - `backend/directions.js` — direction catalog (alphabetical on purpose) + `computeDirection` tally
+- `backend/riasec.js` — Holland/RIASEC prototype: maps the profile to an interest vector and ranks the catalog; fed to the direction prompt as a data-derived hint
 
 ### Frontend
 
