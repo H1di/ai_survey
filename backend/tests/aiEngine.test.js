@@ -118,3 +118,59 @@ test("refineDirection fallback: all quiz votes rejected -> first non-rejected ca
   const refined = await engine.refineDirection({ session, reasonChoice: "environment", feedbackText: "" });
   assert.equal(refined.id, "agriculture");
 });
+
+// --- AI Big Five item validator (P1-1) ---
+
+const { normalizeBigFiveItemsPayload } = require("../aiEngine");
+
+function balancedItems(count = 20) {
+  const traits = ["O", "C", "E", "A", "N"];
+  const perTrait = count / 5;
+  const items = [];
+  for (const trait of traits) {
+    for (let i = 0; i < perTrait; i++) {
+      items.push({
+        id: `x_${trait}_${i}`,
+        trait,
+        reverse: i % 2 === 0,
+        text: `I do the ${trait} thing number ${i}.`,
+      });
+    }
+  }
+  return items;
+}
+
+test("item validator accepts a balanced 20-item payload and reassigns ids", () => {
+  const items = normalizeBigFiveItemsPayload({ items: balancedItems() }, 20);
+  assert.equal(items.length, 20);
+  items.forEach((item, idx) => assert.equal(item.id, `ai_${idx + 1}`));
+});
+
+test("item validator rejects uneven trait distribution", () => {
+  const items = balancedItems();
+  items[0].trait = "E"; // O loses one, E gains one
+  assert.throws(() => normalizeBigFiveItemsPayload({ items }, 20), /Trait/);
+});
+
+test("item validator rejects all-forward keying", () => {
+  const items = balancedItems().map((i) => ({ ...i, reverse: false }));
+  assert.throws(() => normalizeBigFiveItemsPayload({ items }, 20), /reverse share/);
+});
+
+test("item validator rejects duplicate texts and wrong counts", () => {
+  const dup = balancedItems();
+  dup[1].text = dup[0].text;
+  assert.throws(() => normalizeBigFiveItemsPayload({ items: dup }, 20), /Duplicate/);
+  assert.throws(() => normalizeBigFiveItemsPayload({ items: balancedItems().slice(1) }, 20), /Expected 20/);
+  assert.throws(() => normalizeBigFiveItemsPayload({}, 20), /Expected 20/);
+});
+
+test("generateBigFiveItems serves static IPIP by default even with a client", async () => {
+  // A key is present but the AI_BIG_FIVE_ITEMS flag is not set -> static set,
+  // and no network call is attempted (a fake key would explode otherwise).
+  delete process.env.AI_BIG_FIVE_ITEMS;
+  const keyedEngine = createAiEngine({ apiKey: "sk-fake", model: "test" });
+  const items = await keyedEngine.generateBigFiveItems({ depth: "deep" });
+  assert.equal(items.length, 50);
+  assert.equal(items[0].id, "ipip_1");
+});

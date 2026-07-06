@@ -308,6 +308,54 @@ function normalizeRoadmapPayload(payload, profession) {
   };
 }
 
+const BIG_FIVE_TRAITS = ["O", "C", "E", "A", "N"];
+
+// Psychometric guardrails for AI-generated Big Five items: the payload is
+// only accepted when it is a balanced instrument (exact per-trait counts,
+// a real share of reverse-keyed items, no duplicate ids or texts).
+function normalizeBigFiveItemsPayload(payload, expected) {
+  const raw = Array.isArray(payload?.items) ? payload.items : [];
+
+  const items = raw
+    .filter(
+      (i) => i && typeof i.text === "string" && i.text.trim() && BIG_FIVE_TRAITS.includes(i.trait)
+    )
+    .map((i, idx) => ({
+      id: `ai_${idx + 1}`,
+      trait: i.trait,
+      reverse: Boolean(i.reverse),
+      text: i.text.trim().slice(0, 200),
+    }));
+
+  if (items.length !== expected) {
+    throw new Error(`Expected ${expected} valid items, got ${items.length}.`);
+  }
+
+  const seenTexts = new Set();
+  for (const item of items) {
+    const key = item.text.toLowerCase();
+    if (seenTexts.has(key)) {
+      throw new Error(`Duplicate item text: "${item.text}"`);
+    }
+    seenTexts.add(key);
+  }
+
+  const perTrait = expected / BIG_FIVE_TRAITS.length;
+  for (const trait of BIG_FIVE_TRAITS) {
+    const group = items.filter((i) => i.trait === trait);
+    if (group.length !== perTrait) {
+      throw new Error(`Trait ${trait} has ${group.length} items, expected ${perTrait}.`);
+    }
+    const reversed = group.filter((i) => i.reverse).length;
+    const share = reversed / group.length;
+    if (share < 0.3 || share > 0.7) {
+      throw new Error(`Trait ${trait} reverse share ${share} outside [0.3, 0.7].`);
+    }
+  }
+
+  return items;
+}
+
 function normalizeRefinePayload(payload, rejectedIds) {
   const directionId = payload?.directionId;
   if (!DIRECTION_IDS.includes(directionId) || rejectedIds.includes(directionId)) {
@@ -471,7 +519,10 @@ function createAiEngine({ apiKey, model }) {
   }
 
   async function generateBigFiveItems({ depth }) {
-    if (!client) {
+    // Validated public-domain IPIP sets are the default instrument: every
+    // session gets identical, psychometrically anchored items. AI-generated
+    // items are experimental and must be opted into explicitly.
+    if (!client || process.env.AI_BIG_FIVE_ITEMS !== "true") {
       return getFallbackItems(depth);
     }
     try {
@@ -482,24 +533,7 @@ function createAiEngine({ apiKey, model }) {
         user,
         temperature: 0.85,
       });
-      const items = Array.isArray(parsed?.items) ? parsed.items : [];
-      const expected = depth === "deep" ? 50 : 20;
-      const normalized = items
-        .filter(
-          (i) =>
-            i && typeof i.text === "string" && ["O", "C", "E", "A", "N"].includes(i.trait)
-        )
-        .map((i, idx) => ({
-          id: typeof i.id === "string" && i.id ? i.id : `ai_${idx + 1}`,
-          trait: i.trait,
-          reverse: Boolean(i.reverse),
-          text: i.text.trim().slice(0, 200),
-        }));
-      if (normalized.length !== expected) {
-        console.warn("[AI Big Five items] count mismatch, using fallback");
-        return getFallbackItems(depth);
-      }
-      return normalized;
+      return normalizeBigFiveItemsPayload(parsed, depth === "deep" ? 50 : 20);
     } catch (error) {
       console.error("[AI Big Five items fallback]", error.message);
       return getFallbackItems(depth);
@@ -518,4 +552,5 @@ function createAiEngine({ apiKey, model }) {
 
 module.exports = {
   createAiEngine,
+  normalizeBigFiveItemsPayload,
 };
