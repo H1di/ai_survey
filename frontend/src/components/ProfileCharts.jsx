@@ -103,7 +103,7 @@ export function ValuesBarChart({ scores }) {
 
   return (
     <div className="profile-chart">
-      <p className="profile-chart-title">Values (A-choices per dimension)</p>
+      <p className="profile-chart-title">Values (alignment per dimension)</p>
       <ResponsiveContainer width="100%" height={248}>
         <BarChart data={data} layout="vertical" margin={{ top: 0, right: 12, bottom: 0, left: 0 }}>
           <XAxis type="number" domain={[0, 5]} tickCount={6} tick={{ fontSize: 10, fill: MUTED }} />

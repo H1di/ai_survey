@@ -198,7 +198,9 @@ function computeValuesScores(session) {
     const choice = session.valuesAnswers[q.id];
     if (choice === undefined) continue;
     answered += 1;
-    if (choice === "A") totals[q.dimension] += 1;
+    // The dimension-aligned pole is displayed as B on flipped questions.
+    const alignedChoice = q.flip ? "B" : "A";
+    if (choice === alignedChoice) totals[q.dimension] += 1;
   }
   if (answered < VALUES_QUESTIONS.length) return { scores: null, answered };
   return { scores: totals, answered };

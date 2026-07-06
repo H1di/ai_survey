@@ -48,7 +48,7 @@ function buildProfileDigest({
   }
 
   if (valuesScores && valuesDimensions) {
-    lines.push("Values inventory (0–5, A-choices per dimension):");
+    lines.push("Values inventory (0–5, alignment per dimension):");
     for (const dim of valuesDimensions) {
       const score = valuesScores[dim.id];
       if (score === undefined) continue;

@@ -183,6 +183,9 @@ function BigFiveQuestionCard({ q, savedValue, busy, onSubmit, onBack, canGoBack,
   );
 }
 
+// The measured dimension is deliberately NOT shown while answering — naming
+// the construct invites answering for the desired self-image. Dimensions are
+// revealed afterwards in the profile panel.
 function ValuesQuestionCard({ q, savedValue, busy, onChoose, onBack, canGoBack, progress }) {
   return (
     <div className="question-card values-card">
@@ -192,15 +195,10 @@ function ValuesQuestionCard({ q, savedValue, busy, onChoose, onBack, canGoBack, 
             ← Back
           </button>
         )}
-        <p className="dimension-header">
-          <span className="dimension-emoji">{q.dimensionEmoji}</span>{" "}
-          <span className="dimension-label">{q.dimensionLabel}</span>{" "}
-          <span className="dimension-counter">({q.indexInGroup + 1} / 5)</span>
+        <p className="question-category">
+          {progress ? `Question ${progress.index + 1} of ${progress.total}` : "Values"}
         </p>
       </div>
-      <p className="question-category">
-        {progress ? `Question ${progress.index + 1} of ${progress.total}` : ""}
-      </p>
       <h3>Which feels more like you?</h3>
       <div className="ab-pair">
         <button
