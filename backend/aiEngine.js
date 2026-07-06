@@ -198,8 +198,11 @@ function fallbackRoadmap(profession) {
 function fallbackRefineDirection(session) {
   const rejectedIds = session.rejectedDirections.map((d) => d.id);
   const next = computeDirection(session.directionQuestions, session.directionAnswers, rejectedIds);
+  // Refine must always propose something concrete; on a residual tie the
+  // earliest tied candidate is the deterministic "next strongest match".
+  const pick = next.tie ? next.candidates[0] : next;
   return {
-    ...next,
+    ...pick,
     reason: "Based on your quiz answers, this is your next strongest match.",
   };
 }

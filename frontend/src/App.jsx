@@ -433,6 +433,7 @@ function App() {
 
   const [directionQuestions, setDirectionQuestions] = useState([]);
   const [directionAnswers, setDirectionAnswers] = useState({});
+  const [directionTieCandidates, setDirectionTieCandidates] = useState([]);
   const [proposedDirection, setProposedDirection] = useState(null);
   const [direction, setDirection] = useState(null);
   const [narrowingQuestions, setNarrowingQuestions] = useState([]);
@@ -483,6 +484,7 @@ function App() {
     setValuesAnswers(data.valuesAnswers || {});
     setDirectionQuestions(data.directionQuestions || []);
     setDirectionAnswers(data.directionAnswers || {});
+    setDirectionTieCandidates(data.directionTieCandidates || []);
     setProposedDirection(data.proposedDirection || null);
     setDirection(data.direction || null);
     setNarrowingQuestions(data.narrowingQuestions || []);
@@ -837,6 +839,7 @@ function App() {
     setValuesIndex(0);
     setDirectionQuestions([]);
     setDirectionAnswers({});
+    setDirectionTieCandidates([]);
     setProposedDirection(null);
     setDirection(null);
     setNarrowingQuestions([]);
@@ -921,6 +924,32 @@ function App() {
             busyLabel="Reading your answer…"
             onChoose={handleAnswerDirection}
           />
+        ),
+      };
+    } else if (!direction && !proposedDirection && directionTieCandidates.length > 0) {
+      dockCard = {
+        key: "direction-tie",
+        content: (
+          <div className="question-card dock-card">
+            <p className="question-category">It's a close call</p>
+            <h3>Which of these pulls you most?</h3>
+            <p className="dock-subtext">
+              Your answers point equally to these directions — you decide.
+            </p>
+            <div className="option-list">
+              {directionTieCandidates.map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  className="option-button"
+                  onClick={() => handleChooseDirection(d.id)}
+                  disabled={busy.refine}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
         ),
       };
     } else if (!direction && refineMode && rejectedDirections.length < 2) {

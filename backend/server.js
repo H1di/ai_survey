@@ -295,10 +295,17 @@ app.post("/api/direction/answer", (req, res) => {
       (q) => session.directionAnswers[q.id] !== undefined
     );
     if (allAnswered) {
-      store.setProposedDirection(session, {
-        ...computeDirection(session.directionQuestions, session.directionAnswers),
-        reason: "Your answers across the quiz point most strongly to this direction.",
-      });
+      const result = computeDirection(session.directionQuestions, session.directionAnswers);
+      if (result.tie) {
+        // Don't break the tie for the user — expose the candidates and let
+        // the frontend ask; /api/direction/choose resolves it.
+        store.setDirectionTie(session, result.candidates);
+      } else {
+        store.setProposedDirection(session, {
+          ...result,
+          reason: "Your answers across the quiz point most strongly to this direction.",
+        });
+      }
     }
 
     return sendSessionSnapshot(res, session);

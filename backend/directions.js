@@ -166,9 +166,12 @@ function getDirection(id) {
 }
 
 // Deterministic Stage A resolution: each answered option votes for its
-// directionId; most votes wins; ties break by catalog order (strict > while
-// iterating DIRECTIONS keeps the earliest). No answers -> first direction.
-// excludeIds removes rejected directions from both voting and the fallback.
+// directionId; a unique majority wins. A shared top count is NOT resolved
+// silently — with 3 questions and >=8 distinct directionIds a 1-1-1 vote is
+// the common case, and breaking it by catalog order just replaces tech bias
+// with alphabet bias. Ties return { tie, candidates } so the caller can ask
+// the user. No answers -> first direction (excludeIds removes rejected
+// directions from voting and the fallback alike).
 function computeDirection(questions, answers, excludeIds = []) {
   const excluded = new Set(excludeIds);
   const counts = new Map();
@@ -182,20 +185,24 @@ function computeDirection(questions, answers, excludeIds = []) {
     counts.set(option.directionId, (counts.get(option.directionId) || 0) + 1);
   }
 
-  let best = null;
-  for (const dir of DIRECTIONS) {
-    if (excluded.has(dir.id)) continue;
-    const count = counts.get(dir.id) || 0;
-    if (count > 0 && (best === null || count > best.count)) {
-      best = { id: dir.id, label: dir.label, count };
-    }
+  let top = 0;
+  for (const count of counts.values()) {
+    if (count > top) top = count;
   }
 
-  if (!best) {
+  if (top === 0) {
     const firstAvailable = DIRECTIONS.find((dir) => !excluded.has(dir.id)) || DIRECTIONS[0];
     return { id: firstAvailable.id, label: firstAvailable.label };
   }
-  return { id: best.id, label: best.label };
+
+  const leaders = DIRECTIONS.filter(
+    (dir) => !excluded.has(dir.id) && (counts.get(dir.id) || 0) === top
+  ).map(({ id, label }) => ({ id, label }));
+
+  if (leaders.length === 1) {
+    return leaders[0];
+  }
+  return { tie: true, candidates: leaders };
 }
 
 // Validated server-side; display labels live in the frontend refine card.

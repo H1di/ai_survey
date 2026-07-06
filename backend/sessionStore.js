@@ -65,6 +65,7 @@ class SessionStore {
       pathStage: "direction",
       directionQuestions: [],
       directionAnswers: {},
+      directionTieCandidates: [],
       proposedDirection: null,
       direction: null,
       narrowingQuestions: [],
@@ -145,6 +146,13 @@ class SessionStore {
   setDirectionQuestions(session, questions) {
     session.directionQuestions = questions;
     session.directionAnswers = {};
+    session.directionTieCandidates = [];
+    session.proposedDirection = null;
+    this.touch(session);
+  }
+
+  setDirectionTie(session, candidates) {
+    session.directionTieCandidates = candidates;
     session.proposedDirection = null;
     this.touch(session);
   }
@@ -156,6 +164,7 @@ class SessionStore {
 
   setProposedDirection(session, direction) {
     session.proposedDirection = direction;
+    session.directionTieCandidates = [];
     this.touch(session);
   }
 
@@ -226,6 +235,7 @@ class SessionStore {
       pathStage: session.pathStage,
       directionQuestions: session.directionQuestions,
       directionAnswers: session.directionAnswers,
+      directionTieCandidates: session.directionTieCandidates,
       proposedDirection: session.proposedDirection,
       direction: session.direction,
       narrowingQuestions: session.narrowingQuestions,

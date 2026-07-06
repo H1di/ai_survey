@@ -54,11 +54,30 @@ test("computeDirection: majority of option votes wins", () => {
   assert.deepEqual(result, { id: "tech", label: "Programming & Technology" });
 });
 
-test("computeDirection: tie broken by DIRECTIONS catalog order", () => {
-  // tech gets 1 vote (q1), design gets 1 vote (q3): design is earlier in the
-  // alphabetical catalog — tech no longer wins ties by sitting first
+test("computeDirection: shared top count returns tie candidates in catalog order", () => {
+  // tech gets 1 vote (q1), design gets 1 vote (q3): no silent alphabet
+  // tie-break — both candidates come back for the user to resolve.
   const result = computeDirection(QUESTIONS, { dir_q1: "a", dir_q3: "a" });
-  assert.equal(result.id, "design");
+  assert.equal(result.tie, true);
+  assert.deepEqual(
+    result.candidates.map((c) => c.id),
+    ["design", "tech"]
+  );
+  for (const c of result.candidates) assert.ok(c.label);
+});
+
+test("computeDirection: 1-1-1 vote (the common case) is a three-way tie", () => {
+  const result = computeDirection(QUESTIONS, { dir_q1: "a", dir_q2: "b", dir_q3: "b" });
+  assert.equal(result.tie, true);
+  assert.deepEqual(
+    result.candidates.map((c) => c.id),
+    ["business", "healthcare", "tech"]
+  );
+});
+
+test("computeDirection: excludeIds can turn a tie into a unique winner", () => {
+  const result = computeDirection(QUESTIONS, { dir_q1: "a", dir_q3: "a" }, ["design"]);
+  assert.deepEqual(result, { id: "tech", label: "Programming & Technology" });
 });
 
 test("computeDirection: no valid answers falls back to first catalog direction", () => {
@@ -68,9 +87,8 @@ test("computeDirection: no valid answers falls back to first catalog direction",
 
 test("computeDirection excludeIds: excluded direction gets no votes and cannot win", () => {
   const result = computeDirection(QUESTIONS, { dir_q1: "a", dir_q2: "a", dir_q3: "b" }, ["tech"]);
-  assert.notEqual(result.id, "tech");
-  // remaining single votes tie -> catalog order among non-excluded voted dirs
-  assert.equal(result.id, "business");
+  // tech's two votes are discarded; business holds the only remaining vote
+  assert.deepEqual(result, { id: "business", label: "Business & Sales" });
 });
 
 test("computeDirection excludeIds: no votes left falls back to first non-excluded catalog direction", () => {

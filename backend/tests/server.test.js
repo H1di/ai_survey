@@ -75,10 +75,23 @@ test("full Page 3 flow: direction -> narrowing -> professions -> select -> roadm
     ({ status, data } = await post("/api/direction/answer", { sessionId, questionId: q.id, value: q.options[0].value }));
     assert.equal(status, 200);
   }
-  assert.ok(data.proposedDirection, "proposedDirection set after final answer");
-  // fallback q1/q2/q3 first options vote tech/finance/healthcare -> tie broken
-  // by (alphabetical) catalog order = finance
+  // fallback q1/q2/q3 first options vote tech/finance/healthcare: a 1-1-1
+  // tie is surfaced to the user instead of silently resolved by alphabet
+  assert.equal(data.proposedDirection, null);
+  assert.deepEqual(
+    data.directionTieCandidates.map((c) => c.id),
+    ["finance", "healthcare", "tech"]
+  );
+
+  // confirming during an unresolved tie is rejected
+  let tieConfirm = await post("/api/direction/confirm", { sessionId });
+  assert.equal(tieConfirm.status, 400);
+
+  // the user resolves the tie -> proposal, tie cleared
+  ({ status, data } = await post("/api/direction/choose", { sessionId, directionId: "finance" }));
+  assert.equal(status, 200);
   assert.equal(data.proposedDirection.id, "finance");
+  assert.deepEqual(data.directionTieCandidates, []);
 
   // Stage A confirm -> narrowing questions generated
   ({ status, data } = await post("/api/direction/confirm", { sessionId }));
@@ -152,6 +165,7 @@ test("select rejects a professionId that is not one of the options", async () =>
   for (const q of data.directionQuestions) {
     ({ data } = await post("/api/direction/answer", { sessionId, questionId: q.id, value: q.options[0].value }));
   }
+  ({ data } = await post("/api/direction/choose", { sessionId, directionId: data.directionTieCandidates[0].id }));
   ({ data } = await post("/api/direction/confirm", { sessionId }));
   for (const q of data.narrowingQuestions) {
     ({ data } = await post("/api/professions/narrow", { sessionId, questionId: q.id, value: q.options[0].value }));
@@ -173,7 +187,9 @@ test("direction refinement: reject twice, then manual choose", async () => {
   for (const q of data.directionQuestions) {
     ({ data } = await post("/api/direction/answer", { sessionId, questionId: q.id, value: q.options[0].value }));
   }
-  assert.ok(data.proposedDirection.reason, "tally proposal carries a reason");
+  // resolve the 1-1-1 tie, then exercise the refine cycle from a proposal
+  ({ data } = await post("/api/direction/choose", { sessionId, directionId: data.directionTieCandidates[0].id }));
+  assert.ok(data.proposedDirection.reason, "proposal carries a reason");
   const first = data.proposedDirection.id;
 
   // guards
@@ -220,6 +236,7 @@ test("refine guards: no proposal and confirmed direction", async () => {
   for (const q of data.directionQuestions) {
     ({ data } = await post("/api/direction/answer", { sessionId, questionId: q.id, value: q.options[0].value }));
   }
+  ({ data } = await post("/api/direction/choose", { sessionId, directionId: data.directionTieCandidates[0].id }));
   await post("/api/direction/confirm", { sessionId });
   res = await post("/api/direction/refine", { sessionId, reasonChoice: "interests", feedbackText: "" });
   assert.equal(res.status, 400);
