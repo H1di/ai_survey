@@ -13,3 +13,5 @@ npm-debug.log*
 .claude/
 .playwright-mcp/
 graphify-out/
+
+frontend/dist/
