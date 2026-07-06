@@ -57,9 +57,19 @@ function stepProgressText(step, progress) {
   return "";
 }
 
-function DemographicQuestionCard({ q, draft, setDraft, busy, onSubmit }) {
+function DemographicQuestionCard({ q, savedValue, draft, setDraft, busy, onSubmit, onBack, canGoBack, progress }) {
   return (
     <div className="question-card">
+      <div className="question-card-top">
+        {canGoBack && (
+          <button type="button" className="ghost-action back-action" onClick={onBack} disabled={busy}>
+            ← Back
+          </button>
+        )}
+        <p className="question-category">
+          {progress ? `Question ${progress.index + 1} of ${progress.total}` : "About you"}
+        </p>
+      </div>
       <h3>{q.question}</h3>
       {q.kind === "single" && (
         <div className="option-list">
@@ -67,44 +77,46 @@ function DemographicQuestionCard({ q, draft, setDraft, busy, onSubmit }) {
             <button
               key={o.value}
               type="button"
-              className={`option-button ${draft === o.value ? "selected" : ""}`}
-              onClick={() => setDraft(o.value)}
+              className={`option-button ${savedValue === o.value ? "selected" : ""}`}
+              onClick={() => onSubmit(o.value)}
+              disabled={busy}
             >
               {o.label}
             </button>
           ))}
         </div>
       )}
-      {q.kind === "number" && (
-        <input
-          type="number"
-          className="question-textarea"
-          value={draft}
-          min={q.min}
-          max={q.max}
-          placeholder={q.placeholder}
-          onChange={(e) => setDraft(e.target.value)}
-        />
-      )}
-      {q.kind === "text" && (
-        <input
-          type="text"
-          className="question-textarea"
-          value={draft}
-          placeholder={q.placeholder}
-          onChange={(e) => setDraft(e.target.value)}
-        />
-      )}
-      <div className="question-actions single">
-        <button
-          type="button"
-          className="primary-action"
-          onClick={onSubmit}
-          disabled={busy || draft === "" || draft === null}
+      {(q.kind === "number" || q.kind === "text") && (
+        <form
+          key={q.id}
+          className="question-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSubmit(draft);
+          }}
         >
-          {busy ? "Saving..." : "Next"}
-        </button>
-      </div>
+          <input
+            autoFocus
+            type={q.kind === "number" ? "number" : "text"}
+            className="question-textarea"
+            value={draft}
+            min={q.min}
+            max={q.max}
+            placeholder={q.placeholder}
+            onChange={(e) => setDraft(e.target.value)}
+            disabled={busy}
+          />
+          <div className="question-actions single">
+            <button
+              type="submit"
+              className="primary-action"
+              disabled={busy || draft === "" || draft === null}
+            >
+              {busy ? "Saving..." : "Next"}
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
@@ -138,20 +150,27 @@ function DepthChoiceCard({ busy, onChoose }) {
   );
 }
 
-function BigFiveQuestionCard({ q, draft, setDraft, busy, onSubmit, progress }) {
+function BigFiveQuestionCard({ q, savedValue, busy, onSubmit, onBack, canGoBack, progress }) {
   return (
     <div className="question-card">
-      <p className="question-category">
-        {progress ? `Item ${progress.answered + 1} of ${progress.total}` : "Personality"}
-      </p>
+      <div className="question-card-top">
+        {canGoBack && (
+          <button type="button" className="ghost-action back-action" onClick={onBack} disabled={busy}>
+            ← Back
+          </button>
+        )}
+        <p className="question-category">
+          {progress ? `Item ${progress.index + 1} of ${progress.total}` : "Personality"}
+        </p>
+      </div>
       <h3>{q.text}</h3>
       <div className="likert-row">
         {LIKERT.map((l) => (
           <button
             key={l.value}
             type="button"
-            className={`option-button likert-button ${draft === l.value ? "selected" : ""}`}
-            onClick={() => setDraft(l.value)}
+            className={`option-button likert-button ${savedValue === l.value ? "selected" : ""}`}
+            onClick={() => onSubmit(l.value)}
             disabled={busy}
           >
             <span className="likert-value">{l.value}</span>
@@ -159,36 +178,33 @@ function BigFiveQuestionCard({ q, draft, setDraft, busy, onSubmit, progress }) {
           </button>
         ))}
       </div>
-      <div className="question-actions single">
-        <button
-          type="button"
-          className="primary-action"
-          onClick={() => onSubmit(draft)}
-          disabled={busy || !draft}
-        >
-          {busy ? "Saving..." : "Next"}
-        </button>
-      </div>
     </div>
   );
 }
 
-function ValuesQuestionCard({ q, busy, onChoose, progress }) {
+function ValuesQuestionCard({ q, savedValue, busy, onChoose, onBack, canGoBack, progress }) {
   return (
     <div className="question-card values-card">
-      <p className="dimension-header">
-        <span className="dimension-emoji">{q.dimensionEmoji}</span>{" "}
-        <span className="dimension-label">{q.dimensionLabel}</span>{" "}
-        <span className="dimension-counter">({q.indexInGroup + 1} / 5)</span>
-      </p>
+      <div className="question-card-top">
+        {canGoBack && (
+          <button type="button" className="ghost-action back-action" onClick={onBack} disabled={busy}>
+            ← Back
+          </button>
+        )}
+        <p className="dimension-header">
+          <span className="dimension-emoji">{q.dimensionEmoji}</span>{" "}
+          <span className="dimension-label">{q.dimensionLabel}</span>{" "}
+          <span className="dimension-counter">({q.indexInGroup + 1} / 5)</span>
+        </p>
+      </div>
       <p className="question-category">
-        {progress ? `Question ${progress.answered + 1} of ${progress.total}` : ""}
+        {progress ? `Question ${progress.index + 1} of ${progress.total}` : ""}
       </p>
       <h3>Which feels more like you?</h3>
       <div className="ab-pair">
         <button
           type="button"
-          className="ab-option"
+          className={`ab-option ${savedValue === "A" ? "selected" : ""}`}
           onClick={() => onChoose("A")}
           disabled={busy}
         >
@@ -197,7 +213,7 @@ function ValuesQuestionCard({ q, busy, onChoose, progress }) {
         </button>
         <button
           type="button"
-          className="ab-option"
+          className={`ab-option ${savedValue === "B" ? "selected" : ""}`}
           onClick={() => onChoose("B")}
           disabled={busy}
         >
@@ -389,10 +405,18 @@ function App() {
 
   const [sessionId, setSessionId] = useState("");
   const [step, setStep] = useState("entry");
-  const [nextQuestion, setNextQuestion] = useState(null);
-  const [demoDraft, setDemoDraft] = useState("");
-  const [bigFiveDraft, setBigFiveDraft] = useState(0);
   const [progress, setProgress] = useState(null);
+
+  const [demographicQuestions, setDemographicQuestions] = useState([]);
+  const [demoAnswers, setDemoAnswers] = useState({});
+  const [demoIndex, setDemoIndex] = useState(0);
+  const [demoDraft, setDemoDraft] = useState("");
+  const [bigFiveItems, setBigFiveItems] = useState([]);
+  const [bigFiveAnswers, setBigFiveAnswers] = useState({});
+  const [bigFiveIndex, setBigFiveIndex] = useState(0);
+  const [valuesQuestions, setValuesQuestions] = useState([]);
+  const [valuesAnswers, setValuesAnswers] = useState({});
+  const [valuesIndex, setValuesIndex] = useState(0);
 
   const [directionQuestions, setDirectionQuestions] = useState([]);
   const [directionAnswers, setDirectionAnswers] = useState({});
@@ -437,8 +461,13 @@ function App() {
   const applySessionSnapshot = (data) => {
     setSessionId(data.sessionId);
     setStep(data.step);
-    setNextQuestion(data.nextQuestion || null);
     setProgress(data.progress || null);
+    setDemographicQuestions(data.demographicQuestions || []);
+    setDemoAnswers(data.demographics || {});
+    setBigFiveItems(data.bigFiveItems || []);
+    setBigFiveAnswers(data.bigFiveAnswers || {});
+    setValuesQuestions(data.valuesQuestions || []);
+    setValuesAnswers(data.valuesAnswers || {});
     setDirectionQuestions(data.directionQuestions || []);
     setDirectionAnswers(data.directionAnswers || {});
     setProposedDirection(data.proposedDirection || null);
@@ -470,6 +499,7 @@ function App() {
       });
       applySessionSnapshot(data);
       setStage("survey");
+      setDemoIndex(0);
       setDemoDraft("");
     } catch (e) {
       setError(e.message || "Could not start.");
@@ -478,10 +508,14 @@ function App() {
     }
   };
 
-  const handleSubmitDemographic = async () => {
-    if (!sessionId || !nextQuestion) return;
-    const q = nextQuestion.question;
-    const value = q.kind === "number" ? Number(demoDraft) : demoDraft;
+  const draftFromAnswer = (value) =>
+    value === undefined || value === null ? "" : String(value);
+
+  const handleSubmitDemographic = async (rawValue) => {
+    if (!sessionId) return;
+    const q = demographicQuestions[demoIndex];
+    if (!q) return;
+    const value = q.kind === "number" ? Number(rawValue) : rawValue;
     if (value === "" || value === null || (typeof value === "number" && Number.isNaN(value))) {
       return;
     }
@@ -494,12 +528,24 @@ function App() {
         value,
       });
       applySessionSnapshot(data);
-      setDemoDraft("");
+      const questions = data.demographicQuestions || [];
+      if (demoIndex < questions.length - 1) {
+        const nextQ = questions[demoIndex + 1];
+        setDemoDraft(draftFromAnswer(data.demographics?.[nextQ.id]));
+        setDemoIndex((i) => i + 1);
+      }
     } catch (e) {
       setError(e.message || "Could not save.");
     } finally {
       setBusy((p) => ({ ...p, demo: false }));
     }
+  };
+
+  const handleBackDemographic = () => {
+    const prevQ = demographicQuestions[demoIndex - 1];
+    if (!prevQ) return;
+    setDemoDraft(draftFromAnswer(demoAnswers[prevQ.id]));
+    setDemoIndex((i) => Math.max(0, i - 1));
   };
 
   const handleChooseDepth = async (depth) => {
@@ -509,7 +555,8 @@ function App() {
     try {
       const data = await chooseBigFiveDepth({ sessionId, depth });
       applySessionSnapshot(data);
-      setBigFiveDraft(0);
+      setBigFiveIndex(0);
+      setValuesIndex(0);
     } catch (e) {
       setError(e.message || "Could not start Big Five.");
     } finally {
@@ -518,17 +565,17 @@ function App() {
   };
 
   const handleSubmitBigFive = async (value) => {
-    if (!sessionId || !nextQuestion) return;
+    if (!sessionId) return;
+    const item = bigFiveItems[bigFiveIndex];
+    if (!item) return;
     setError("");
     setBusy((p) => ({ ...p, bigFive: true }));
     try {
-      const data = await submitBigFiveAnswer({
-        sessionId,
-        itemId: nextQuestion.question.id,
-        value,
-      });
+      const data = await submitBigFiveAnswer({ sessionId, itemId: item.id, value });
       applySessionSnapshot(data);
-      setBigFiveDraft(0);
+      if (bigFiveIndex < (data.bigFiveItems?.length ?? 0) - 1) {
+        setBigFiveIndex((i) => i + 1);
+      }
     } catch (e) {
       setError(e.message || "Could not save.");
     } finally {
@@ -536,22 +583,35 @@ function App() {
     }
   };
 
+  const handleBackBigFive = () => {
+    setBigFiveIndex((i) => Math.max(0, i - 1));
+  };
+
   const handleSubmitValues = async (choice) => {
-    if (!sessionId || !nextQuestion) return;
+    if (!sessionId) return;
+    const question = valuesQuestions[valuesIndex];
+    if (!question) return;
     setError("");
     setBusy((p) => ({ ...p, values: true }));
     try {
       const data = await submitValuesAnswer({
         sessionId,
-        questionId: nextQuestion.question.id,
+        questionId: question.id,
         choice,
       });
       applySessionSnapshot(data);
+      if (valuesIndex < (data.valuesQuestions?.length ?? 0) - 1) {
+        setValuesIndex((i) => i + 1);
+      }
     } catch (e) {
       setError(e.message || "Could not save.");
     } finally {
       setBusy((p) => ({ ...p, values: false }));
     }
+  };
+
+  const handleBackValues = () => {
+    setValuesIndex((i) => Math.max(0, i - 1));
   };
 
   const handleEnterLifePath = async () => {
@@ -568,6 +628,10 @@ function App() {
       setBusy((p) => ({ ...p, enterTree: false }));
     }
   };
+
+  const currentDemographicQuestion = demographicQuestions[demoIndex] || null;
+  const currentBigFiveItem = bigFiveItems[bigFiveIndex] || null;
+  const currentValuesQuestion = valuesQuestions[valuesIndex] || null;
 
   const currentDirectionQuestion =
     directionQuestions.find((q) => directionAnswers[q.id] === undefined) || null;
@@ -709,10 +773,17 @@ function App() {
     setDreamAnswer("");
     setSessionId("");
     setStep("entry");
-    setNextQuestion(null);
-    setDemoDraft("");
-    setBigFiveDraft(0);
     setProgress(null);
+    setDemographicQuestions([]);
+    setDemoAnswers({});
+    setDemoIndex(0);
+    setDemoDraft("");
+    setBigFiveItems([]);
+    setBigFiveAnswers({});
+    setBigFiveIndex(0);
+    setValuesQuestions([]);
+    setValuesAnswers({});
+    setValuesIndex(0);
     setDirectionQuestions([]);
     setDirectionAnswers({});
     setProposedDirection(null);
@@ -989,13 +1060,17 @@ function App() {
             <p>{stepProgressText(step, progress)}</p>
           </header>
 
-          {step === "demographics" && nextQuestion?.question && (
+          {step === "demographics" && currentDemographicQuestion && (
             <DemographicQuestionCard
-              q={nextQuestion.question}
+              q={currentDemographicQuestion}
+              savedValue={demoAnswers[currentDemographicQuestion.id] ?? null}
               draft={demoDraft}
               setDraft={setDemoDraft}
               busy={busy.demo}
               onSubmit={handleSubmitDemographic}
+              onBack={handleBackDemographic}
+              canGoBack={demoIndex > 0}
+              progress={{ index: demoIndex, total: demographicQuestions.length }}
             />
           )}
 
@@ -1003,23 +1078,27 @@ function App() {
             <DepthChoiceCard busy={busy.depth} onChoose={handleChooseDepth} />
           )}
 
-          {step === "big_five" && nextQuestion?.question && (
+          {step === "big_five" && currentBigFiveItem && (
             <BigFiveQuestionCard
-              q={nextQuestion.question}
-              draft={bigFiveDraft}
-              setDraft={setBigFiveDraft}
+              q={currentBigFiveItem}
+              savedValue={bigFiveAnswers[currentBigFiveItem.id] ?? null}
               busy={busy.bigFive}
               onSubmit={handleSubmitBigFive}
-              progress={progress?.bigFive}
+              onBack={handleBackBigFive}
+              canGoBack={bigFiveIndex > 0}
+              progress={{ index: bigFiveIndex, total: bigFiveItems.length }}
             />
           )}
 
-          {step === "values" && nextQuestion?.question && (
+          {step === "values" && currentValuesQuestion && (
             <ValuesQuestionCard
-              q={nextQuestion.question}
+              q={currentValuesQuestion}
+              savedValue={valuesAnswers[currentValuesQuestion.id] ?? null}
               busy={busy.values}
               onChoose={handleSubmitValues}
-              progress={progress?.values}
+              onBack={handleBackValues}
+              canGoBack={valuesIndex > 0}
+              progress={{ index: valuesIndex, total: valuesQuestions.length }}
             />
           )}
 

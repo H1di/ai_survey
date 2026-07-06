@@ -124,6 +124,35 @@ test("serializeSessionState exposes Page 3 fields and hides the old model", () =
   assert.ok(snapshot.summary !== undefined);
 });
 
+test("serializeSessionState exposes question lists and answers for back-navigation", () => {
+  const store = new SessionStore();
+  const s = makeSession(store);
+  store.setBigFiveDepthAndItems(s, "short", [
+    { id: "bf1", text: "Item one", trait: "O", reverse: true },
+  ]);
+  store.recordBigFiveAnswer(s, "bf1", 4);
+  store.recordValuesAnswer(s, "values_1", "A");
+  store.setDemographicAnswer(s, "sex", "female");
+
+  const snapshot = store.serializeSessionState(s, { done: false }, {});
+
+  assert.equal(snapshot.demographicQuestions.length, 3);
+  for (const q of snapshot.demographicQuestions) {
+    assert.ok(q.id && q.kind && q.question);
+  }
+  assert.deepEqual(snapshot.demographics, { sex: "female" });
+
+  // Big Five items expose only id/text — trait/reverse stay server-side.
+  assert.deepEqual(snapshot.bigFiveItems, [{ id: "bf1", text: "Item one" }]);
+  assert.deepEqual(snapshot.bigFiveAnswers, { bf1: 4 });
+
+  assert.equal(snapshot.valuesQuestions.length, 40);
+  for (const q of snapshot.valuesQuestions) {
+    assert.ok(q.id && q.dimension && q.optionA && q.optionB);
+  }
+  assert.deepEqual(snapshot.valuesAnswers, { values_1: "A" });
+});
+
 test("rejectProposedDirection records the rejection and clears the proposal", () => {
   const store = new SessionStore();
   const s = makeSession(store);

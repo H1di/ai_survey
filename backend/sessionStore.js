@@ -1,8 +1,13 @@
 const { randomUUID } = require("node:crypto");
 
 const { DIRECTIONS } = require("./directions");
+const { DEMOGRAPHIC_QUESTIONS, VALUES_QUESTIONS } = require("./questionPool");
+const { serializeDemographic, serializeValueQuestion } = require("./questionEngine");
 
 const DIRECTION_CATALOG = DIRECTIONS.map(({ id, label }) => ({ id, label }));
+
+const SERIALIZED_DEMOGRAPHIC_QUESTIONS = DEMOGRAPHIC_QUESTIONS.map(serializeDemographic);
+const SERIALIZED_VALUES_QUESTIONS = VALUES_QUESTIONS.map(serializeValueQuestion);
 
 class SessionStore {
   constructor() {
@@ -176,10 +181,15 @@ class SessionStore {
       entryChoice: session.entryChoice,
       dreamAnswer: session.dreamAnswer,
       step: session.step,
+      demographicQuestions: SERIALIZED_DEMOGRAPHIC_QUESTIONS,
       demographics: session.demographics,
       bigFiveDepth: session.bigFiveDepth,
+      bigFiveItems: session.bigFiveItems.map((i) => ({ id: i.id, text: i.text })),
+      bigFiveAnswers: session.bigFiveAnswers,
       bigFiveScores: session.bigFiveScores,
       derivedTraits: session.derivedTraits,
+      valuesQuestions: SERIALIZED_VALUES_QUESTIONS,
+      valuesAnswers: session.valuesAnswers,
       valuesScores: session.valuesScores,
       progress,
       summary,

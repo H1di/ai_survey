@@ -238,6 +238,8 @@ function summarizeAnswersForClient(session) {
 
 module.exports = {
   pickNextQuestion,
+  serializeDemographic,
+  serializeValueQuestion,
   validateDemographicAnswer,
   validateBigFiveAnswer,
   validateValuesAnswer,

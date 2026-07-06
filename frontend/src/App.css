@@ -218,6 +218,24 @@
   margin-top: 0;
 }
 
+.question-card-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.question-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.back-action {
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
 .secondary-action,
 .ghost-action {
   background: #ffffff;
@@ -578,6 +596,10 @@
   transition: background 160ms ease, color 160ms ease, opacity 160ms ease;
 }
 .ab-option:hover:enabled {
+  background: #111111;
+  color: #ffffff;
+}
+.ab-option.selected {
   background: #111111;
   color: #ffffff;
 }
