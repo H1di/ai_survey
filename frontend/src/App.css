@@ -475,3 +475,10 @@
     grid-template-columns: 1fr;
   }
 }
+
+.entry-disclaimer {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  color: var(--color-text-faint, #888888);
+  max-width: 46ch;
+}

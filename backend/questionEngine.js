@@ -164,23 +164,26 @@ function deriveBigFiveTraits(scores) {
   };
 }
 
+// behaviourTendencies/decisionPriorities are the Big Two meta-traits
+// (DeYoung): Stability = mean(A, C, 100-N), Plasticity = mean(O, E). The
+// field names stay for API compatibility; the copy uses the real names.
 function describeTraits({ behaviourTendencies, decisionPriorities, scores }) {
   const high = (v) => v >= 65;
   const low = (v) => v <= 35;
   const parts = [];
   parts.push(
     high(behaviourTendencies)
-      ? "Behaviour tendencies: steady, organized, low-volatility under stress."
+      ? "Stability (composure & self-discipline): steady, organized, low-volatility under stress."
       : low(behaviourTendencies)
-        ? "Behaviour tendencies: volatile, reactive, less structured."
-        : "Behaviour tendencies: balanced steadiness."
+        ? "Stability (composure & self-discipline): volatile, reactive, less structured."
+        : "Stability (composure & self-discipline): balanced steadiness."
   );
   parts.push(
     high(decisionPriorities)
-      ? "Decision priorities: novelty-seeking, exploratory, energized by people and ideas."
+      ? "Plasticity (drive toward the new): novelty-seeking, exploratory, energized by people and ideas."
       : low(decisionPriorities)
-        ? "Decision priorities: conservative, prefers depth and routine over novelty."
-        : "Decision priorities: balanced between exploration and routine."
+        ? "Plasticity (drive toward the new): conservative, prefers depth and routine over novelty."
+        : "Plasticity (drive toward the new): balanced between exploration and routine."
   );
   parts.push(
     `OCEAN: O=${scores.O}, C=${scores.C}, E=${scores.E}, A=${scores.A}, N=${scores.N}`

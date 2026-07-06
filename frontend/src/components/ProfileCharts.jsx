@@ -128,24 +128,33 @@ export function ValuesBarChart({ scores }) {
 }
 
 export default function ProfilePanel({ profile, onClose }) {
-  const { bigFiveScores, derivedTraits, valuesScores } = profile || {};
+  const { bigFiveScores, derivedTraits, valuesScores, bigFiveDepth } = profile || {};
 
   if (!bigFiveScores && !valuesScores) return null;
 
   return (
     <aside className="profile-panel">
       <div className="profile-panel-header">
-        <p className="profile-panel-title">Your profile</p>
+        <p className="profile-panel-title">Preliminary profile</p>
         <button type="button" className="profile-panel-close" onClick={onClose}>
           ×
         </button>
       </div>
       <PersonalityRadarChart scores={bigFiveScores} />
+      {bigFiveDepth === "short" && (
+        <p className="profile-panel-note">
+          Based on a 20-item short screen — a rough sketch, not a measured verdict.
+        </p>
+      )}
       <ValuesBarChart scores={valuesScores} />
       {derivedTraits?.summary && <p className="profile-panel-summary">{derivedTraits.summary}</p>}
       <p className="profile-panel-note">
         Directions and professions are picked from these survey scores — your dream answer only
         colours the story.
+      </p>
+      <p className="profile-panel-note">
+        This is an exploratory self-reflection tool, not professional career counseling or a
+        psychological assessment.
       </p>
     </aside>
   );

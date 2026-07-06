@@ -501,6 +501,7 @@ function App() {
       bigFiveScores: data.bigFiveScores || null,
       derivedTraits: data.derivedTraits || null,
       valuesScores: data.valuesScores || null,
+      bigFiveDepth: data.bigFiveDepth || null,
     });
     if (data.aiEnabled !== undefined) setAiEnabled(Boolean(data.aiEnabled));
   };
@@ -1157,6 +1158,11 @@ function App() {
           >
             {busy.start ? "Entering..." : "Help to explore my career"}
           </button>
+
+          <p className="entry-disclaimer">
+            An exploratory self-reflection tool — not professional career
+            counseling or a psychological assessment.
+          </p>
 
           {error && <p className="error-text">{error}</p>}
         </section>
