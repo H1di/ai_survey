@@ -1,6 +1,7 @@
 const cors = require("cors");
 const dotenv = require("dotenv");
 const express = require("express");
+const rateLimit = require("express-rate-limit");
 const { createAiEngine } = require("./aiEngine");
 const {
   VALUES_DIMENSIONS,
@@ -34,8 +35,44 @@ const aiEngine = createAiEngine({
   model: MODEL,
 });
 
-app.use(cors());
+const CORS_ORIGINS = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
+  : ["http://localhost:5173", "http://127.0.0.1:5173"];
+
+// Requests proxied by the Vite dev server are same-origin and bypass CORS,
+// so this only constrains direct cross-origin browser calls.
+app.use(cors({ origin: CORS_ORIGINS }));
 app.use(express.json({ limit: "1mb" }));
+
+const RATE_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000;
+
+const globalLimiter = rateLimit({
+  windowMs: RATE_WINDOW_MS,
+  max: Number(process.env.RATE_LIMIT_GLOBAL_MAX) || 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use("/api", globalLimiter);
+
+// Tighter budget for routes that can trigger OpenAI spend. One honest
+// session needs ~10 of these; the cap mainly stops scripted wallet drain.
+const aiLimiter = rateLimit({
+  windowMs: RATE_WINDOW_MS,
+  max: Number(process.env.RATE_LIMIT_AI_MAX) || 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many AI requests from this address. Try again later." },
+});
+for (const path of [
+  "/api/session/big-five-depth",
+  "/api/direction/question",
+  "/api/direction/confirm",
+  "/api/direction/refine",
+  "/api/professions/narrow",
+  "/api/roadmap/generate",
+]) {
+  app.use(path, aiLimiter);
+}
 
 function isValidEntryChoice(value) {
   return value === "change" || value === "find";
@@ -66,7 +103,9 @@ app.post("/api/session/start", (req, res) => {
     return res.status(400).json({ error: "entryChoice must be 'change' or 'find'." });
   }
 
-  const normalizedDream = typeof dreamAnswer === "string" ? dreamAnswer.trim() : "";
+  // Capped like feedbackText: the dream is quoted inside every AI prompt.
+  const normalizedDream =
+    typeof dreamAnswer === "string" ? dreamAnswer.trim().slice(0, 500) : "";
 
   if (!normalizedDream) {
     return res.status(400).json({ error: "dreamAnswer is required." });

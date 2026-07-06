@@ -1095,6 +1095,7 @@ function App() {
           <textarea
             className="dream-input"
             value={dreamAnswer}
+            maxLength={500}
             onChange={(event) => setDreamAnswer(event.target.value)}
             placeholder="Write your honest answer"
           />

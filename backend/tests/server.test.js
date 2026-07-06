@@ -1,6 +1,10 @@
 // Force fallback mode BEFORE requiring server: dotenv.config() never
 // overrides an env var that is already set, so this blanks any real key.
 process.env.OPENAI_API_KEY = "";
+// This suite fires hundreds of requests from one IP; rate-limit behavior
+// has its own suite (rateLimit.test.js runs in a separate process).
+process.env.RATE_LIMIT_GLOBAL_MAX = "1000000";
+process.env.RATE_LIMIT_AI_MAX = "1000000";
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -243,4 +247,11 @@ test("GET /api/session/:id returns enough state to resume after a reload", async
 
   const unknown = await fetch(`${base}/api/session/does-not-exist`);
   assert.equal(unknown.status, 404);
+});
+
+test("dreamAnswer is capped at 500 chars before storage and prompts", async () => {
+  const long = "x".repeat(10_000);
+  const { status, data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: long });
+  assert.equal(status, 200);
+  assert.equal(data.dreamAnswer.length, 500);
 });
