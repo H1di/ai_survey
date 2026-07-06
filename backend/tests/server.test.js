@@ -222,3 +222,25 @@ test("refine guards: no proposal and confirmed direction", async () => {
   res = await post("/api/direction/choose", { sessionId, directionId: "media" });
   assert.equal(res.status, 400);
 });
+
+test("GET /api/session/:id returns enough state to resume after a reload", async () => {
+  // Start and answer one demographic, then "reload".
+  let { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "resume me" });
+  const sessionId = data.sessionId;
+  ({ data } = await post("/api/session/demographics", { sessionId, questionId: "sex", value: "female" }));
+
+  const res = await fetch(`${base}/api/session/${sessionId}`);
+  assert.equal(res.status, 200);
+  const snapshot = await res.json();
+
+  assert.equal(snapshot.sessionId, sessionId);
+  assert.equal(snapshot.step, "demographics");
+  assert.equal(snapshot.entryChoice, "find");
+  assert.equal(snapshot.dreamAnswer, "resume me");
+  assert.ok(snapshot.demographicQuestions.length >= 3, "question list present");
+  assert.equal(snapshot.demographics.sex, "female", "saved answers present");
+  assert.ok(Array.isArray(snapshot.valuesQuestions) && snapshot.valuesQuestions.length === 40);
+
+  const unknown = await fetch(`${base}/api/session/does-not-exist`);
+  assert.equal(unknown.status, 404);
+});

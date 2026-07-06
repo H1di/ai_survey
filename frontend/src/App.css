@@ -13,6 +13,15 @@
   animation: fade-in 220ms ease;
 }
 
+.restore-hint {
+  min-height: calc(100vh - 96px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  color: var(--color-text-muted, #555555);
+}
+
 .entry-screen {
   min-height: calc(100vh - 96px);
   display: flex;

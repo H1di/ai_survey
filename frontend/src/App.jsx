@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import GraphView from "./components/GraphView";
 import ConfirmModal from "./components/GraphView/ConfirmModal";
@@ -11,6 +11,7 @@ import {
   chooseDirection,
   confirmDirection,
   fetchDirectionQuestions,
+  fetchSession,
   generateRoadmap,
   refineDirection,
   selectProfession,
@@ -243,6 +244,15 @@ const REDUCED_MOTION =
   typeof window !== "undefined" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+const SESSION_STORAGE_KEY = "lpe.sessionId";
+
+// Index of the first unanswered question, so a restored session resumes
+// where the user left off (falls back to 0 for a fresh list).
+function firstUnansweredIndex(questions, answers) {
+  const index = questions.findIndex((q) => (answers || {})[q.id] === undefined);
+  return index === -1 ? Math.max(0, questions.length - 1) : index;
+}
+
 // Values must match REFINE_REASON_VALUES on the backend.
 const REFINE_REASONS = [
   { value: "environment", label: "Wrong day-to-day environment" },
@@ -399,6 +409,9 @@ function GraphQuestionCard({ heading, question, busy, busyLabel, onChoose }) {
 
 function App() {
   const [stage, setStage] = useState("entry");
+  const [restoring, setRestoring] = useState(() =>
+    Boolean(localStorage.getItem(SESSION_STORAGE_KEY))
+  );
 
   const [entryChoice, setEntryChoice] = useState("");
   const [dreamAnswer, setDreamAnswer] = useState("");
@@ -486,6 +499,41 @@ function App() {
     });
   };
 
+  // Resume a stored session after reload; a dead/unknown id falls back to entry.
+  useEffect(() => {
+    const storedId = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!storedId) return undefined;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchSession(storedId);
+        if (cancelled) return;
+        applySessionSnapshot(data);
+        setEntryChoice(data.entryChoice || "");
+        setDreamAnswer(data.dreamAnswer || "");
+        setDemoIndex(firstUnansweredIndex(data.demographicQuestions || [], data.demographics));
+        setBigFiveIndex(firstUnansweredIndex(data.bigFiveItems || [], data.bigFiveAnswers));
+        setValuesIndex(firstUnansweredIndex(data.valuesQuestions || [], data.valuesAnswers));
+        setNarrowIntent(Object.keys(data.narrowingAnswers || {}).length > 0);
+        const inTree =
+          data.step === "complete" &&
+          ((data.directionQuestions || []).length > 0 || data.direction);
+        setStage(inTree ? "tree" : "survey");
+      } catch {
+        if (!cancelled) localStorage.removeItem(SESSION_STORAGE_KEY);
+      } finally {
+        if (!cancelled) setRestoring(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // Mount-only restore.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleStartSession = async () => {
     if (!entryChoice || !dreamAnswer.trim()) {
       return;
@@ -498,6 +546,7 @@ function App() {
         dreamAnswer: dreamAnswer.trim(),
       });
       applySessionSnapshot(data);
+      localStorage.setItem(SESSION_STORAGE_KEY, data.sessionId);
       setStage("survey");
       setDemoIndex(0);
       setDemoDraft("");
@@ -768,6 +817,8 @@ function App() {
   };
 
   const resetAll = () => {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+    setRestoring(false);
     setStage("entry");
     setEntryChoice("");
     setDreamAnswer("");
@@ -1008,6 +1059,14 @@ function App() {
         ),
       };
     }
+  }
+
+  if (restoring) {
+    return (
+      <main className="app-shell">
+        <p className="restore-hint">Resuming your session…</p>
+      </main>
+    );
   }
 
   return (

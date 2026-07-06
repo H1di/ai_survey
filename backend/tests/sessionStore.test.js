@@ -169,3 +169,38 @@ test("old branch/theme methods are gone", () => {
     assert.equal(store[gone], undefined, `${gone} should be removed`);
   }
 });
+
+test("evictExpired removes sessions older than ttl and keeps fresh ones", () => {
+  const store = new SessionStore({ ttlMs: 1000 });
+  const stale = makeSession(store);
+  const fresh = makeSession(store);
+
+  stale.updatedAt = new Date(Date.now() - 5000).toISOString();
+
+  const evicted = store.evictExpired();
+  assert.equal(evicted, 1);
+  assert.equal(store.get(stale.id), null);
+  assert.equal(store.get(fresh.id), fresh);
+});
+
+test("touch resets the eviction clock", () => {
+  const store = new SessionStore({ ttlMs: 1000 });
+  const s = makeSession(store);
+  s.updatedAt = new Date(Date.now() - 5000).toISOString();
+
+  store.touch(s);
+
+  assert.equal(store.evictExpired(), 0);
+  assert.equal(store.get(s.id), s);
+});
+
+test("startSweep/stopSweep are idempotent and unref'd", () => {
+  const store = new SessionStore({ ttlMs: 1000, sweepIntervalMs: 50 });
+  store.startSweep();
+  const timer = store.sweepTimer;
+  store.startSweep();
+  assert.equal(store.sweepTimer, timer, "second start must not replace the timer");
+  store.stopSweep();
+  assert.equal(store.sweepTimer, null);
+  store.stopSweep();
+});

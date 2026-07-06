@@ -24,6 +24,7 @@ dotenv.config();
 
 const app = express();
 const store = new SessionStore();
+store.startSweep();
 
 const PORT = Number(process.env.PORT) || 3001;
 const MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";

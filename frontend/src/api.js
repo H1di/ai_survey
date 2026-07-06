@@ -16,6 +16,10 @@ async function request(path, options = {}) {
   return data;
 }
 
+export function fetchSession(sessionId) {
+  return request(`/api/session/${encodeURIComponent(sessionId)}`);
+}
+
 export function startSession(payload) {
   return request("/api/session/start", {
     method: "POST",

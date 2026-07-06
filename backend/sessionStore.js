@@ -9,9 +9,39 @@ const DIRECTION_CATALOG = DIRECTIONS.map(({ id, label }) => ({ id, label }));
 const SERIALIZED_DEMOGRAPHIC_QUESTIONS = DEMOGRAPHIC_QUESTIONS.map(serializeDemographic);
 const SERIALIZED_VALUES_QUESTIONS = VALUES_QUESTIONS.map(serializeValueQuestion);
 
+const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+
 class SessionStore {
-  constructor() {
+  constructor({ ttlMs = DEFAULT_TTL_MS, sweepIntervalMs = DEFAULT_SWEEP_INTERVAL_MS } = {}) {
     this.sessions = new Map();
+    this.ttlMs = ttlMs;
+    this.sweepIntervalMs = sweepIntervalMs;
+    this.sweepTimer = null;
+  }
+
+  evictExpired(now = Date.now()) {
+    let evicted = 0;
+    for (const [id, session] of this.sessions) {
+      if (now - Date.parse(session.updatedAt) > this.ttlMs) {
+        this.sessions.delete(id);
+        evicted += 1;
+      }
+    }
+    return evicted;
+  }
+
+  startSweep() {
+    if (this.sweepTimer) return;
+    this.sweepTimer = setInterval(() => this.evictExpired(), this.sweepIntervalMs);
+    // Never keep the process alive just for the sweep.
+    if (typeof this.sweepTimer.unref === "function") this.sweepTimer.unref();
+  }
+
+  stopSweep() {
+    if (!this.sweepTimer) return;
+    clearInterval(this.sweepTimer);
+    this.sweepTimer = null;
   }
 
   createSession({ entryChoice, dreamAnswer }) {
