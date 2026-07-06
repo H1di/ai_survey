@@ -3,12 +3,8 @@ const dotenv = require("dotenv");
 const express = require("express");
 const rateLimit = require("express-rate-limit");
 const { createAiEngine } = require("./aiEngine");
+const { DEMOGRAPHIC_QUESTIONS } = require("./questionPool");
 const {
-  VALUES_DIMENSIONS,
-  DEMOGRAPHIC_QUESTIONS,
-} = require("./questionPool");
-const {
-  pickNextQuestion,
   validateDemographicAnswer,
   validateBigFiveAnswer,
   validateValuesAnswer,
@@ -80,16 +76,15 @@ function isValidEntryChoice(value) {
 
 const AI_ENABLED = Boolean(process.env.OPENAI_API_KEY);
 
-function sendSessionSnapshot(res, session, extras = {}) {
+function sendSessionSnapshot(res, session, { includeStatic = false } = {}) {
   const progress = buildProgress(session);
   const summary = summarizeAnswersForClient(session);
 
   return res.json({
-    ...store.serializeSessionState(session, progress, summary),
+    ...store.serializeSessionState(session, progress, summary, { includeStatic }),
     // Lets the UI say honestly when suggestions come from fixed fallback
     // rules rather than AI (no key configured).
     aiEnabled: AI_ENABLED,
-    ...extras,
   });
 }
 
@@ -121,19 +116,13 @@ app.post("/api/session/start", (req, res) => {
     dreamAnswer: normalizedDream,
   });
 
-  return sendSessionSnapshot(res, session, {
-    nextQuestion: pickNextQuestion(session),
-    valuesDimensions: VALUES_DIMENSIONS,
-  });
+  return sendSessionSnapshot(res, session, { includeStatic: true });
 });
 
 app.get("/api/session/:sessionId", (req, res) => {
   try {
     const session = store.require(req.params.sessionId);
-    return sendSessionSnapshot(res, session, {
-      nextQuestion: pickNextQuestion(session),
-      valuesDimensions: VALUES_DIMENSIONS,
-    });
+    return sendSessionSnapshot(res, session, { includeStatic: true });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ error: error.message });
   }
@@ -158,9 +147,7 @@ app.post("/api/session/demographics", (req, res) => {
       store.advanceStep(session, "depth_choice");
     }
 
-    return sendSessionSnapshot(res, session, {
-      nextQuestion: pickNextQuestion(session),
-    });
+    return sendSessionSnapshot(res, session);
   } catch (error) {
     return res.status(error.statusCode || 500).json({ error: error.message });
   }
@@ -184,9 +171,8 @@ app.post("/api/session/big-five-depth", async (req, res) => {
     store.setBigFiveDepthAndItems(session, depth, items);
     store.advanceStep(session, "big_five");
 
-    return sendSessionSnapshot(res, session, {
-      nextQuestion: pickNextQuestion(session),
-    });
+    // bigFiveItems just changed — this is one of the static-list snapshots.
+    return sendSessionSnapshot(res, session, { includeStatic: true });
   } catch (error) {
     console.error("[session/big-five-depth]", error);
     return res
@@ -217,9 +203,7 @@ app.post("/api/big-five/answer", (req, res) => {
       store.advanceStep(session, "values");
     }
 
-    return sendSessionSnapshot(res, session, {
-      nextQuestion: pickNextQuestion(session),
-    });
+    return sendSessionSnapshot(res, session);
   } catch (error) {
     return res.status(error.statusCode || 500).json({ error: error.message });
   }
@@ -237,16 +221,13 @@ app.post("/api/values/answer", (req, res) => {
     const normalized = validateValuesAnswer(questionId, choice);
     store.recordValuesAnswer(session, questionId, normalized);
 
-    const { scores, answered } = computeValuesScores(session);
+    const { scores } = computeValuesScores(session);
     if (scores) {
       store.setValuesScores(session, scores);
       store.advanceStep(session, "complete");
     }
 
-    return sendSessionSnapshot(res, session, {
-      nextQuestion: pickNextQuestion(session),
-      valuesAnswered: answered,
-    });
+    return sendSessionSnapshot(res, session);
   } catch (error) {
     return res.status(error.statusCode || 500).json({ error: error.message });
   }

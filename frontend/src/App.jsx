@@ -492,11 +492,14 @@ function App() {
     setSessionId(data.sessionId);
     setStep(data.step);
     setProgress(data.progress || null);
-    setDemographicQuestions(data.demographicQuestions || []);
+    // Static question banks only travel on start/resume/depth-choice
+    // snapshots; answer responses omit them, so merge instead of replacing.
+    if (data.demographicQuestions) setDemographicQuestions(data.demographicQuestions);
+    if (data.bigFiveItems) setBigFiveItems(data.bigFiveItems);
+    if (data.valuesQuestions) setValuesQuestions(data.valuesQuestions);
+    if (data.directionCatalog) setDirectionCatalog(data.directionCatalog);
     setDemoAnswers(data.demographics || {});
-    setBigFiveItems(data.bigFiveItems || []);
     setBigFiveAnswers(data.bigFiveAnswers || {});
-    setValuesQuestions(data.valuesQuestions || []);
     setValuesAnswers(data.valuesAnswers || {});
     setDirectionQuestions(data.directionQuestions || []);
     setDirectionAnswers(data.directionAnswers || {});
@@ -509,7 +512,6 @@ function App() {
     setSelectedProfession(data.selectedProfession || null);
     setRoadmaps(data.roadmaps || {});
     setRejectedDirections(data.rejectedDirections || []);
-    setDirectionCatalog(data.directionCatalog || []);
     setProfile({
       bigFiveScores: data.bigFiveScores || null,
       derivedTraits: data.derivedTraits || null,
@@ -597,9 +599,8 @@ function App() {
         value,
       });
       applySessionSnapshot(data);
-      const questions = data.demographicQuestions || [];
-      if (demoIndex < questions.length - 1) {
-        const nextQ = questions[demoIndex + 1];
+      if (demoIndex < demographicQuestions.length - 1) {
+        const nextQ = demographicQuestions[demoIndex + 1];
         setDemoDraft(draftFromAnswer(data.demographics?.[nextQ.id]));
         setDemoIndex((i) => i + 1);
       }
@@ -644,7 +645,7 @@ function App() {
     try {
       const data = await submitBigFiveAnswer({ sessionId, itemId: item.id, value });
       applySessionSnapshot(data);
-      if (bigFiveIndex < (data.bigFiveItems?.length ?? 0) - 1) {
+      if (bigFiveIndex < bigFiveItems.length - 1) {
         setBigFiveIndex((i) => i + 1);
       }
     } catch (e) {
@@ -671,7 +672,7 @@ function App() {
         choice,
       });
       applySessionSnapshot(data);
-      if (valuesIndex < (data.valuesQuestions?.length ?? 0) - 1) {
+      if (valuesIndex < valuesQuestions.length - 1) {
         setValuesIndex((i) => i + 1);
       }
     } catch (e) {

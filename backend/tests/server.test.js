@@ -31,31 +31,52 @@ async function post(path, body) {
 }
 
 // Fast-forwards Page 1 + Page 2 (fallback Big Five items are deterministic).
+// Static question banks arrive on start and depth-choice snapshots only —
+// answer responses are trimmed, so iterate over the captured lists.
 async function completeAssessment() {
   let { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "build useful things" });
   const sessionId = data.sessionId;
+  const { demographicQuestions, valuesQuestions } = data;
 
   const demoValues = { sex: "female", age: 30, country: "Testland" };
-  while (data.step === "demographics") {
-    const q = data.nextQuestion.question;
+  for (const q of demographicQuestions) {
     ({ data } = await post("/api/session/demographics", { sessionId, questionId: q.id, value: demoValues[q.id] }));
   }
+  assert.equal(data.step, "depth_choice");
 
   ({ data } = await post("/api/session/big-five-depth", { sessionId, depth: "short" }));
+  const bigFiveItems = data.bigFiveItems;
 
-  while (data.step === "big_five") {
-    const q = data.nextQuestion.question;
-    ({ data } = await post("/api/big-five/answer", { sessionId, itemId: q.id, value: 3 }));
+  for (const item of bigFiveItems) {
+    ({ data } = await post("/api/big-five/answer", { sessionId, itemId: item.id, value: 3 }));
   }
+  assert.equal(data.step, "values");
 
-  while (data.step === "values") {
-    const q = data.nextQuestion.question;
+  for (const q of valuesQuestions) {
     ({ data } = await post("/api/values/answer", { sessionId, questionId: q.id, choice: "A" }));
   }
 
   assert.equal(data.step, "complete");
   return { sessionId, data };
 }
+
+test("answer snapshots omit static question banks; start/GET include them", async () => {
+  let { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "trim me" });
+  const sessionId = data.sessionId;
+  assert.ok(data.demographicQuestions, "start carries question banks");
+  assert.ok(data.valuesQuestions);
+  assert.ok(data.directionCatalog);
+
+  ({ data } = await post("/api/session/demographics", { sessionId, questionId: "sex", value: "male" }));
+  assert.equal(data.demographicQuestions, undefined, "answer response is trimmed");
+  assert.equal(data.valuesQuestions, undefined);
+  assert.equal(data.directionCatalog, undefined);
+  assert.ok(data.demographics, "dynamic state still present");
+
+  const res = await fetch(`${base}/api/session/${sessionId}`);
+  const snapshot = await res.json();
+  assert.ok(snapshot.demographicQuestions, "GET (resume) carries question banks");
+});
 
 test("full Page 3 flow: direction -> narrowing -> professions -> select -> roadmap", async () => {
   const { sessionId } = await completeAssessment();
@@ -213,7 +234,10 @@ test("direction refinement: reject twice, then manual choose", async () => {
   // choose: rejected id -> 400; valid -> proposal "Chosen by you."
   res = await post("/api/direction/choose", { sessionId, directionId: first });
   assert.equal(res.status, 400);
-  const pick = data.directionCatalog.find(
+  // the catalog is a static-snapshot field; refine responses no longer carry it
+  const catalogRes = await fetch(`${base}/api/session/${sessionId}`);
+  const { directionCatalog } = await catalogRes.json();
+  const pick = directionCatalog.find(
     (d) => ![first, second].includes(d.id)
   );
   ({ data } = await post("/api/direction/choose", { sessionId, directionId: pick.id }));

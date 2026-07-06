@@ -8,49 +8,6 @@ const {
 
 const TRAIT_KEYS = ["O", "C", "E", "A", "N"];
 
-function pickNextQuestion(session) {
-  switch (session.step) {
-    case "demographics":
-      return pickNextDemographic(session);
-    case "big_five":
-      return pickNextBigFive(session);
-    case "values":
-      return pickNextValue(session);
-    default:
-      return null;
-  }
-}
-
-function pickNextDemographic(session) {
-  for (const q of DEMOGRAPHIC_QUESTIONS) {
-    if (!session.demographics || session.demographics[q.id] === undefined) {
-      return { stage: "demographics", question: serializeDemographic(q) };
-    }
-  }
-  return null;
-}
-
-function pickNextBigFive(session) {
-  if (!session.bigFiveItems || !session.bigFiveItems.length) {
-    return null;
-  }
-  for (const item of session.bigFiveItems) {
-    if (session.bigFiveAnswers[item.id] === undefined) {
-      return { stage: "big_five", question: { ...item } };
-    }
-  }
-  return null;
-}
-
-function pickNextValue(session) {
-  for (const q of VALUES_QUESTIONS) {
-    if (session.valuesAnswers[q.id] === undefined) {
-      return { stage: "values", question: serializeValueQuestion(q) };
-    }
-  }
-  return null;
-}
-
 function serializeDemographic(q) {
   return {
     id: q.id,
@@ -242,7 +199,6 @@ function summarizeAnswersForClient(session) {
 }
 
 module.exports = {
-  pickNextQuestion,
   serializeDemographic,
   serializeValueQuestion,
   validateDemographicAnswer,

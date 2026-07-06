@@ -214,20 +214,31 @@ class SessionStore {
     this.touch(session);
   }
 
-  serializeSessionState(session, progress, summary) {
+  // includeStatic=false trims the per-answer payload: question banks and the
+  // direction catalog only travel on session start, GET (resume), and the
+  // depth choice (where bigFiveItems change). The frontend merges, so answer
+  // responses carry only the state that can actually have moved.
+  serializeSessionState(session, progress, summary, { includeStatic = true } = {}) {
+    const staticPart = includeStatic
+      ? {
+          demographicQuestions: SERIALIZED_DEMOGRAPHIC_QUESTIONS,
+          bigFiveItems: session.bigFiveItems.map((i) => ({ id: i.id, text: i.text })),
+          valuesQuestions: SERIALIZED_VALUES_QUESTIONS,
+          directionCatalog: DIRECTION_CATALOG,
+        }
+      : {};
+
     return {
       sessionId: session.id,
       entryChoice: session.entryChoice,
       dreamAnswer: session.dreamAnswer,
       step: session.step,
-      demographicQuestions: SERIALIZED_DEMOGRAPHIC_QUESTIONS,
+      ...staticPart,
       demographics: session.demographics,
       bigFiveDepth: session.bigFiveDepth,
-      bigFiveItems: session.bigFiveItems.map((i) => ({ id: i.id, text: i.text })),
       bigFiveAnswers: session.bigFiveAnswers,
       bigFiveScores: session.bigFiveScores,
       derivedTraits: session.derivedTraits,
-      valuesQuestions: SERIALIZED_VALUES_QUESTIONS,
       valuesAnswers: session.valuesAnswers,
       valuesScores: session.valuesScores,
       progress,
@@ -244,7 +255,6 @@ class SessionStore {
       selectedProfession: session.selectedProfession,
       roadmaps: session.roadmaps,
       rejectedDirections: session.rejectedDirections,
-      directionCatalog: DIRECTION_CATALOG,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
     };
