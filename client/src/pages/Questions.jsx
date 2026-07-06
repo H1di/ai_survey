@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../state/AppContext';
-import { QUESTIONS } from './questions';
+import { QUESTIONS } from './questionsData';
 import './Questions.css';
 
 const variants = {
