@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import GraphView from "./components/GraphView";
 import ConfirmModal from "./components/GraphView/ConfirmModal";
@@ -11,6 +11,7 @@ import {
   chooseDirection,
   confirmDirection,
   fetchDirectionQuestions,
+  fetchSession,
   generateRoadmap,
   refineDirection,
   selectProfession,
@@ -19,6 +20,7 @@ import {
   submitDemographics,
   submitValuesAnswer,
 } from "./api";
+import { buildLifePathGraph, firstUnansweredIndex, selectDockCard } from "./lifePath";
 import "./App.css";
 import "./components/GraphView/GraphPage.css";
 
@@ -55,6 +57,19 @@ function stepProgressText(step, progress) {
   if (step === "values")
     return `${progress.values.answered} / ${progress.values.total}`;
   return "";
+}
+
+// One journey, one bar: demographics + Big Five + values combined. Before the
+// depth choice the Big Five length is unknown, so assume the short set — the
+// bar can only get more accurate, never jump backwards.
+function overallProgress(progress) {
+  if (!progress) return null;
+  const bigFiveTotal = progress.bigFive.total || 20;
+  const total = progress.demographics.total + bigFiveTotal + progress.values.total;
+  const answered =
+    progress.demographics.answered + progress.bigFive.answered + progress.values.answered;
+  if (!total) return null;
+  return { answered, total, percent: Math.round((answered / total) * 100) };
 }
 
 function DemographicQuestionCard({ q, savedValue, draft, setDraft, busy, onSubmit, onBack, canGoBack, progress }) {
@@ -133,7 +148,8 @@ function DepthChoiceCard({ busy, onChoose }) {
           disabled={Boolean(busy)}
         >
           <p className="depth-title">Short</p>
-          <p className="depth-meta">20 questions • 3–5 minutes</p>
+          <p className="depth-meta">20 personality questions • 3–5 minutes</p>
+          <p className="depth-meta">63 questions overall • ~10 minutes to your paths</p>
         </button>
         <button
           type="button"
@@ -142,7 +158,8 @@ function DepthChoiceCard({ busy, onChoose }) {
           disabled={Boolean(busy)}
         >
           <p className="depth-title">Deep</p>
-          <p className="depth-meta">50 questions • 8–12 minutes</p>
+          <p className="depth-meta">50 personality questions • 8–12 minutes</p>
+          <p className="depth-meta">93 questions overall • ~18 minutes to your paths</p>
         </button>
       </div>
       {busy && <p className="depth-loading">Generating items…</p>}
@@ -182,6 +199,9 @@ function BigFiveQuestionCard({ q, savedValue, busy, onSubmit, onBack, canGoBack,
   );
 }
 
+// The measured dimension is deliberately NOT shown while answering — naming
+// the construct invites answering for the desired self-image. Dimensions are
+// revealed afterwards in the profile panel.
 function ValuesQuestionCard({ q, savedValue, busy, onChoose, onBack, canGoBack, progress }) {
   return (
     <div className="question-card values-card">
@@ -191,15 +211,10 @@ function ValuesQuestionCard({ q, savedValue, busy, onChoose, onBack, canGoBack, 
             ← Back
           </button>
         )}
-        <p className="dimension-header">
-          <span className="dimension-emoji">{q.dimensionEmoji}</span>{" "}
-          <span className="dimension-label">{q.dimensionLabel}</span>{" "}
-          <span className="dimension-counter">({q.indexInGroup + 1} / 5)</span>
+        <p className="question-category">
+          {progress ? `Question ${progress.index + 1} of ${progress.total}` : "Values"}
         </p>
       </div>
-      <p className="question-category">
-        {progress ? `Question ${progress.index + 1} of ${progress.total}` : ""}
-      </p>
       <h3>Which feels more like you?</h3>
       <div className="ab-pair">
         <button
@@ -225,154 +240,11 @@ function ValuesQuestionCard({ q, savedValue, busy, onChoose, onBack, canGoBack, 
   );
 }
 
-const ME_NODE = { id: "me", type: "me", position: { x: 0, y: 0 }, data: {} };
-
-// Vertical story: Me -> Direction -> 3 professions -> roadmap chain.
-const DIRECTION_Y = 240;
-const PROFESSION_Y = 500;
-const PROFESSION_GAP = 340;
-const ROADMAP_START_Y = 760;
-const ROADMAP_GAP = 200;
-
-// Cascade timing: a node appears exactly when its edge finishes drawing.
-const EDGE_DRAW_MS = 600;
-const PROFESSION_STAGGER_MS = 180;
-const ROADMAP_STEP_MS = 600;
-
 const REDUCED_MOTION =
   typeof window !== "undefined" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-// Values must match REFINE_REASON_VALUES on the backend.
-const REFINE_REASONS = [
-  { value: "environment", label: "Wrong day-to-day environment" },
-  { value: "interests", label: "Doesn't match my real interests" },
-  { value: "too_technical", label: "Too technical / not my style" },
-  { value: "prospects", label: "Worried about pay & prospects" },
-];
-
-function professionX(index, count) {
-  return (index - (count - 1) / 2) * PROFESSION_GAP;
-}
-
-function buildLifePathGraph({
-  direction,
-  professionOptions,
-  selectedProfessionId,
-  roadmaps,
-  roadmapPending,
-  onProfessionOpen,
-  onStageOpen,
-}) {
-  const nodes = [ME_NODE];
-  const edges = [];
-
-  if (!direction) {
-    return { nodes, edges };
-  }
-
-  nodes.push({
-    id: "direction",
-    type: "direction",
-    position: { x: 0, y: DIRECTION_Y },
-    draggable: true,
-    style: { "--appear-delay": `${EDGE_DRAW_MS}ms` },
-    data: { label: direction.label },
-  });
-  edges.push({
-    id: "me-direction",
-    source: "me",
-    target: "direction",
-    type: "branch",
-    data: { delay: 0, active: true, flowDelayMs: EDGE_DRAW_MS },
-  });
-
-  professionOptions.forEach((profession, index) => {
-    const edgeDelay = index * PROFESSION_STAGGER_MS;
-    nodes.push({
-      id: profession.id,
-      type: "profession",
-      position: { x: professionX(index, professionOptions.length), y: PROFESSION_Y },
-      draggable: true,
-      style: { "--appear-delay": `${edgeDelay + EDGE_DRAW_MS}ms` },
-      data: {
-        title: profession.title,
-        summary: profession.summary,
-        selected: profession.id === selectedProfessionId,
-        onOpen: () => onProfessionOpen(profession),
-      },
-    });
-    edges.push({
-      id: `direction-${profession.id}`,
-      source: "direction",
-      target: profession.id,
-      type: "branch",
-      data: {
-        delay: edgeDelay,
-        active: profession.id === selectedProfessionId || Boolean(roadmaps[profession.id]),
-        flowDelayMs: 150,
-      },
-    });
-  });
-
-  const selectedIndex = professionOptions.findIndex((p) => p.id === selectedProfessionId);
-
-  if (roadmapPending && selectedIndex !== -1) {
-    const anchor = professionOptions[selectedIndex];
-    const anchorX = professionX(selectedIndex, professionOptions.length);
-    nodes.push({
-      id: "roadmap-loading",
-      type: "loading",
-      position: { x: anchorX, y: ROADMAP_START_Y },
-      data: {},
-    });
-    edges.push({
-      id: `${anchor.id}-roadmap-loading`,
-      source: anchor.id,
-      target: "roadmap-loading",
-      type: "branch",
-    });
-  }
-
-  // Every built roadmap stays on the graph, each under its own profession.
-  Object.entries(roadmaps).forEach(([professionId, professionRoadmap]) => {
-    const profIndex = professionOptions.findIndex((p) => p.id === professionId);
-    if (profIndex === -1) return;
-    const chainX = professionX(profIndex, professionOptions.length);
-
-    professionRoadmap.stages.forEach((stage, index) => {
-      const nodeId = `stage-${professionId}-${stage.id}`;
-      const parentId =
-        index === 0
-          ? professionId
-          : `stage-${professionId}-${professionRoadmap.stages[index - 1].id}`;
-      const edgeDelay = index * ROADMAP_STEP_MS;
-      nodes.push({
-        id: nodeId,
-        type: "roadmap",
-        position: { x: chainX, y: ROADMAP_START_Y + index * ROADMAP_GAP },
-        draggable: true,
-        style: { "--appear-delay": `${edgeDelay + EDGE_DRAW_MS}ms` },
-        data: {
-          index: index + 1,
-          title: stage.title,
-          timeframe: stage.timeframe,
-          last: index === professionRoadmap.stages.length - 1,
-          onOpen: () => onStageOpen(stage, index),
-        },
-      });
-      edges.push({
-        id: `${parentId}-${nodeId}`,
-        source: parentId,
-        target: nodeId,
-        type: "branch",
-        data: { delay: edgeDelay, active: true, flowDelayMs: edgeDelay + EDGE_DRAW_MS },
-      });
-    });
-  });
-
-  return { nodes, edges };
-}
+const SESSION_STORAGE_KEY = "lpe.sessionId";
 
 function GraphQuestionCard({ heading, question, busy, busyLabel, onChoose }) {
   return (
@@ -399,6 +271,9 @@ function GraphQuestionCard({ heading, question, busy, busyLabel, onChoose }) {
 
 function App() {
   const [stage, setStage] = useState("entry");
+  const [restoring, setRestoring] = useState(() =>
+    Boolean(localStorage.getItem(SESSION_STORAGE_KEY))
+  );
 
   const [entryChoice, setEntryChoice] = useState("");
   const [dreamAnswer, setDreamAnswer] = useState("");
@@ -420,6 +295,7 @@ function App() {
 
   const [directionQuestions, setDirectionQuestions] = useState([]);
   const [directionAnswers, setDirectionAnswers] = useState({});
+  const [directionTieCandidates, setDirectionTieCandidates] = useState([]);
   const [proposedDirection, setProposedDirection] = useState(null);
   const [direction, setDirection] = useState(null);
   const [narrowingQuestions, setNarrowingQuestions] = useState([]);
@@ -430,6 +306,10 @@ function App() {
 
   const [rejectedDirections, setRejectedDirections] = useState([]);
   const [directionCatalog, setDirectionCatalog] = useState([]);
+  // Served by the backend (single source): refine reason options and the
+  // values dimension metadata used by the profile charts.
+  const [refineReasons, setRefineReasons] = useState([]);
+  const [valuesDimensionsMeta, setValuesDimensionsMeta] = useState([]);
   const [refineMode, setRefineMode] = useState(false);
   const [refineReason, setRefineReason] = useState("");
   const [refineText, setRefineText] = useState("");
@@ -440,6 +320,7 @@ function App() {
 
   const [profile, setProfile] = useState(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(true);
 
   const [busy, setBusy] = useState({
     start: false,
@@ -457,19 +338,27 @@ function App() {
   });
 
   const [error, setError] = useState("");
+  // Re-runs the last failed AI-backed action; rendered next to the error text.
+  const [retryAction, setRetryAction] = useState(null);
 
   const applySessionSnapshot = (data) => {
     setSessionId(data.sessionId);
     setStep(data.step);
     setProgress(data.progress || null);
-    setDemographicQuestions(data.demographicQuestions || []);
+    // Static question banks only travel on start/resume/depth-choice
+    // snapshots; answer responses omit them, so merge instead of replacing.
+    if (data.demographicQuestions) setDemographicQuestions(data.demographicQuestions);
+    if (data.bigFiveItems) setBigFiveItems(data.bigFiveItems);
+    if (data.valuesQuestions) setValuesQuestions(data.valuesQuestions);
+    if (data.directionCatalog) setDirectionCatalog(data.directionCatalog);
+    if (data.refineReasons) setRefineReasons(data.refineReasons);
+    if (data.valuesDimensions) setValuesDimensionsMeta(data.valuesDimensions);
     setDemoAnswers(data.demographics || {});
-    setBigFiveItems(data.bigFiveItems || []);
     setBigFiveAnswers(data.bigFiveAnswers || {});
-    setValuesQuestions(data.valuesQuestions || []);
     setValuesAnswers(data.valuesAnswers || {});
     setDirectionQuestions(data.directionQuestions || []);
     setDirectionAnswers(data.directionAnswers || {});
+    setDirectionTieCandidates(data.directionTieCandidates || []);
     setProposedDirection(data.proposedDirection || null);
     setDirection(data.direction || null);
     setNarrowingQuestions(data.narrowingQuestions || []);
@@ -478,13 +367,49 @@ function App() {
     setSelectedProfession(data.selectedProfession || null);
     setRoadmaps(data.roadmaps || {});
     setRejectedDirections(data.rejectedDirections || []);
-    setDirectionCatalog(data.directionCatalog || []);
     setProfile({
       bigFiveScores: data.bigFiveScores || null,
       derivedTraits: data.derivedTraits || null,
       valuesScores: data.valuesScores || null,
+      bigFiveDepth: data.bigFiveDepth || null,
     });
+    if (data.aiEnabled !== undefined) setAiEnabled(Boolean(data.aiEnabled));
   };
+
+  // Resume a stored session after reload; a dead/unknown id falls back to entry.
+  useEffect(() => {
+    const storedId = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!storedId) return undefined;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchSession(storedId);
+        if (cancelled) return;
+        applySessionSnapshot(data);
+        setEntryChoice(data.entryChoice || "");
+        setDreamAnswer(data.dreamAnswer || "");
+        setDemoIndex(firstUnansweredIndex(data.demographicQuestions || [], data.demographics));
+        setBigFiveIndex(firstUnansweredIndex(data.bigFiveItems || [], data.bigFiveAnswers));
+        setValuesIndex(firstUnansweredIndex(data.valuesQuestions || [], data.valuesAnswers));
+        setNarrowIntent(Object.keys(data.narrowingAnswers || {}).length > 0);
+        const inTree =
+          data.step === "complete" &&
+          ((data.directionQuestions || []).length > 0 || data.direction);
+        setStage(inTree ? "tree" : "survey");
+      } catch {
+        if (!cancelled) localStorage.removeItem(SESSION_STORAGE_KEY);
+      } finally {
+        if (!cancelled) setRestoring(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // Mount-only restore.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleStartSession = async () => {
     if (!entryChoice || !dreamAnswer.trim()) {
@@ -498,6 +423,7 @@ function App() {
         dreamAnswer: dreamAnswer.trim(),
       });
       applySessionSnapshot(data);
+      localStorage.setItem(SESSION_STORAGE_KEY, data.sessionId);
       setStage("survey");
       setDemoIndex(0);
       setDemoDraft("");
@@ -528,9 +454,8 @@ function App() {
         value,
       });
       applySessionSnapshot(data);
-      const questions = data.demographicQuestions || [];
-      if (demoIndex < questions.length - 1) {
-        const nextQ = questions[demoIndex + 1];
+      if (demoIndex < demographicQuestions.length - 1) {
+        const nextQ = demographicQuestions[demoIndex + 1];
         setDemoDraft(draftFromAnswer(data.demographics?.[nextQ.id]));
         setDemoIndex((i) => i + 1);
       }
@@ -555,10 +480,12 @@ function App() {
     try {
       const data = await chooseBigFiveDepth({ sessionId, depth });
       applySessionSnapshot(data);
+      setRetryAction(null);
       setBigFiveIndex(0);
       setValuesIndex(0);
     } catch (e) {
       setError(e.message || "Could not start Big Five.");
+      setRetryAction(() => () => handleChooseDepth(depth));
     } finally {
       setBusy((p) => ({ ...p, depth: "" }));
     }
@@ -573,7 +500,7 @@ function App() {
     try {
       const data = await submitBigFiveAnswer({ sessionId, itemId: item.id, value });
       applySessionSnapshot(data);
-      if (bigFiveIndex < (data.bigFiveItems?.length ?? 0) - 1) {
+      if (bigFiveIndex < bigFiveItems.length - 1) {
         setBigFiveIndex((i) => i + 1);
       }
     } catch (e) {
@@ -600,7 +527,7 @@ function App() {
         choice,
       });
       applySessionSnapshot(data);
-      if (valuesIndex < (data.valuesQuestions?.length ?? 0) - 1) {
+      if (valuesIndex < valuesQuestions.length - 1) {
         setValuesIndex((i) => i + 1);
       }
     } catch (e) {
@@ -621,9 +548,11 @@ function App() {
     try {
       const data = await fetchDirectionQuestions({ sessionId });
       applySessionSnapshot(data);
+      setRetryAction(null);
       setStage("tree");
     } catch (e) {
       setError(e.message || "Could not start the Life Path Engine.");
+      setRetryAction(() => handleEnterLifePath);
     } finally {
       setBusy((p) => ({ ...p, enterTree: false }));
     }
@@ -688,11 +617,13 @@ function App() {
         feedbackText: refineText.trim(),
       });
       applySessionSnapshot(data);
+      setRetryAction(null);
       setRefineMode(false);
       setRefineReason("");
       setRefineText("");
     } catch (e) {
       setError(e.message || "Could not refine direction.");
+      setRetryAction(() => handleRefineDirection);
     } finally {
       setBusy((p) => ({ ...p, refine: false }));
     }
@@ -755,9 +686,11 @@ function App() {
     try {
       const data = await generateRoadmap({ sessionId });
       applySessionSnapshot(data);
+      setRetryAction(null);
       setConfirmContext(null);
     } catch (e) {
       setError(e.message || "Could not generate roadmap.");
+      setRetryAction(() => handleConfirmRoadmap);
     } finally {
       setBusy((p) => ({ ...p, roadmap: false }));
     }
@@ -768,6 +701,8 @@ function App() {
   };
 
   const resetAll = () => {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+    setRestoring(false);
     setStage("entry");
     setEntryChoice("");
     setDreamAnswer("");
@@ -786,6 +721,7 @@ function App() {
     setValuesIndex(0);
     setDirectionQuestions([]);
     setDirectionAnswers({});
+    setDirectionTieCandidates([]);
     setProposedDirection(null);
     setDirection(null);
     setNarrowingQuestions([]);
@@ -795,6 +731,8 @@ function App() {
     setRoadmaps({});
     setRejectedDirections([]);
     setDirectionCatalog([]);
+    setRefineReasons([]);
+    setValuesDimensionsMeta([]);
     setRefineMode(false);
     setRefineReason("");
     setRefineText("");
@@ -804,6 +742,7 @@ function App() {
     setProfile(null);
     setProfileOpen(false);
     setError("");
+    setRetryAction(null);
     setBusy({
       start: false,
       demo: false,
@@ -857,9 +796,22 @@ function App() {
     focusNodeIds = ["me", "direction"];
   }
 
+  const dockCardKind = selectDockCard({
+    stage,
+    direction,
+    currentDirectionQuestion,
+    directionTieCandidates,
+    proposedDirection,
+    refineMode,
+    rejectedDirections,
+    professionOptions,
+    narrowIntent,
+    currentNarrowingQuestion,
+  });
+
   let dockCard = null;
-  if (stage === "tree") {
-    if (!direction && currentDirectionQuestion) {
+  {
+    if (dockCardKind === "direction-question") {
       dockCard = {
         key: `dir-${currentDirectionQuestion.id}`,
         content: (
@@ -872,7 +824,33 @@ function App() {
           />
         ),
       };
-    } else if (!direction && refineMode && rejectedDirections.length < 2) {
+    } else if (dockCardKind === "direction-tie") {
+      dockCard = {
+        key: "direction-tie",
+        content: (
+          <div className="question-card dock-card">
+            <p className="question-category">It's a close call</p>
+            <h3>Which of these pulls you most?</h3>
+            <p className="dock-subtext">
+              Your answers point equally to these directions — you decide.
+            </p>
+            <div className="option-list">
+              {directionTieCandidates.map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  className="option-button"
+                  onClick={() => handleChooseDirection(d.id)}
+                  disabled={busy.refine}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ),
+      };
+    } else if (dockCardKind === "refine") {
       dockCard = {
         key: "refine",
         content: (
@@ -882,7 +860,7 @@ function App() {
               What feels off about {proposedDirection ? proposedDirection.label : "this direction"}?
             </h3>
             <div className="option-list">
-              {REFINE_REASONS.map((r) => (
+              {refineReasons.map((r) => (
                 <button
                   key={r.value}
                   type="button"
@@ -894,13 +872,20 @@ function App() {
                 </button>
               ))}
             </div>
-            <textarea
-              className="dock-textarea"
-              value={refineText}
-              placeholder="Tell me what you actually want — interests, environment, anything…"
-              onChange={(e) => setRefineText(e.target.value)}
-              disabled={busy.refine}
-            />
+            {aiEnabled ? (
+              <textarea
+                className="dock-textarea"
+                value={refineText}
+                placeholder="Tell me what you actually want — interests, environment, anything…"
+                onChange={(e) => setRefineText(e.target.value)}
+                disabled={busy.refine}
+              />
+            ) : (
+              <p className="dock-subtext">
+                Demo mode: the next suggestion comes from your quiz answers, so
+                written feedback isn't read here.
+              </p>
+            )}
             <div className="question-actions single">
               <button
                 type="button"
@@ -914,7 +899,7 @@ function App() {
           </div>
         ),
       };
-    } else if (!direction && refineMode && rejectedDirections.length >= 2) {
+    } else if (dockCardKind === "direction-pick") {
       dockCard = {
         key: "direction-pick",
         content: (
@@ -940,7 +925,7 @@ function App() {
           </div>
         ),
       };
-    } else if (!direction && proposedDirection) {
+    } else if (dockCardKind === "proposal") {
       dockCard = {
         key: "proposal",
         content: (
@@ -972,7 +957,7 @@ function App() {
           </div>
         ),
       };
-    } else if (direction && professionOptions.length === 0 && !narrowIntent) {
+    } else if (dockCardKind === "narrow-prompt") {
       dockCard = {
         key: "narrow-prompt",
         content: (
@@ -994,7 +979,7 @@ function App() {
           </div>
         ),
       };
-    } else if (direction && professionOptions.length === 0 && narrowIntent && currentNarrowingQuestion) {
+    } else if (dockCardKind === "narrowing") {
       dockCard = {
         key: `nar-${currentNarrowingQuestion.id}`,
         content: (
@@ -1008,6 +993,14 @@ function App() {
         ),
       };
     }
+  }
+
+  if (restoring) {
+    return (
+      <main className="app-shell">
+        <p className="restore-hint">Resuming your session…</p>
+      </main>
+    );
   }
 
   return (
@@ -1036,6 +1029,7 @@ function App() {
           <textarea
             className="dream-input"
             value={dreamAnswer}
+            maxLength={500}
             onChange={(event) => setDreamAnswer(event.target.value)}
             placeholder="Write your honest answer"
           />
@@ -1049,6 +1043,11 @@ function App() {
             {busy.start ? "Entering..." : "Help to explore my career"}
           </button>
 
+          <p className="entry-disclaimer">
+            An exploratory self-reflection tool — not professional career
+            counseling or a psychological assessment.
+          </p>
+
           {error && <p className="error-text">{error}</p>}
         </section>
       )}
@@ -1059,6 +1058,28 @@ function App() {
             <h2>{stepHeading(step)}</h2>
             <p>{stepProgressText(step, progress)}</p>
           </header>
+
+          {step !== "complete" && (() => {
+            const overall = overallProgress(progress);
+            return overall ? (
+              <div
+                className="overall-progress"
+                role="progressbar"
+                aria-valuenow={overall.answered}
+                aria-valuemin={0}
+                aria-valuemax={overall.total}
+                aria-label={`Overall: ${overall.answered} of ${overall.total} questions`}
+              >
+                <div className="overall-progress-fill" style={{ width: `${overall.percent}%` }} />
+              </div>
+            ) : null;
+          })()}
+
+          {!aiEnabled && (
+            <p className="demo-notice">
+              Demo mode — suggestions come from fixed rules, not AI.
+            </p>
+          )}
 
           {step === "demographics" && currentDemographicQuestion && (
             <DemographicQuestionCard
@@ -1125,7 +1146,16 @@ function App() {
             </button>
           </div>
 
-          {error && <p className="error-text">{error}</p>}
+          {error && (
+            <div className="error-row">
+              <p className="error-text">{error}</p>
+              {retryAction && (
+                <button type="button" className="ghost-action" onClick={() => retryAction()}>
+                  Try again
+                </button>
+              )}
+            </div>
+          )}
         </section>
       )}
 
@@ -1137,6 +1167,7 @@ function App() {
             </button>
             <span className="graph-logo">Life Path Explorer</span>
             <span className="graph-header-side">
+              {!aiEnabled && <span className="demo-notice demo-notice-inline">Demo mode</span>}
               <button
                 type="button"
                 className={`graph-profile-toggle ${profileOpen ? "active" : ""}`}
@@ -1156,7 +1187,11 @@ function App() {
               focusNodeIds={focusNodeIds}
             />
             {profileOpen && (
-              <ProfilePanel profile={profile} onClose={() => setProfileOpen(false)} />
+              <ProfilePanel
+                profile={profile}
+                dimensions={valuesDimensionsMeta}
+                onClose={() => setProfileOpen(false)}
+              />
             )}
           </div>
 
@@ -1220,7 +1255,16 @@ function App() {
             )}
           </AnimatePresence>
 
-          {error && <p className="error-text graph-error">{error}</p>}
+          {error && (
+            <div className="error-row graph-error">
+              <p className="error-text">{error}</p>
+              {retryAction && (
+                <button type="button" className="ghost-action" onClick={() => retryAction()}>
+                  Try again
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </main>

@@ -1,13 +1,10 @@
 const cors = require("cors");
 const dotenv = require("dotenv");
 const express = require("express");
+const rateLimit = require("express-rate-limit");
 const { createAiEngine } = require("./aiEngine");
+const { DEMOGRAPHIC_QUESTIONS } = require("./questionPool");
 const {
-  VALUES_DIMENSIONS,
-  DEMOGRAPHIC_QUESTIONS,
-} = require("./questionPool");
-const {
-  pickNextQuestion,
   validateDemographicAnswer,
   validateBigFiveAnswer,
   validateValuesAnswer,
@@ -20,10 +17,19 @@ const {
 const { computeDirection, getDirection, REFINE_REASON_VALUES } = require("./directions");
 const { SessionStore } = require("./sessionStore");
 
-dotenv.config();
+// Tests set their own env (and force fallback by blanking the key) — skip
+// .env entirely so it can't refill a real key underneath them.
+if (process.env.NODE_ENV !== "test") {
+  // An empty OPENAI_API_KEY inherited from the launching shell would otherwise
+  // shadow the real value in .env — dotenv never overrides an already-set var.
+  // An empty key is never useful, so drop it and let .env win.
+  if (!process.env.OPENAI_API_KEY) delete process.env.OPENAI_API_KEY;
+  dotenv.config();
+}
 
 const app = express();
 const store = new SessionStore();
+store.startSweep();
 
 const PORT = Number(process.env.PORT) || 3001;
 const MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
@@ -33,20 +39,60 @@ const aiEngine = createAiEngine({
   model: MODEL,
 });
 
-app.use(cors());
+const CORS_ORIGINS = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
+  : ["http://localhost:5173", "http://127.0.0.1:5173"];
+
+// Requests proxied by the Vite dev server are same-origin and bypass CORS,
+// so this only constrains direct cross-origin browser calls.
+app.use(cors({ origin: CORS_ORIGINS }));
 app.use(express.json({ limit: "1mb" }));
+
+const RATE_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000;
+
+const globalLimiter = rateLimit({
+  windowMs: RATE_WINDOW_MS,
+  max: Number(process.env.RATE_LIMIT_GLOBAL_MAX) || 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use("/api", globalLimiter);
+
+// Tighter budget for routes that can trigger OpenAI spend. One honest
+// session needs ~10 of these; the cap mainly stops scripted wallet drain.
+const aiLimiter = rateLimit({
+  windowMs: RATE_WINDOW_MS,
+  max: Number(process.env.RATE_LIMIT_AI_MAX) || 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many AI requests from this address. Try again later." },
+});
+for (const path of [
+  "/api/session/big-five-depth",
+  "/api/direction/question",
+  "/api/direction/confirm",
+  "/api/direction/refine",
+  "/api/professions/narrow",
+  "/api/roadmap/generate",
+]) {
+  app.use(path, aiLimiter);
+}
 
 function isValidEntryChoice(value) {
   return value === "change" || value === "find";
 }
 
-function sendSessionSnapshot(res, session, extras = {}) {
+const AI_ENABLED = Boolean(process.env.OPENAI_API_KEY);
+
+function sendSessionSnapshot(res, session, { includeStatic = false } = {}) {
   const progress = buildProgress(session);
   const summary = summarizeAnswersForClient(session);
 
   return res.json({
-    ...store.serializeSessionState(session, progress, summary),
-    ...extras,
+    ...store.serializeSessionState(session, progress, summary, { includeStatic }),
+    // Lets the UI say honestly when suggestions come from fixed fallback
+    // rules rather than AI (no key configured).
+    aiEnabled: AI_ENABLED,
   });
 }
 
@@ -65,7 +111,9 @@ app.post("/api/session/start", (req, res) => {
     return res.status(400).json({ error: "entryChoice must be 'change' or 'find'." });
   }
 
-  const normalizedDream = typeof dreamAnswer === "string" ? dreamAnswer.trim() : "";
+  // Capped like feedbackText: the dream is quoted inside every AI prompt.
+  const normalizedDream =
+    typeof dreamAnswer === "string" ? dreamAnswer.trim().slice(0, 500) : "";
 
   if (!normalizedDream) {
     return res.status(400).json({ error: "dreamAnswer is required." });
@@ -76,19 +124,13 @@ app.post("/api/session/start", (req, res) => {
     dreamAnswer: normalizedDream,
   });
 
-  return sendSessionSnapshot(res, session, {
-    nextQuestion: pickNextQuestion(session),
-    valuesDimensions: VALUES_DIMENSIONS,
-  });
+  return sendSessionSnapshot(res, session, { includeStatic: true });
 });
 
 app.get("/api/session/:sessionId", (req, res) => {
   try {
     const session = store.require(req.params.sessionId);
-    return sendSessionSnapshot(res, session, {
-      nextQuestion: pickNextQuestion(session),
-      valuesDimensions: VALUES_DIMENSIONS,
-    });
+    return sendSessionSnapshot(res, session, { includeStatic: true });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ error: error.message });
   }
@@ -113,9 +155,7 @@ app.post("/api/session/demographics", (req, res) => {
       store.advanceStep(session, "depth_choice");
     }
 
-    return sendSessionSnapshot(res, session, {
-      nextQuestion: pickNextQuestion(session),
-    });
+    return sendSessionSnapshot(res, session);
   } catch (error) {
     return res.status(error.statusCode || 500).json({ error: error.message });
   }
@@ -139,9 +179,8 @@ app.post("/api/session/big-five-depth", async (req, res) => {
     store.setBigFiveDepthAndItems(session, depth, items);
     store.advanceStep(session, "big_five");
 
-    return sendSessionSnapshot(res, session, {
-      nextQuestion: pickNextQuestion(session),
-    });
+    // bigFiveItems just changed — this is one of the static-list snapshots.
+    return sendSessionSnapshot(res, session, { includeStatic: true });
   } catch (error) {
     console.error("[session/big-five-depth]", error);
     return res
@@ -172,9 +211,7 @@ app.post("/api/big-five/answer", (req, res) => {
       store.advanceStep(session, "values");
     }
 
-    return sendSessionSnapshot(res, session, {
-      nextQuestion: pickNextQuestion(session),
-    });
+    return sendSessionSnapshot(res, session);
   } catch (error) {
     return res.status(error.statusCode || 500).json({ error: error.message });
   }
@@ -192,16 +229,13 @@ app.post("/api/values/answer", (req, res) => {
     const normalized = validateValuesAnswer(questionId, choice);
     store.recordValuesAnswer(session, questionId, normalized);
 
-    const { scores, answered } = computeValuesScores(session);
+    const { scores } = computeValuesScores(session);
     if (scores) {
       store.setValuesScores(session, scores);
       store.advanceStep(session, "complete");
     }
 
-    return sendSessionSnapshot(res, session, {
-      nextQuestion: pickNextQuestion(session),
-      valuesAnswered: answered,
-    });
+    return sendSessionSnapshot(res, session);
   } catch (error) {
     return res.status(error.statusCode || 500).json({ error: error.message });
   }
@@ -255,10 +289,17 @@ app.post("/api/direction/answer", (req, res) => {
       (q) => session.directionAnswers[q.id] !== undefined
     );
     if (allAnswered) {
-      store.setProposedDirection(session, {
-        ...computeDirection(session.directionQuestions, session.directionAnswers),
-        reason: "Your answers across the quiz point most strongly to this direction.",
-      });
+      const result = computeDirection(session.directionQuestions, session.directionAnswers);
+      if (result.tie) {
+        // Don't break the tie for the user — expose the candidates and let
+        // the frontend ask; /api/direction/choose resolves it.
+        store.setDirectionTie(session, result.candidates);
+      } else {
+        store.setProposedDirection(session, {
+          ...result,
+          reason: "Your answers across the quiz point most strongly to this direction.",
+        });
+      }
     }
 
     return sendSessionSnapshot(res, session);

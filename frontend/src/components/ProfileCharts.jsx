@@ -28,18 +28,6 @@ const BIG_FIVE_AXES = [
   { key: "N", label: "Neuroticism" },
 ];
 
-// Must match VALUES_DIMENSIONS ids/labels in backend/questionPool.js.
-const VALUES_DIMENSIONS = [
-  { id: "economic_return", label: "Economic Return", emoji: "💰" },
-  { id: "lifestyle", label: "Lifestyle", emoji: "🧘" },
-  { id: "achievement", label: "Achievement", emoji: "🚀" },
-  { id: "intellectual_stimulation", label: "Intellectual Stimulation", emoji: "🧠" },
-  { id: "meaning_impact", label: "Meaning / Impact", emoji: "❤️" },
-  { id: "independence", label: "Independence", emoji: "🧭" },
-  { id: "structure", label: "Structure", emoji: "🏢" },
-  { id: "social_environment", label: "Social Environment", emoji: "👥" },
-];
-
 function RadarTick({ payload, x, y, textAnchor, highlighted }) {
   return (
     <text
@@ -92,10 +80,12 @@ export function PersonalityRadarChart({ scores, highlightKeys = [] }) {
   );
 }
 
-export function ValuesBarChart({ scores }) {
-  if (!scores) return null;
+// `dimensions` metadata (ids, labels, emoji) is served by the backend in the
+// session snapshot — the single source shared with scoring and prompts.
+export function ValuesBarChart({ scores, dimensions = [] }) {
+  if (!scores || !dimensions.length) return null;
 
-  const data = VALUES_DIMENSIONS.map((dim) => ({
+  const data = dimensions.map((dim) => ({
     id: dim.id,
     name: `${dim.emoji} ${dim.label}`,
     value: scores[dim.id] ?? 0,
@@ -103,7 +93,7 @@ export function ValuesBarChart({ scores }) {
 
   return (
     <div className="profile-chart">
-      <p className="profile-chart-title">Values (A-choices per dimension)</p>
+      <p className="profile-chart-title">Values (alignment per dimension)</p>
       <ResponsiveContainer width="100%" height={248}>
         <BarChart data={data} layout="vertical" margin={{ top: 0, right: 12, bottom: 0, left: 0 }}>
           <XAxis type="number" domain={[0, 5]} tickCount={6} tick={{ fontSize: 10, fill: MUTED }} />
@@ -127,25 +117,34 @@ export function ValuesBarChart({ scores }) {
   );
 }
 
-export default function ProfilePanel({ profile, onClose }) {
-  const { bigFiveScores, derivedTraits, valuesScores } = profile || {};
+export default function ProfilePanel({ profile, dimensions = [], onClose }) {
+  const { bigFiveScores, derivedTraits, valuesScores, bigFiveDepth } = profile || {};
 
   if (!bigFiveScores && !valuesScores) return null;
 
   return (
     <aside className="profile-panel">
       <div className="profile-panel-header">
-        <p className="profile-panel-title">Your profile</p>
+        <p className="profile-panel-title">Preliminary profile</p>
         <button type="button" className="profile-panel-close" onClick={onClose}>
           ×
         </button>
       </div>
       <PersonalityRadarChart scores={bigFiveScores} />
-      <ValuesBarChart scores={valuesScores} />
+      {bigFiveDepth === "short" && (
+        <p className="profile-panel-note">
+          Based on a 20-item short screen — a rough sketch, not a measured verdict.
+        </p>
+      )}
+      <ValuesBarChart scores={valuesScores} dimensions={dimensions} />
       {derivedTraits?.summary && <p className="profile-panel-summary">{derivedTraits.summary}</p>}
       <p className="profile-panel-note">
         Directions and professions are picked from these survey scores — your dream answer only
         colours the story.
+      </p>
+      <p className="profile-panel-note">
+        This is an exploratory self-reflection tool, not professional career counseling or a
+        psychological assessment.
       </p>
     </aside>
   );

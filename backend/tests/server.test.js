@@ -1,6 +1,11 @@
-// Force fallback mode BEFORE requiring server: dotenv.config() never
-// overrides an env var that is already set, so this blanks any real key.
+// Force fallback mode BEFORE requiring server: NODE_ENV=test makes server.js
+// skip dotenv, so the blanked key here is never refilled from .env.
+process.env.NODE_ENV = "test";
 process.env.OPENAI_API_KEY = "";
+// This suite fires hundreds of requests from one IP; rate-limit behavior
+// has its own suite (rateLimit.test.js runs in a separate process).
+process.env.RATE_LIMIT_GLOBAL_MAX = "1000000";
+process.env.RATE_LIMIT_AI_MAX = "1000000";
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -27,31 +32,52 @@ async function post(path, body) {
 }
 
 // Fast-forwards Page 1 + Page 2 (fallback Big Five items are deterministic).
+// Static question banks arrive on start and depth-choice snapshots only —
+// answer responses are trimmed, so iterate over the captured lists.
 async function completeAssessment() {
   let { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "build useful things" });
   const sessionId = data.sessionId;
+  const { demographicQuestions, valuesQuestions } = data;
 
   const demoValues = { sex: "female", age: 30, country: "Testland" };
-  while (data.step === "demographics") {
-    const q = data.nextQuestion.question;
+  for (const q of demographicQuestions) {
     ({ data } = await post("/api/session/demographics", { sessionId, questionId: q.id, value: demoValues[q.id] }));
   }
+  assert.equal(data.step, "depth_choice");
 
   ({ data } = await post("/api/session/big-five-depth", { sessionId, depth: "short" }));
+  const bigFiveItems = data.bigFiveItems;
 
-  while (data.step === "big_five") {
-    const q = data.nextQuestion.question;
-    ({ data } = await post("/api/big-five/answer", { sessionId, itemId: q.id, value: 3 }));
+  for (const item of bigFiveItems) {
+    ({ data } = await post("/api/big-five/answer", { sessionId, itemId: item.id, value: 3 }));
   }
+  assert.equal(data.step, "values");
 
-  while (data.step === "values") {
-    const q = data.nextQuestion.question;
+  for (const q of valuesQuestions) {
     ({ data } = await post("/api/values/answer", { sessionId, questionId: q.id, choice: "A" }));
   }
 
   assert.equal(data.step, "complete");
   return { sessionId, data };
 }
+
+test("answer snapshots omit static question banks; start/GET include them", async () => {
+  let { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "trim me" });
+  const sessionId = data.sessionId;
+  assert.ok(data.demographicQuestions, "start carries question banks");
+  assert.ok(data.valuesQuestions);
+  assert.ok(data.directionCatalog);
+
+  ({ data } = await post("/api/session/demographics", { sessionId, questionId: "sex", value: "male" }));
+  assert.equal(data.demographicQuestions, undefined, "answer response is trimmed");
+  assert.equal(data.valuesQuestions, undefined);
+  assert.equal(data.directionCatalog, undefined);
+  assert.ok(data.demographics, "dynamic state still present");
+
+  const res = await fetch(`${base}/api/session/${sessionId}`);
+  const snapshot = await res.json();
+  assert.ok(snapshot.demographicQuestions, "GET (resume) carries question banks");
+});
 
 test("full Page 3 flow: direction -> narrowing -> professions -> select -> roadmap", async () => {
   const { sessionId } = await completeAssessment();
@@ -71,10 +97,23 @@ test("full Page 3 flow: direction -> narrowing -> professions -> select -> roadm
     ({ status, data } = await post("/api/direction/answer", { sessionId, questionId: q.id, value: q.options[0].value }));
     assert.equal(status, 200);
   }
-  assert.ok(data.proposedDirection, "proposedDirection set after final answer");
-  // fallback q1/q2/q3 first options vote tech/finance/healthcare -> tie broken
-  // by (alphabetical) catalog order = finance
+  // fallback q1/q2/q3 first options vote tech/finance/healthcare: a 1-1-1
+  // tie is surfaced to the user instead of silently resolved by alphabet
+  assert.equal(data.proposedDirection, null);
+  assert.deepEqual(
+    data.directionTieCandidates.map((c) => c.id),
+    ["finance", "healthcare", "tech"]
+  );
+
+  // confirming during an unresolved tie is rejected
+  let tieConfirm = await post("/api/direction/confirm", { sessionId });
+  assert.equal(tieConfirm.status, 400);
+
+  // the user resolves the tie -> proposal, tie cleared
+  ({ status, data } = await post("/api/direction/choose", { sessionId, directionId: "finance" }));
+  assert.equal(status, 200);
   assert.equal(data.proposedDirection.id, "finance");
+  assert.deepEqual(data.directionTieCandidates, []);
 
   // Stage A confirm -> narrowing questions generated
   ({ status, data } = await post("/api/direction/confirm", { sessionId }));
@@ -148,6 +187,7 @@ test("select rejects a professionId that is not one of the options", async () =>
   for (const q of data.directionQuestions) {
     ({ data } = await post("/api/direction/answer", { sessionId, questionId: q.id, value: q.options[0].value }));
   }
+  ({ data } = await post("/api/direction/choose", { sessionId, directionId: data.directionTieCandidates[0].id }));
   ({ data } = await post("/api/direction/confirm", { sessionId }));
   for (const q of data.narrowingQuestions) {
     ({ data } = await post("/api/professions/narrow", { sessionId, questionId: q.id, value: q.options[0].value }));
@@ -169,7 +209,9 @@ test("direction refinement: reject twice, then manual choose", async () => {
   for (const q of data.directionQuestions) {
     ({ data } = await post("/api/direction/answer", { sessionId, questionId: q.id, value: q.options[0].value }));
   }
-  assert.ok(data.proposedDirection.reason, "tally proposal carries a reason");
+  // resolve the 1-1-1 tie, then exercise the refine cycle from a proposal
+  ({ data } = await post("/api/direction/choose", { sessionId, directionId: data.directionTieCandidates[0].id }));
+  assert.ok(data.proposedDirection.reason, "proposal carries a reason");
   const first = data.proposedDirection.id;
 
   // guards
@@ -193,7 +235,10 @@ test("direction refinement: reject twice, then manual choose", async () => {
   // choose: rejected id -> 400; valid -> proposal "Chosen by you."
   res = await post("/api/direction/choose", { sessionId, directionId: first });
   assert.equal(res.status, 400);
-  const pick = data.directionCatalog.find(
+  // the catalog is a static-snapshot field; refine responses no longer carry it
+  const catalogRes = await fetch(`${base}/api/session/${sessionId}`);
+  const { directionCatalog } = await catalogRes.json();
+  const pick = directionCatalog.find(
     (d) => ![first, second].includes(d.id)
   );
   ({ data } = await post("/api/direction/choose", { sessionId, directionId: pick.id }));
@@ -216,9 +261,44 @@ test("refine guards: no proposal and confirmed direction", async () => {
   for (const q of data.directionQuestions) {
     ({ data } = await post("/api/direction/answer", { sessionId, questionId: q.id, value: q.options[0].value }));
   }
+  ({ data } = await post("/api/direction/choose", { sessionId, directionId: data.directionTieCandidates[0].id }));
   await post("/api/direction/confirm", { sessionId });
   res = await post("/api/direction/refine", { sessionId, reasonChoice: "interests", feedbackText: "" });
   assert.equal(res.status, 400);
   res = await post("/api/direction/choose", { sessionId, directionId: "media" });
   assert.equal(res.status, 400);
+});
+
+test("GET /api/session/:id returns enough state to resume after a reload", async () => {
+  // Start and answer one demographic, then "reload".
+  let { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "resume me" });
+  const sessionId = data.sessionId;
+  ({ data } = await post("/api/session/demographics", { sessionId, questionId: "sex", value: "female" }));
+
+  const res = await fetch(`${base}/api/session/${sessionId}`);
+  assert.equal(res.status, 200);
+  const snapshot = await res.json();
+
+  assert.equal(snapshot.sessionId, sessionId);
+  assert.equal(snapshot.step, "demographics");
+  assert.equal(snapshot.entryChoice, "find");
+  assert.equal(snapshot.dreamAnswer, "resume me");
+  assert.ok(snapshot.demographicQuestions.length >= 3, "question list present");
+  assert.equal(snapshot.demographics.sex, "female", "saved answers present");
+  assert.ok(Array.isArray(snapshot.valuesQuestions) && snapshot.valuesQuestions.length === 40);
+
+  const unknown = await fetch(`${base}/api/session/does-not-exist`);
+  assert.equal(unknown.status, 404);
+});
+
+test("dreamAnswer is capped at 500 chars before storage and prompts", async () => {
+  const long = "x".repeat(10_000);
+  const { status, data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: long });
+  assert.equal(status, 200);
+  assert.equal(data.dreamAnswer.length, 500);
+});
+
+test("snapshots expose aiEnabled so the UI can label demo mode", async () => {
+  const { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "honesty" });
+  assert.equal(data.aiEnabled, false, "keyless test run must report aiEnabled=false");
 });

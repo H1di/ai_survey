@@ -8,49 +8,6 @@ const {
 
 const TRAIT_KEYS = ["O", "C", "E", "A", "N"];
 
-function pickNextQuestion(session) {
-  switch (session.step) {
-    case "demographics":
-      return pickNextDemographic(session);
-    case "big_five":
-      return pickNextBigFive(session);
-    case "values":
-      return pickNextValue(session);
-    default:
-      return null;
-  }
-}
-
-function pickNextDemographic(session) {
-  for (const q of DEMOGRAPHIC_QUESTIONS) {
-    if (!session.demographics || session.demographics[q.id] === undefined) {
-      return { stage: "demographics", question: serializeDemographic(q) };
-    }
-  }
-  return null;
-}
-
-function pickNextBigFive(session) {
-  if (!session.bigFiveItems || !session.bigFiveItems.length) {
-    return null;
-  }
-  for (const item of session.bigFiveItems) {
-    if (session.bigFiveAnswers[item.id] === undefined) {
-      return { stage: "big_five", question: { ...item } };
-    }
-  }
-  return null;
-}
-
-function pickNextValue(session) {
-  for (const q of VALUES_QUESTIONS) {
-    if (session.valuesAnswers[q.id] === undefined) {
-      return { stage: "values", question: serializeValueQuestion(q) };
-    }
-  }
-  return null;
-}
-
 function serializeDemographic(q) {
   return {
     id: q.id,
@@ -164,23 +121,26 @@ function deriveBigFiveTraits(scores) {
   };
 }
 
+// behaviourTendencies/decisionPriorities are the Big Two meta-traits
+// (DeYoung): Stability = mean(A, C, 100-N), Plasticity = mean(O, E). The
+// field names stay for API compatibility; the copy uses the real names.
 function describeTraits({ behaviourTendencies, decisionPriorities, scores }) {
   const high = (v) => v >= 65;
   const low = (v) => v <= 35;
   const parts = [];
   parts.push(
     high(behaviourTendencies)
-      ? "Behaviour tendencies: steady, organized, low-volatility under stress."
+      ? "Stability (composure & self-discipline): steady, organized, low-volatility under stress."
       : low(behaviourTendencies)
-        ? "Behaviour tendencies: volatile, reactive, less structured."
-        : "Behaviour tendencies: balanced steadiness."
+        ? "Stability (composure & self-discipline): volatile, reactive, less structured."
+        : "Stability (composure & self-discipline): balanced steadiness."
   );
   parts.push(
     high(decisionPriorities)
-      ? "Decision priorities: novelty-seeking, exploratory, energized by people and ideas."
+      ? "Plasticity (drive toward the new): novelty-seeking, exploratory, energized by people and ideas."
       : low(decisionPriorities)
-        ? "Decision priorities: conservative, prefers depth and routine over novelty."
-        : "Decision priorities: balanced between exploration and routine."
+        ? "Plasticity (drive toward the new): conservative, prefers depth and routine over novelty."
+        : "Plasticity (drive toward the new): balanced between exploration and routine."
   );
   parts.push(
     `OCEAN: O=${scores.O}, C=${scores.C}, E=${scores.E}, A=${scores.A}, N=${scores.N}`
@@ -195,7 +155,9 @@ function computeValuesScores(session) {
     const choice = session.valuesAnswers[q.id];
     if (choice === undefined) continue;
     answered += 1;
-    if (choice === "A") totals[q.dimension] += 1;
+    // The dimension-aligned pole is displayed as B on flipped questions.
+    const alignedChoice = q.flip ? "B" : "A";
+    if (choice === alignedChoice) totals[q.dimension] += 1;
   }
   if (answered < VALUES_QUESTIONS.length) return { scores: null, answered };
   return { scores: totals, answered };
@@ -237,7 +199,6 @@ function summarizeAnswersForClient(session) {
 }
 
 module.exports = {
-  pickNextQuestion,
   serializeDemographic,
   serializeValueQuestion,
   validateDemographicAnswer,

@@ -1,7 +1,11 @@
 const { randomUUID } = require("node:crypto");
 
-const { DIRECTIONS } = require("./directions");
-const { DEMOGRAPHIC_QUESTIONS, VALUES_QUESTIONS } = require("./questionPool");
+const { DIRECTIONS, REFINE_REASONS } = require("./directions");
+const {
+  DEMOGRAPHIC_QUESTIONS,
+  VALUES_QUESTIONS,
+  VALUES_DIMENSIONS,
+} = require("./questionPool");
 const { serializeDemographic, serializeValueQuestion } = require("./questionEngine");
 
 const DIRECTION_CATALOG = DIRECTIONS.map(({ id, label }) => ({ id, label }));
@@ -9,9 +13,39 @@ const DIRECTION_CATALOG = DIRECTIONS.map(({ id, label }) => ({ id, label }));
 const SERIALIZED_DEMOGRAPHIC_QUESTIONS = DEMOGRAPHIC_QUESTIONS.map(serializeDemographic);
 const SERIALIZED_VALUES_QUESTIONS = VALUES_QUESTIONS.map(serializeValueQuestion);
 
+const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+
 class SessionStore {
-  constructor() {
+  constructor({ ttlMs = DEFAULT_TTL_MS, sweepIntervalMs = DEFAULT_SWEEP_INTERVAL_MS } = {}) {
     this.sessions = new Map();
+    this.ttlMs = ttlMs;
+    this.sweepIntervalMs = sweepIntervalMs;
+    this.sweepTimer = null;
+  }
+
+  evictExpired(now = Date.now()) {
+    let evicted = 0;
+    for (const [id, session] of this.sessions) {
+      if (now - Date.parse(session.updatedAt) > this.ttlMs) {
+        this.sessions.delete(id);
+        evicted += 1;
+      }
+    }
+    return evicted;
+  }
+
+  startSweep() {
+    if (this.sweepTimer) return;
+    this.sweepTimer = setInterval(() => this.evictExpired(), this.sweepIntervalMs);
+    // Never keep the process alive just for the sweep.
+    if (typeof this.sweepTimer.unref === "function") this.sweepTimer.unref();
+  }
+
+  stopSweep() {
+    if (!this.sweepTimer) return;
+    clearInterval(this.sweepTimer);
+    this.sweepTimer = null;
   }
 
   createSession({ entryChoice, dreamAnswer }) {
@@ -35,6 +69,7 @@ class SessionStore {
       pathStage: "direction",
       directionQuestions: [],
       directionAnswers: {},
+      directionTieCandidates: [],
       proposedDirection: null,
       direction: null,
       narrowingQuestions: [],
@@ -115,6 +150,13 @@ class SessionStore {
   setDirectionQuestions(session, questions) {
     session.directionQuestions = questions;
     session.directionAnswers = {};
+    session.directionTieCandidates = [];
+    session.proposedDirection = null;
+    this.touch(session);
+  }
+
+  setDirectionTie(session, candidates) {
+    session.directionTieCandidates = candidates;
     session.proposedDirection = null;
     this.touch(session);
   }
@@ -126,6 +168,7 @@ class SessionStore {
 
   setProposedDirection(session, direction) {
     session.proposedDirection = direction;
+    session.directionTieCandidates = [];
     this.touch(session);
   }
 
@@ -175,20 +218,33 @@ class SessionStore {
     this.touch(session);
   }
 
-  serializeSessionState(session, progress, summary) {
+  // includeStatic=false trims the per-answer payload: question banks and the
+  // direction catalog only travel on session start, GET (resume), and the
+  // depth choice (where bigFiveItems change). The frontend merges, so answer
+  // responses carry only the state that can actually have moved.
+  serializeSessionState(session, progress, summary, { includeStatic = true } = {}) {
+    const staticPart = includeStatic
+      ? {
+          demographicQuestions: SERIALIZED_DEMOGRAPHIC_QUESTIONS,
+          bigFiveItems: session.bigFiveItems.map((i) => ({ id: i.id, text: i.text })),
+          valuesQuestions: SERIALIZED_VALUES_QUESTIONS,
+          directionCatalog: DIRECTION_CATALOG,
+          valuesDimensions: VALUES_DIMENSIONS,
+          refineReasons: REFINE_REASONS,
+        }
+      : {};
+
     return {
       sessionId: session.id,
       entryChoice: session.entryChoice,
       dreamAnswer: session.dreamAnswer,
       step: session.step,
-      demographicQuestions: SERIALIZED_DEMOGRAPHIC_QUESTIONS,
+      ...staticPart,
       demographics: session.demographics,
       bigFiveDepth: session.bigFiveDepth,
-      bigFiveItems: session.bigFiveItems.map((i) => ({ id: i.id, text: i.text })),
       bigFiveAnswers: session.bigFiveAnswers,
       bigFiveScores: session.bigFiveScores,
       derivedTraits: session.derivedTraits,
-      valuesQuestions: SERIALIZED_VALUES_QUESTIONS,
       valuesAnswers: session.valuesAnswers,
       valuesScores: session.valuesScores,
       progress,
@@ -196,6 +252,7 @@ class SessionStore {
       pathStage: session.pathStage,
       directionQuestions: session.directionQuestions,
       directionAnswers: session.directionAnswers,
+      directionTieCandidates: session.directionTieCandidates,
       proposedDirection: session.proposedDirection,
       direction: session.direction,
       narrowingQuestions: session.narrowingQuestions,
@@ -204,7 +261,6 @@ class SessionStore {
       selectedProfession: session.selectedProfession,
       roadmaps: session.roadmaps,
       rejectedDirections: session.rejectedDirections,
-      directionCatalog: DIRECTION_CATALOG,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
     };

@@ -4,8 +4,7 @@ node_modules/
 *.log
 npm-debug.log*
 
-client/build/
-server/dist/
+/*.png
 
 .DS_Store
 .vscode/
@@ -13,3 +12,6 @@ server/dist/
 
 .claude/
 .playwright-mcp/
+graphify-out/
+
+frontend/dist/
