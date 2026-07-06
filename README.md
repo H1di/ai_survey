@@ -75,14 +75,18 @@ npm run dev
 
 ## API Routes
 
-### Session + Questions
+### Session + Survey
 - `POST /api/session/start`
-  - body: `{ "entryChoice": "change|find", "dreamAnswer": "...", "premiumDepth": false }`
-- `GET /api/session/:sessionId`
-- `POST /api/session/premium`
-  - body: `{ "sessionId": "...", "premiumDepth": true|false }`
-- `POST /api/questions/answer`
-  - body: `{ "sessionId": "...", "questionId": "...", "answer": "..." }`
+  - body: `{ "entryChoice": "change|find", "dreamAnswer": "..." }`
+- `GET /api/session/:sessionId` — full session snapshot (used to resume after reload)
+- `POST /api/session/demographics`
+  - body: `{ "sessionId": "...", "questionId": "sex|age|country", "value": ... }`
+- `POST /api/session/big-five-depth`
+  - body: `{ "sessionId": "...", "depth": "short|deep" }` — 20 or 50 items
+- `POST /api/big-five/answer`
+  - body: `{ "sessionId": "...", "itemId": "...", "value": 1-5 }`
+- `POST /api/values/answer`
+  - body: `{ "sessionId": "...", "questionId": "...", "choice": "A|B" }`
 
 ### Life Path Engine
 - `POST /api/direction/question`
