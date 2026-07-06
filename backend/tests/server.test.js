@@ -1,5 +1,6 @@
-// Force fallback mode BEFORE requiring server: dotenv.config() never
-// overrides an env var that is already set, so this blanks any real key.
+// Force fallback mode BEFORE requiring server: NODE_ENV=test makes server.js
+// skip dotenv, so the blanked key here is never refilled from .env.
+process.env.NODE_ENV = "test";
 process.env.OPENAI_API_KEY = "";
 // This suite fires hundreds of requests from one IP; rate-limit behavior
 // has its own suite (rateLimit.test.js runs in a separate process).

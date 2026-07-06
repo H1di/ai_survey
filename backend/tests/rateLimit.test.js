@@ -1,6 +1,7 @@
-// Env must be set BEFORE requiring server (dotenv never overrides set vars,
-// and the limiters read these at module load). node --test runs each file
-// in its own process, so this cannot leak into other suites.
+// Env must be set BEFORE requiring server (the limiters read these at module
+// load). NODE_ENV=test makes server.js skip dotenv so .env can't refill the
+// key. node --test runs each file in its own process, so this cannot leak.
+process.env.NODE_ENV = "test";
 process.env.OPENAI_API_KEY = "";
 process.env.RATE_LIMIT_AI_MAX = "2";
 process.env.RATE_LIMIT_GLOBAL_MAX = "50";

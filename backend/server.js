@@ -17,7 +17,15 @@ const {
 const { computeDirection, getDirection, REFINE_REASON_VALUES } = require("./directions");
 const { SessionStore } = require("./sessionStore");
 
-dotenv.config();
+// Tests set their own env (and force fallback by blanking the key) — skip
+// .env entirely so it can't refill a real key underneath them.
+if (process.env.NODE_ENV !== "test") {
+  // An empty OPENAI_API_KEY inherited from the launching shell would otherwise
+  // shadow the real value in .env — dotenv never overrides an already-set var.
+  // An empty key is never useful, so drop it and let .env win.
+  if (!process.env.OPENAI_API_KEY) delete process.env.OPENAI_API_KEY;
+  dotenv.config();
+}
 
 const app = express();
 const store = new SessionStore();
