@@ -248,6 +248,62 @@ test("keyless engine: riasec items fall back to the static pool, analyzeCV to em
   assert.deepEqual(analysis, { skills: [], domains: [], seniority: "" });
 });
 
+// --- Schwartz values (Phase 2) ---
+
+const { normalizeSchwartzValuesPayload } = require("../aiEngine");
+const { SCHWARTZ_ORDER } = require("../schwartzValues");
+
+const GOOD_SCHWARTZ = {
+  self_direction: 90, stimulation: 75, hedonism: 55, achievement: 60, power: 25,
+  security: 30, conformity: 20, tradition: 15, benevolence: 55, universalism: 70,
+};
+
+test("normalizeSchwartzValuesPayload clamps, requires all keys, rejects flat profiles", () => {
+  const { scores, rationale } = normalizeSchwartzValuesPayload({
+    schwartzValues: { ...GOOD_SCHWARTZ, self_direction: 150.7, tradition: -3 },
+    valuesRationale: { self_direction: "Creates and explores.", bogus_key: "x", universalism: "Cares broadly.", stimulation: "Variety.", power: "extra beyond three" },
+  });
+  assert.equal(scores.self_direction, 100);
+  assert.equal(scores.tradition, 0);
+  assert.equal(rationale.bogus_key, undefined, "invalid keys dropped");
+  assert.ok(Object.keys(rationale).length <= 3, "rationale capped at 3");
+
+  const missing = { ...GOOD_SCHWARTZ };
+  delete missing.universalism;
+  assert.throws(() => normalizeSchwartzValuesPayload({ schwartzValues: missing }), /missing/i);
+
+  const flat = Object.fromEntries(SCHWARTZ_ORDER.map((k) => [k, 50]));
+  assert.throws(() => normalizeSchwartzValuesPayload({ schwartzValues: flat }), /flat/i);
+});
+
+test("keyless inferUserValues: non-flat in-range profile from a varied session", async () => {
+  const scores = await engine.inferUserValues({
+    session: fakeSession({
+      riasecScores: { R: 20, I: 70, A: 85, S: 60, E: 40, C: 25 },
+      jobCharProfile: { compensation: 30, work_mode: 85, job_security: 20, career_growth: 45, complexity: 80, meaning_impact: 90, social: 60 },
+    }),
+  });
+  for (const key of SCHWARTZ_ORDER) {
+    assert.ok(scores[key] >= 0 && scores[key] <= 100, `${key} out of range`);
+  }
+  const nums = SCHWARTZ_ORDER.map((k) => scores[k]);
+  assert.ok(Math.max(...nums) - Math.min(...nums) >= 15, "profile must not be flat");
+});
+
+test("keyless scoreProfessionValues: prototype-based profile + top-value rationale", async () => {
+  const { schwartzValues, valuesRationale } = await engine.scoreProfessionValues({
+    jobTitle: "Data Scientist",
+    orientedField: "Science & Research",
+    thesis: "Investigative modeling work.",
+    directionId: "science",
+    jobCharProfile: { meaning_impact: 90 },
+  });
+  for (const key of SCHWARTZ_ORDER) {
+    assert.ok(schwartzValues[key] >= 0 && schwartzValues[key] <= 100);
+  }
+  assert.equal(Object.keys(valuesRationale).length, 1, "fallback carries one top-value line");
+});
+
 test("keyless engine: inferRiasecProfile derives from Big Five; jobChar questions from the bank", async () => {
   const scores = await engine.inferRiasecProfile({ session: fakeSession() });
   for (const key of ["R", "I", "A", "S", "E", "C"]) {
