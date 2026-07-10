@@ -101,40 +101,10 @@ export function uploadCvFile({ sessionId, file }) {
   return request("/api/cv", { method: "POST", body: form, headers: { "Content-Type": null } });
 }
 
-export function fetchDirectionQuestions(payload) {
-  return request("/api/direction/question", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
 
-export function answerDirectionQuestion(payload) {
-  return request("/api/direction/answer", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
 
-export function confirmDirection(payload) {
-  return request("/api/direction/confirm", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
 
-export function answerNarrowingQuestion(payload) {
-  return request("/api/professions/narrow", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
 
-export function selectProfession(payload) {
-  return request("/api/professions/select", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
 
 export function generateRoadmap(payload) {
   return request("/api/roadmap/generate", {
@@ -143,16 +113,14 @@ export function generateRoadmap(payload) {
   });
 }
 
-export function refineDirection(payload) {
-  return request("/api/direction/refine", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+export function fetchFirstOutput(payload) {
+  return request("/api/output/first", { method: "POST", body: JSON.stringify(payload) });
 }
 
-export function chooseDirection(payload) {
-  return request("/api/direction/choose", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+export function refineOutput(payload) {
+  return request("/api/output/refine", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function acceptOutput(payload) {
+  return request("/api/output/accept", { method: "POST", body: JSON.stringify(payload) });
 }

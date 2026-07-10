@@ -1,20 +1,15 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import GraphView from "./components/GraphView";
-import ConfirmModal from "./components/GraphView/ConfirmModal";
 import { DetailPanel } from "./components/GraphView/NodeComponent";
 import ProfilePanel from "./components/ProfileCharts";
 import {
-  answerDirectionQuestion,
-  answerNarrowingQuestion,
+  acceptOutput,
   chooseBigFiveDepth,
-  chooseDirection,
-  confirmDirection,
-  fetchDirectionQuestions,
+  fetchFirstOutput,
   fetchSession,
   generateRoadmap,
-  refineDirection,
-  selectProfession,
+  refineOutput,
   skipRiasec,
   startRiasec,
   startSession,
@@ -408,34 +403,38 @@ function JobCharQuestionCard({ q, savedValue, busy, onSubmit, onBack, canGoBack,
   );
 }
 
+// Side panel for output details and advice lists — same visual language as
+// the roadmap DetailPanel, but section-driven.
+function InfoPanel({ view, onClose }) {
+  if (!view) return null;
+  return (
+    <div className="detail-panel">
+      <button className="detail-close" onClick={onClose}>×</button>
+      <p className="detail-archetype">{view.archetype}</p>
+      <h2 className="detail-title">{view.title}</h2>
+      {view.description && <p className="detail-desc">{view.description}</p>}
+      {(view.sections || []).map((section, index) => (
+        <div className="detail-section" key={index}>
+          {section.heading && <h4>{section.heading}</h4>}
+          {section.text && <p>{section.text}</p>}
+          {section.items && section.items.length > 0 && (
+            <ul>
+              {section.items.map((item, itemIndex) => (
+                <li key={itemIndex}>{item}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const REDUCED_MOTION =
   typeof window !== "undefined" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const SESSION_STORAGE_KEY = "lpe.sessionId";
-
-function GraphQuestionCard({ heading, question, busy, busyLabel, onChoose }) {
-  return (
-    <div className="question-card dock-card">
-      <p className="question-category">{heading}</p>
-      <h3>{question.text}</h3>
-      <div className="option-list">
-        {question.options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            className="option-button"
-            onClick={() => onChoose(option.value)}
-            disabled={busy}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-      {busy && <p className="dock-busy">{busyLabel || "Working…"}</p>}
-    </div>
-  );
-}
 
 function App() {
   const [stage, setStage] = useState("entry");
@@ -462,7 +461,6 @@ function App() {
   const [riasecAnswers, setRiasecAnswers] = useState({});
   const [riasecIndex, setRiasecIndex] = useState(0);
   const [jobCharParams, setJobCharParams] = useState([]);
-  const [jobCharRanking, setJobCharRanking] = useState(null);
   const [jobCharItems, setJobCharItems] = useState([]);
   const [jobCharAnswers, setJobCharAnswers] = useState({});
   const [jcIndex, setJcIndex] = useState(0);
@@ -474,28 +472,16 @@ function App() {
   const [cvMode, setCvMode] = useState("choice"); // choice | paste | journey
   const [cvDraft, setCvDraft] = useState("");
 
-  const [directionQuestions, setDirectionQuestions] = useState([]);
-  const [directionAnswers, setDirectionAnswers] = useState({});
-  const [directionTieCandidates, setDirectionTieCandidates] = useState([]);
-  const [proposedDirection, setProposedDirection] = useState(null);
-  const [direction, setDirection] = useState(null);
-  const [narrowingQuestions, setNarrowingQuestions] = useState([]);
-  const [narrowingAnswers, setNarrowingAnswers] = useState({});
-  const [professionOptions, setProfessionOptions] = useState([]);
-  const [selectedProfession, setSelectedProfession] = useState(null);
+  const [outputs, setOutputs] = useState([]);
+  const [acceptedOutputId, setAcceptedOutputId] = useState(null);
   const [roadmaps, setRoadmaps] = useState({});
 
-  const [rejectedDirections, setRejectedDirections] = useState([]);
-  const [directionCatalog, setDirectionCatalog] = useState([]);
-  // Served by the backend (single source): refine reason options.
-  const [refineReasons, setRefineReasons] = useState([]);
+  // Refine panel view state: checked params map to their brief reasons.
   const [refineMode, setRefineMode] = useState(false);
-  const [refineReason, setRefineReason] = useState("");
-  const [refineText, setRefineText] = useState("");
+  const [refineChecks, setRefineChecks] = useState({});
 
-  const [narrowIntent, setNarrowIntent] = useState(false);
-  const [confirmContext, setConfirmContext] = useState(null);
   const [stageDetail, setStageDetail] = useState(null);
+  const [infoView, setInfoView] = useState(null);
 
   const [profile, setProfile] = useState(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -514,10 +500,7 @@ function App() {
     cv: false,
     journey: false,
     enterTree: false,
-    direction: false,
-    confirmDirection: false,
-    narrowing: false,
-    select: false,
+    accept: false,
     roadmap: false,
     refine: false,
   });
@@ -537,26 +520,23 @@ function App() {
     if (data.riasecItems) setRiasecItems(data.riasecItems);
     if (data.jobCharParams) setJobCharParams(data.jobCharParams);
     if (data.careerJourneyQuestions) setCareerJourneyQuestions(data.careerJourneyQuestions);
-    if (data.directionCatalog) setDirectionCatalog(data.directionCatalog);
-    if (data.refineReasons) setRefineReasons(data.refineReasons);
     setDemoAnswers(data.demographics || {});
     setBigFiveAnswers(data.bigFiveAnswers || {});
     setRiasecAnswers(data.riasecAnswers || {});
-    setJobCharRanking(data.jobCharRanking || null);
     setJobCharItems(data.jobCharItems || []);
     setJobCharAnswers(data.jobCharAnswers || {});
     setCareerJourneyAnswers(data.careerJourneyAnswers || {});
-    setDirectionQuestions(data.directionQuestions || []);
-    setDirectionAnswers(data.directionAnswers || {});
-    setDirectionTieCandidates(data.directionTieCandidates || []);
-    setProposedDirection(data.proposedDirection || null);
-    setDirection(data.direction || null);
-    setNarrowingQuestions(data.narrowingQuestions || []);
-    setNarrowingAnswers(data.narrowingAnswers || {});
-    setProfessionOptions(data.professionOptions || []);
-    setSelectedProfession(data.selectedProfession || null);
+    setOutputs(data.outputs || []);
+    setAcceptedOutputId(data.acceptedOutputId || null);
     setRoadmaps(data.roadmaps || {});
-    setRejectedDirections(data.rejectedDirections || []);
+    // Seed the reorderable ranking with the canonical order when the
+    // job-characteristics step opens (before any ranking is submitted).
+    if (data.step === "job_characteristics" && !data.jobCharRanking) {
+      const paramsSource = data.jobCharParams || jobCharParams;
+      if (paramsSource.length === 7) {
+        setRankDraft((draft) => (draft.length === 7 ? draft : paramsSource.map((p) => p.id)));
+      }
+    }
     setProfile({
       bigFiveScores: data.bigFiveScores || null,
       derivedTraits: data.derivedTraits || null,
@@ -564,6 +544,8 @@ function App() {
       riasecCode: data.riasecCode || null,
       riasecInferred: Boolean(data.riasecInferred),
       bigFiveDepth: data.bigFiveDepth || null,
+      userValues: data.userValues || null,
+      userValuesAxes: data.userValuesAxes || null,
     });
     if (data.aiEnabled !== undefined) setAiEnabled(Boolean(data.aiEnabled));
   };
@@ -590,10 +572,7 @@ function App() {
           firstUnansweredIndex(data.careerJourneyQuestions || [], data.careerJourneyAnswers)
         );
         if (Object.keys(data.careerJourneyAnswers || {}).length) setCvMode("journey");
-        setNarrowIntent(Object.keys(data.narrowingAnswers || {}).length > 0);
-        const inTree =
-          data.step === "tree" &&
-          ((data.directionQuestions || []).length > 0 || data.direction);
+        const inTree = data.step === "tree" && (data.outputs || []).length > 0;
         setStage(inTree ? "tree" : "survey");
       } catch {
         if (!cancelled) localStorage.removeItem(SESSION_STORAGE_KEY);
@@ -735,6 +714,8 @@ function App() {
     if (stage !== "survey" || step !== "riasec") return;
     if (riasecItems.length || busy.riasecStart) return;
     handleStartRiasec();
+    // busy flag + handler identity intentionally omitted: this effect must
+    // fire once per riasec-step entry, not on every busy-state flip.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, step, riasecItems.length]);
 
@@ -768,12 +749,6 @@ function App() {
       setBusy((p) => ({ ...p, riasecSkip: false }));
     }
   };
-
-  // Seed the reorderable ranking with the canonical order once the step opens.
-  useEffect(() => {
-    if (step !== "job_characteristics" || jobCharRanking || rankDraft.length) return;
-    setRankDraft(jobCharParams.map((p) => p.id));
-  }, [step, jobCharRanking, rankDraft.length, jobCharParams]);
 
   const handleSubmitRanking = async (depth) => {
     if (!sessionId || rankDraft.length !== 7) return;
@@ -870,7 +845,7 @@ function App() {
     setError("");
     setBusy((p) => ({ ...p, enterTree: true }));
     try {
-      const data = await fetchDirectionQuestions({ sessionId });
+      const data = await fetchFirstOutput({ sessionId });
       applySessionSnapshot(data);
       setRetryAction(null);
       setStage("tree");
@@ -885,141 +860,160 @@ function App() {
   const currentDemographicQuestion = demographicQuestions[demoIndex] || null;
   const currentBigFiveItem = bigFiveItems[bigFiveIndex] || null;
 
-  const currentDirectionQuestion =
-    directionQuestions.find((q) => directionAnswers[q.id] === undefined) || null;
-  const currentNarrowingQuestion =
-    narrowingQuestions.find((q) => narrowingAnswers[q.id] === undefined) || null;
+  const latestOutput = outputs.length ? outputs[outputs.length - 1] : null;
+  const acceptedOutput = outputs.find((o) => o.id === acceptedOutputId) || null;
 
-  const handleAnswerDirection = async (value) => {
-    if (!sessionId || !currentDirectionQuestion) return;
-    setError("");
-    setBusy((p) => ({ ...p, direction: true }));
-    try {
-      const data = await answerDirectionQuestion({
-        sessionId,
-        questionId: currentDirectionQuestion.id,
-        value,
-      });
-      applySessionSnapshot(data);
-    } catch (e) {
-      setError(e.message || "Could not save.");
-    } finally {
-      setBusy((p) => ({ ...p, direction: false }));
-    }
+  const SCHWARTZ_LABELS = {
+    self_direction: "Self-Direction",
+    stimulation: "Stimulation",
+    hedonism: "Hedonism",
+    achievement: "Achievement",
+    power: "Power",
+    security: "Security",
+    conformity: "Conformity",
+    tradition: "Tradition",
+    benevolence: "Benevolence",
+    universalism: "Universalism",
   };
 
-  const handleConfirmDirection = async () => {
+  const ADVICE_VIEWS = {
+    aiRecommendations: { title: "AI Recommendations", format: (i) => `${i.title} — ${i.detail}` },
+    events: { title: "Events", format: (i) => `${i.name} — ${i.why}` },
+    universities: { title: "Universities & Majors", format: (i) => `${i.name}: ${i.program}` },
+    courses: { title: "Courses", format: (i) => `${i.name} (${i.provider}) — ${i.why}` },
+  };
+
+  const handleOutputOpen = (output) => {
+    setStageDetail(null);
+    const rationaleLines = Object.entries(output.valuesRationale || {}).map(
+      ([key, line]) => `${SCHWARTZ_LABELS[key] || key}: ${line}`
+    );
+    setInfoView({
+      archetype: output.orientedField,
+      title: output.jobTitle,
+      description: output.thesis,
+      sections: [
+        { heading: "Why this fits you", text: output.whyFit },
+        {
+          heading: "Through your 7 priorities",
+          items: jobCharParams.map((p) => output.parameterFit?.[p.id]).filter(Boolean),
+        },
+        output.changeSummary ? { heading: "What changed", text: output.changeSummary } : null,
+        { heading: "First milestone", text: output.firstMilestone },
+        output.valuesFit
+          ? {
+              heading: `Values match: ${output.valuesFit.overall}/100`,
+              text: `Plane fit ${output.valuesFit.axisFit}, profile fit ${output.valuesFit.detailFit}.`,
+              items: rationaleLines,
+            }
+          : null,
+        { heading: "Constraints", text: output.constraintsNote },
+      ].filter(Boolean),
+    });
+  };
+
+  const handleAdviceOpen = (blockKey) => {
+    if (!acceptedOutput?.detail) return;
+    const view = ADVICE_VIEWS[blockKey];
+    setStageDetail(null);
+    setInfoView({
+      archetype: acceptedOutput.jobTitle,
+      title: view.title,
+      sections: [{ heading: "", items: acceptedOutput.detail[blockKey].map(view.format) }],
+    });
+  };
+
+  const handleGenerateRoadmap = async (outputId) => {
     if (!sessionId) return;
-    setError("");
-    setBusy((p) => ({ ...p, confirmDirection: true }));
-    try {
-      const data = await confirmDirection({ sessionId });
-      applySessionSnapshot(data);
-    } catch (e) {
-      setError(e.message || "Could not confirm direction.");
-    } finally {
-      setBusy((p) => ({ ...p, confirmDirection: false }));
-    }
-  };
-
-  const handleOpenRefine = () => {
-    setError("");
-    setRefineMode(true);
-    setRefineReason("");
-    setRefineText("");
-  };
-
-  const handleRefineDirection = async () => {
-    if (!sessionId || !refineReason) return;
-    setError("");
-    setBusy((p) => ({ ...p, refine: true }));
-    try {
-      const data = await refineDirection({
-        sessionId,
-        reasonChoice: refineReason,
-        feedbackText: refineText.trim(),
-      });
-      applySessionSnapshot(data);
-      setRetryAction(null);
-      setRefineMode(false);
-      setRefineReason("");
-      setRefineText("");
-    } catch (e) {
-      setError(e.message || "Could not refine direction.");
-      setRetryAction(() => handleRefineDirection);
-    } finally {
-      setBusy((p) => ({ ...p, refine: false }));
-    }
-  };
-
-  const handleChooseDirection = async (directionId) => {
-    if (!sessionId) return;
-    setError("");
-    setBusy((p) => ({ ...p, refine: true }));
-    try {
-      const data = await chooseDirection({ sessionId, directionId });
-      applySessionSnapshot(data);
-      setRefineMode(false);
-      setRefineReason("");
-      setRefineText("");
-    } catch (e) {
-      setError(e.message || "Could not choose direction.");
-    } finally {
-      setBusy((p) => ({ ...p, refine: false }));
-    }
-  };
-
-  const handleAnswerNarrowing = async (value) => {
-    if (!sessionId || !currentNarrowingQuestion) return;
-    setError("");
-    setBusy((p) => ({ ...p, narrowing: true }));
-    try {
-      const data = await answerNarrowingQuestion({
-        sessionId,
-        questionId: currentNarrowingQuestion.id,
-        value,
-      });
-      applySessionSnapshot(data);
-    } catch (e) {
-      setError(e.message || "Could not save.");
-    } finally {
-      setBusy((p) => ({ ...p, narrowing: false }));
-    }
-  };
-
-  const handleProfessionOpen = async (profession) => {
-    if (busy.roadmap || busy.select) return;
-    setError("");
-    setBusy((p) => ({ ...p, select: true }));
-    try {
-      const data = await selectProfession({ sessionId, professionId: profession.id });
-      applySessionSnapshot(data);
-      setConfirmContext(profession);
-    } catch (e) {
-      setError(e.message || "Could not select profession.");
-    } finally {
-      setBusy((p) => ({ ...p, select: false }));
-    }
-  };
-
-  const handleConfirmRoadmap = async () => {
-    if (!sessionId || !confirmContext) return;
     setError("");
     setBusy((p) => ({ ...p, roadmap: true }));
     try {
-      const data = await generateRoadmap({ sessionId });
+      const data = await generateRoadmap({ sessionId, outputId });
       applySessionSnapshot(data);
       setRetryAction(null);
-      setConfirmContext(null);
     } catch (e) {
       setError(e.message || "Could not generate roadmap.");
-      setRetryAction(() => handleConfirmRoadmap);
+      setRetryAction(() => () => handleGenerateRoadmap(outputId));
     } finally {
       setBusy((p) => ({ ...p, roadmap: false }));
     }
   };
 
+  const handleAcceptOutput = async () => {
+    if (!sessionId || !latestOutput) return;
+    const outputId = latestOutput.id;
+    setError("");
+    setBusy((p) => ({ ...p, accept: true }));
+    try {
+      const data = await acceptOutput({ sessionId, outputId });
+      applySessionSnapshot(data);
+      setRetryAction(null);
+    } catch (e) {
+      setError(e.message || "Could not accept the output.");
+      setRetryAction(() => handleAcceptOutput);
+      setBusy((p) => ({ ...p, accept: false }));
+      return;
+    }
+    setBusy((p) => ({ ...p, accept: false }));
+    // Yes-branch: the roadmap builds right after the advice blocks land.
+    await handleGenerateRoadmap(outputId);
+  };
+
+  const toggleRefineParam = (paramId) => {
+    setRefineChecks((checks) => {
+      const next = { ...checks };
+      if (paramId in next) delete next[paramId];
+      else next[paramId] = "";
+      return next;
+    });
+  };
+
+  const closeRefine = () => {
+    setRefineMode(false);
+    setRefineChecks({});
+  };
+
+  const handleRefineSubmit = async () => {
+    if (!sessionId || !latestOutput) return;
+    const changes = Object.entries(refineChecks).map(([param, reason]) => ({
+      param,
+      reason: reason.trim(),
+    }));
+    if (!changes.length) return;
+    setError("");
+    setBusy((p) => ({ ...p, refine: true }));
+    try {
+      const data = await refineOutput({ sessionId, outputId: latestOutput.id, changes });
+      applySessionSnapshot(data);
+      setRetryAction(null);
+      closeRefine();
+    } catch (e) {
+      setError(e.message || "Could not regenerate the output.");
+      setRetryAction(() => handleRefineSubmit);
+    } finally {
+      setBusy((p) => ({ ...p, refine: false }));
+    }
+  };
+
+  const handleNotSuitable = async () => {
+    if (!sessionId || !latestOutput) return;
+    setError("");
+    setBusy((p) => ({ ...p, refine: true }));
+    try {
+      const data = await refineOutput({ sessionId, outputId: latestOutput.id, notSuitable: true });
+      applySessionSnapshot(data);
+      setRetryAction(null);
+      closeRefine();
+    } catch (e) {
+      setError(e.message || "Could not regenerate the output.");
+      setRetryAction(() => handleNotSuitable);
+    } finally {
+      setBusy((p) => ({ ...p, refine: false }));
+    }
+  };
+
   const handleStageOpen = (stageItem, index) => {
+    setInfoView(null);
     setStageDetail({ stage: stageItem, index });
   };
 
@@ -1043,7 +1037,6 @@ function App() {
     setRiasecAnswers({});
     setRiasecIndex(0);
     setJobCharParams([]);
-    setJobCharRanking(null);
     setJobCharItems([]);
     setJobCharAnswers({});
     setJcIndex(0);
@@ -1055,25 +1048,13 @@ function App() {
     setCvMode("choice");
     setCvDraft("");
     setCvIntent("");
-    setDirectionQuestions([]);
-    setDirectionAnswers({});
-    setDirectionTieCandidates([]);
-    setProposedDirection(null);
-    setDirection(null);
-    setNarrowingQuestions([]);
-    setNarrowingAnswers({});
-    setProfessionOptions([]);
-    setSelectedProfession(null);
+    setOutputs([]);
+    setAcceptedOutputId(null);
     setRoadmaps({});
-    setRejectedDirections([]);
-    setDirectionCatalog([]);
-    setRefineReasons([]);
     setRefineMode(false);
-    setRefineReason("");
-    setRefineText("");
-    setNarrowIntent(false);
-    setConfirmContext(null);
+    setRefineChecks({});
     setStageDetail(null);
+    setInfoView(null);
     setProfile(null);
     setProfileOpen(false);
     setError("");
@@ -1091,249 +1072,160 @@ function App() {
       cv: false,
       journey: false,
       enterTree: false,
-      direction: false,
-      confirmDirection: false,
-      narrowing: false,
-      select: false,
+      accept: false,
       roadmap: false,
       refine: false,
     });
   };
 
   const graph = buildLifePathGraph({
-    direction,
-    professionOptions,
-    selectedProfessionId: selectedProfession?.id || null,
+    outputs,
+    acceptedOutputId,
     roadmaps,
     roadmapPending: busy.roadmap,
-    onProfessionOpen: handleProfessionOpen,
+    detailPending: busy.accept,
+    onOutputOpen: handleOutputOpen,
+    onAdviceOpen: handleAdviceOpen,
     onStageOpen: handleStageOpen,
   });
 
-  const selectedRoadmap = selectedProfession ? roadmaps[selectedProfession.id] : null;
+  const selectedRoadmap = acceptedOutputId ? roadmaps[acceptedOutputId] : null;
   const roadmapVisible = Boolean(selectedRoadmap);
 
-  const treeHint = !direction
-    ? "Answer the questions to find your direction"
-    : professionOptions.length === 0
-      ? "Direction locked — now narrow it down"
+  const treeHint = !outputs.length
+    ? "Generating your first path…"
+    : !acceptedOutputId
+      ? "Review the suggestion — accept it or tune what doesn't fit"
       : roadmapVisible
         ? "Your roadmap — click any step for details"
-        : "Click a profession to continue";
+        : "Accepted — building your next steps";
 
   let focusKey = "start";
   let focusNodeIds = ["me"];
   if (roadmapVisible) {
-    focusKey = `roadmap-${selectedProfession.id}`;
+    focusKey = `roadmap-${acceptedOutputId}`;
     focusNodeIds = [
-      selectedProfession.id,
-      ...selectedRoadmap.stages.map((s) => `stage-${selectedProfession.id}-${s.id}`),
+      acceptedOutputId,
+      ...selectedRoadmap.stages.map((st) => `stage-${acceptedOutputId}-${st.id}`),
     ];
-  } else if (professionOptions.length > 0) {
-    focusKey = "professions";
-    focusNodeIds = ["direction", ...professionOptions.map((p) => p.id)];
-  } else if (direction) {
-    focusKey = "direction";
-    focusNodeIds = ["me", "direction"];
+  } else if (acceptedOutput?.detail) {
+    focusKey = `detail-${acceptedOutputId}`;
+    focusNodeIds = [acceptedOutputId, "advice-aiRecommendations", "advice-courses"];
+  } else if (latestOutput) {
+    focusKey = latestOutput.id;
+    focusNodeIds = [latestOutput.parentId || "me", latestOutput.id];
   }
 
-  const dockCardKind = selectDockCard({
-    stage,
-    direction,
-    currentDirectionQuestion,
-    directionTieCandidates,
-    proposedDirection,
-    refineMode,
-    rejectedDirections,
-    professionOptions,
-    narrowIntent,
-    currentNarrowingQuestion,
-  });
+  const dockCardKind = selectDockCard({ stage, outputs, acceptedOutputId, refineMode });
 
   let dockCard = null;
-  {
-    if (dockCardKind === "direction-question") {
-      dockCard = {
-        key: `dir-${currentDirectionQuestion.id}`,
-        content: (
-          <GraphQuestionCard
-            heading={`Direction · Question ${Object.keys(directionAnswers).length + 1} of ${directionQuestions.length}`}
-            question={currentDirectionQuestion}
-            busy={busy.direction}
-            busyLabel="Reading your answer…"
-            onChoose={handleAnswerDirection}
-          />
-        ),
-      };
-    } else if (dockCardKind === "direction-tie") {
-      dockCard = {
-        key: "direction-tie",
-        content: (
-          <div className="question-card dock-card">
-            <p className="question-category">It's a close call</p>
-            <h3>Which of these pulls you most?</h3>
-            <p className="dock-subtext">
-              Your answers point equally to these directions — you decide.
-            </p>
-            <div className="option-list">
-              {directionTieCandidates.map((d) => (
-                <button
-                  key={d.id}
-                  type="button"
-                  className="option-button"
-                  onClick={() => handleChooseDirection(d.id)}
-                  disabled={busy.refine}
-                >
-                  {d.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        ),
-      };
-    } else if (dockCardKind === "refine") {
-      dockCard = {
-        key: "refine",
-        content: (
-          <div className="question-card dock-card">
-            <p className="question-category">Let's get this right</p>
-            <h3>
-              What feels off about {proposedDirection ? proposedDirection.label : "this direction"}?
-            </h3>
-            <div className="option-list">
-              {refineReasons.map((r) => (
-                <button
-                  key={r.value}
-                  type="button"
-                  className={`option-button ${refineReason === r.value ? "selected" : ""}`}
-                  onClick={() => setRefineReason(r.value)}
-                  disabled={busy.refine}
-                >
-                  {r.label}
-                </button>
-              ))}
-            </div>
-            {aiEnabled ? (
-              <textarea
-                className="dock-textarea"
-                value={refineText}
-                placeholder="Tell me what you actually want — interests, environment, anything…"
-                onChange={(e) => setRefineText(e.target.value)}
-                disabled={busy.refine}
-              />
-            ) : (
-              <p className="dock-subtext">
-                Demo mode: the next suggestion comes from your quiz answers, so
-                written feedback isn't read here.
-              </p>
+  if (dockCardKind === "output-review" && latestOutput) {
+    dockCard = {
+      key: `review-${latestOutput.id}`,
+      content: (
+        <div className="question-card dock-card">
+          <p className="question-category">
+            {latestOutput.orientedField}
+            {latestOutput.valuesFit && (
+              <span className="fit-badge">{latestOutput.valuesFit.overall}% values fit</span>
             )}
-            <div className="question-actions single">
-              <button
-                type="button"
-                className="primary-action"
-                onClick={handleRefineDirection}
-                disabled={busy.refine || !refineReason}
-              >
-                {busy.refine ? "Thinking…" : "Suggest another direction"}
-              </button>
-            </div>
+          </p>
+          <h3>{latestOutput.jobTitle}</h3>
+          <p className="dock-subtext">{latestOutput.thesis}</p>
+          {latestOutput.changeSummary && (
+            <p className="dock-subtext dock-change-summary">{latestOutput.changeSummary}</p>
+          )}
+          <div className="question-actions">
+            <button
+              type="button"
+              className="primary-action"
+              onClick={handleAcceptOutput}
+              disabled={busy.accept || busy.refine}
+            >
+              {busy.accept ? "Building next steps…" : "Yes, this fits"}
+            </button>
+            <button
+              type="button"
+              className="ghost-action"
+              onClick={() => setRefineMode(true)}
+              disabled={busy.accept || busy.refine}
+            >
+              No — adjust
+            </button>
+            <button
+              type="button"
+              className="ghost-action"
+              onClick={() => handleOutputOpen(latestOutput)}
+            >
+              Details
+            </button>
           </div>
-        ),
-      };
-    } else if (dockCardKind === "direction-pick") {
-      dockCard = {
-        key: "direction-pick",
-        content: (
-          <div className="question-card dock-card">
-            <p className="question-category">Pick your direction</p>
-            <h3>Choose the one that feels right</h3>
-            <p className="dock-subtext">Your roadmap will build from whichever you pick.</p>
-            <div className="option-list">
-              {directionCatalog
-                .filter((d) => !rejectedDirections.some((r) => r.id === d.id))
-                .map((d) => (
-                  <button
-                    key={d.id}
-                    type="button"
-                    className="option-button"
-                    onClick={() => handleChooseDirection(d.id)}
-                    disabled={busy.refine}
-                  >
-                    {d.label}
-                  </button>
-                ))}
-            </div>
+        </div>
+      ),
+    };
+  } else if (dockCardKind === "refine" && latestOutput) {
+    const checkedCount = Object.keys(refineChecks).length;
+    dockCard = {
+      key: "refine",
+      content: (
+        <div className="question-card dock-card">
+          <p className="question-category">What doesn't fit?</p>
+          <h3>Tick what to change about “{latestOutput.jobTitle}”</h3>
+          <div className="refine-params">
+            {jobCharParams.map((p) => {
+              const checked = p.id in refineChecks;
+              return (
+                <div key={p.id} className={`refine-param ${checked ? "checked" : ""}`}>
+                  <label className="refine-param-label">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleRefineParam(p.id)}
+                      disabled={busy.refine}
+                    />
+                    <span>{p.label}</span>
+                  </label>
+                  {checked && (
+                    <input
+                      type="text"
+                      className="refine-reason"
+                      placeholder="Briefly — what should change?"
+                      value={refineChecks[p.id]}
+                      maxLength={200}
+                      onChange={(e) =>
+                        setRefineChecks((c) => ({ ...c, [p.id]: e.target.value }))
+                      }
+                      disabled={busy.refine}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
-        ),
-      };
-    } else if (dockCardKind === "proposal") {
-      dockCard = {
-        key: "proposal",
-        content: (
-          <div className="question-card dock-card">
-            <p className="question-category">Direction found</p>
-            <h3>{proposedDirection.label}</h3>
-            <p className="dock-subtext">
-              {proposedDirection.reason ||
-                "Based on your profile and answers, this is your strongest broad direction."}
-            </p>
-            <div className="question-actions">
-              <button
-                type="button"
-                className="primary-action"
-                onClick={handleConfirmDirection}
-                disabled={busy.confirmDirection}
-              >
-                {busy.confirmDirection ? "Confirming…" : "Confirm this direction"}
-              </button>
-              <button
-                type="button"
-                className="ghost-action"
-                onClick={handleOpenRefine}
-                disabled={busy.confirmDirection}
-              >
-                Not quite right
-              </button>
-            </div>
+          <div className="question-actions">
+            <button
+              type="button"
+              className="primary-action"
+              onClick={handleRefineSubmit}
+              disabled={busy.refine || checkedCount === 0}
+            >
+              {busy.refine ? "Regenerating…" : "Regenerate with these changes"}
+            </button>
+            <button
+              type="button"
+              className="ghost-action"
+              onClick={handleNotSuitable}
+              disabled={busy.refine}
+            >
+              It doesn't fit me overall
+            </button>
+            <button type="button" className="ghost-action" onClick={closeRefine} disabled={busy.refine}>
+              Back
+            </button>
           </div>
-        ),
-      };
-    } else if (dockCardKind === "narrow-prompt") {
-      dockCard = {
-        key: "narrow-prompt",
-        content: (
-          <div className="question-card dock-card">
-            <p className="question-category">Direction confirmed</p>
-            <h3>{direction.label}</h3>
-            <p className="dock-subtext">
-              Want to narrow it down to specific professions?
-            </p>
-            <div className="question-actions single">
-              <button
-                type="button"
-                className="primary-action"
-                onClick={() => setNarrowIntent(true)}
-              >
-                Yes, narrow it down
-              </button>
-            </div>
-          </div>
-        ),
-      };
-    } else if (dockCardKind === "narrowing") {
-      dockCard = {
-        key: `nar-${currentNarrowingQuestion.id}`,
-        content: (
-          <GraphQuestionCard
-            heading={`Narrowing · Question ${Object.keys(narrowingAnswers).length + 1} of ${narrowingQuestions.length}`}
-            question={currentNarrowingQuestion}
-            busy={busy.narrowing}
-            busyLabel="Finding your professions…"
-            onChoose={handleAnswerNarrowing}
-          />
-        ),
-      };
-    }
+        </div>
+      ),
+    };
   }
 
   if (restoring) {
@@ -1670,14 +1562,16 @@ function App() {
           </div>
 
           <AnimatePresence>
-            {confirmContext && (
-              <ConfirmModal
-                key="confirm"
-                profession={confirmContext}
-                busy={busy.roadmap}
-                onConfirm={handleConfirmRoadmap}
-                onDismiss={() => !busy.roadmap && setConfirmContext(null)}
-              />
+            {infoView && (
+              <Motion.div
+                key="info-view"
+                initial={{ x: 20, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: 20, opacity: 0 }}
+                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <InfoPanel view={infoView} onClose={() => setInfoView(null)} />
+              </Motion.div>
             )}
           </AnimatePresence>
 

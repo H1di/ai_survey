@@ -8,14 +8,14 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { MeNode, DirectionNode, ProfessionNode, RoadmapNode, LoadingNode } from './NodeComponent';
+import { MeNode, OutputNode, AdviceNode, RoadmapNode, LoadingNode } from './NodeComponent';
 import BranchEdge from './BranchEdge';
 import './GraphView.css';
 
 const nodeTypes = {
   me: MeNode,
-  direction: DirectionNode,
-  profession: ProfessionNode,
+  output: OutputNode,
+  advice: AdviceNode,
   roadmap: RoadmapNode,
   loading: LoadingNode,
 };
