@@ -153,6 +153,30 @@ test("riasec inference prompt includes Big Five and dream", () => {
   assert.match(user, /open a bakery/);
 });
 
+test("user values inference prompt demands the 10-score schema over the digest", () => {
+  const { system, user } = prompts.buildUserValuesInferencePrompt({ profileDigest: "PROFILE_TEXT" });
+  assert.match(system, /"schwartzValues"/);
+  assert.match(system, /self_direction, stimulation, hedonism, achievement, power, security, conformity, tradition, benevolence, universalism/);
+  assert.match(system, /flat/i);
+  assert.match(user, /PROFILE_TEXT/);
+});
+
+test("profession values prompt scores the role, lists circular order, caps rationale at top-3", () => {
+  const { system, user } = prompts.buildProfessionValuesProfilePrompt({
+    jobTitle: "Hospice Nurse",
+    orientedField: "Healthcare",
+    thesis: "Care work with deep human contact.",
+  });
+  assert.match(system, /"schwartzValues"/);
+  assert.match(system, /"valuesRationale"/);
+  assert.match(system, /ROLE structurally rewards/);
+  assert.match(system, /self_direction, stimulation, hedonism, achievement, power, security, conformity, tradition, benevolence, universalism/);
+  assert.match(system, /3 highest values only/);
+  assert.match(user, /Hospice Nurse/);
+  assert.match(user, /Healthcare/);
+  assert.match(user, /deep human contact/);
+});
+
 test("refine prompt excludes rejected ids, includes feedback, and demands the refine schema", () => {
   const { system, user } = prompts.buildDirectionRefinePrompt({
     profileDigest: PROFILE,

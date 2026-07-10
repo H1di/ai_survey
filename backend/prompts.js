@@ -152,6 +152,41 @@ function buildJobCharQuestionsPrompt({ ranking, count }) {
   return { system, user };
 }
 
+const SCHWARTZ_CIRCLE_LINE =
+  "self_direction, stimulation, hedonism, achievement, power, security, conformity, tradition, benevolence, universalism";
+
+const SCHWARTZ_SCORES_SCHEMA =
+  '{"schwartzValues":{"self_direction":0,"stimulation":0,"hedonism":0,"achievement":0,"power":0,"security":0,"conformity":0,"tradition":0,"benevolence":0,"universalism":0}}';
+
+function buildUserValuesInferencePrompt({ profileDigest }) {
+  const system = [
+    "You estimate a person's Schwartz Basic Human Values profile from survey signal.",
+    "Return valid JSON only.",
+    `JSON schema: ${SCHWARTZ_SCORES_SCHEMA} with each value an integer 0-100.`,
+    "Circular order (adjacent compatible, opposite conflicting):",
+    `${SCHWARTZ_CIRCLE_LINE}.`,
+    "Opposite values should rarely both be high. Use the full 0–100 range; a flat all-similar profile is a failure.",
+    "Ground the estimate in the Big Five scores, RIASEC interests, ranked job-characteristic targets, and the dream answer.",
+  ].join(" ");
+  const user = ["Profile:", profileDigest, "Estimate the 10 value scores now."].join("\n");
+  return { system, user };
+}
+
+function buildProfessionValuesProfilePrompt({ jobTitle, orientedField, thesis }) {
+  const system = [
+    "You are an occupational psychologist scoring a profession on Schwartz's 10 Basic Human Values.",
+    "Return valid JSON only.",
+    'JSON schema: {"schwartzValues":{"self_direction":0,"stimulation":0,"hedonism":0,"achievement":0,"power":0,"security":0,"conformity":0,"tradition":0,"benevolence":0,"universalism":0},"valuesRationale":{"<key>":"..."}}',
+    "Score what the ROLE structurally rewards or requires, not one employer's culture.",
+    "Circular order (adjacent compatible, opposite conflicting):",
+    `${SCHWARTZ_CIRCLE_LINE}.`,
+    "Opposite values should rarely both be high. Use the full 0–100 range; a flat all-similar profile is a failure.",
+    "valuesRationale: one short line for each of the 3 highest values only.",
+  ].join(" ");
+  const user = `Job: ${jobTitle}. Field: ${orientedField}. Summary: ${thesis}. Score it now.`;
+  return { system, user };
+}
+
 function buildCvParsePrompt(cvText) {
   const system = [
     "You extract a structured career signal from a raw CV text.",
@@ -360,6 +395,8 @@ module.exports = {
   buildRiasecInferencePrompt,
   buildJobCharQuestionsPrompt,
   buildCvParsePrompt,
+  buildUserValuesInferencePrompt,
+  buildProfessionValuesProfilePrompt,
   buildAnswersDigest,
   buildDirectionQuestionsPrompt,
   buildDirectionRefinePrompt,
