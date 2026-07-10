@@ -5,7 +5,18 @@ const multer = require("multer");
 const rateLimit = require("express-rate-limit");
 const { extractCvText } = require("./cvExtract");
 const { createAiEngine } = require("./aiEngine");
-const { DEMOGRAPHIC_QUESTIONS, CAREER_JOURNEY_QUESTIONS } = require("./questionPool");
+const {
+  DEMOGRAPHIC_QUESTIONS,
+  CAREER_JOURNEY_QUESTIONS,
+  JOB_CHAR_PARAM_IDS,
+} = require("./questionPool");
+const {
+  deriveHigherOrder,
+  deriveAxes,
+  deriveTopValues,
+  dominantPole,
+  valuesFit,
+} = require("./schwartzValues");
 const {
   validateDemographicAnswer,
   validateBigFiveAnswer,
@@ -21,7 +32,6 @@ const {
   buildProgress,
   summarizeAnswersForClient,
 } = require("./questionEngine");
-const { computeDirection, getDirection, REFINE_REASON_VALUES } = require("./directions");
 const { SessionStore } = require("./sessionStore");
 
 // Tests set their own env (and force fallback by blanking the key) — skip
@@ -80,10 +90,9 @@ for (const path of [
   "/api/riasec/skip",
   "/api/job-characteristics/rank",
   "/api/cv",
-  "/api/direction/question",
-  "/api/direction/confirm",
-  "/api/direction/refine",
-  "/api/professions/narrow",
+  "/api/output/first",
+  "/api/output/refine",
+  "/api/output/accept",
   "/api/roadmap/generate",
 ]) {
   app.use(path, aiLimiter);
@@ -407,231 +416,169 @@ function requireCompletedAssessment(session) {
   }
 }
 
-app.post("/api/direction/question", async (req, res) => {
+// The single place output aggregates are computed: Schwartz-score the raw
+// output, derive poles/axes/top values, and measure fit against the user's
+// inferred value vector. The AI never outputs these numbers.
+async function buildScoredOutput(session, rawOutput) {
+  const { schwartzValues, valuesRationale } = await aiEngine.scoreProfessionValues({
+    jobTitle: rawOutput.jobTitle,
+    orientedField: rawOutput.orientedField,
+    thesis: rawOutput.thesis,
+    directionId: rawOutput.directionId,
+    jobCharProfile: session.jobCharProfile,
+  });
+  const higherOrder = deriveHigherOrder(schwartzValues);
+  return {
+    ...rawOutput,
+    schwartzValues,
+    valuesRationale,
+    higherOrder,
+    axes: deriveAxes(higherOrder),
+    dominantPole: dominantPole(higherOrder),
+    topValues: deriveTopValues(schwartzValues),
+    valuesFit: session.userValues
+      ? valuesFit(session.userValues.scores, schwartzValues)
+      : null,
+    accepted: null,
+    detail: null,
+  };
+}
+
+function validateRefineChanges(changes) {
+  if (!Array.isArray(changes) || changes.length < 1 || changes.length > JOB_CHAR_PARAM_IDS.length) {
+    return null;
+  }
+  const seen = new Set();
+  const normalized = [];
+  for (const change of changes) {
+    const param = change?.param;
+    if (!JOB_CHAR_PARAM_IDS.includes(param) || seen.has(param)) return null;
+    seen.add(param);
+    normalized.push({
+      param,
+      reason: typeof change.reason === "string" ? change.reason.trim().slice(0, 200) : "",
+    });
+  }
+  return normalized;
+}
+
+app.post("/api/output/first", async (req, res) => {
   try {
     const { sessionId } = req.body || {};
     const session = store.require(sessionId);
     requireCompletedAssessment(session);
 
-    if (!session.directionQuestions.length) {
-      const questions = await aiEngine.generateDirectionQuestions({ session });
-      store.setDirectionQuestions(session, questions);
+    if (!session.outputs.length) {
+      const raw = await aiEngine.generateFirstOutput({ session, excludeDirectionIds: [] });
+      const scored = await buildScoredOutput(session, raw);
+      store.appendOutput(session, scored);
     }
 
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    console.error("[direction/question]", error);
+    if (!error.statusCode) console.error("[output/first]", error);
     return res
       .status(error.statusCode || 500)
-      .json({ error: error.statusCode ? error.message : "Failed to load direction questions." });
+      .json({ error: error.statusCode ? error.message : "Failed to generate your first output." });
   }
 });
 
-app.post("/api/direction/answer", (req, res) => {
+app.post("/api/output/refine", async (req, res) => {
   try {
-    const { sessionId, questionId, value } = req.body || {};
+    const { sessionId, outputId, notSuitable, changes } = req.body || {};
     const session = store.require(sessionId);
     requireCompletedAssessment(session);
 
-    const question = session.directionQuestions.find((q) => q.id === questionId);
-    if (!question) {
-      return res.status(400).json({ error: "Unknown direction question." });
+    if (session.acceptedOutputId) {
+      return res.status(400).json({ error: "An output is already accepted." });
     }
-    if (!question.options.some((o) => o.value === value)) {
-      return res.status(400).json({ error: "Invalid answer option." });
-    }
-
-    store.recordDirectionAnswer(session, questionId, value);
-
-    const allAnswered = session.directionQuestions.every(
-      (q) => session.directionAnswers[q.id] !== undefined
-    );
-    if (allAnswered) {
-      const result = computeDirection(session.directionQuestions, session.directionAnswers);
-      if (result.tie) {
-        // Don't break the tie for the user — expose the candidates and let
-        // the frontend ask; /api/direction/choose resolves it.
-        store.setDirectionTie(session, result.candidates);
-      } else {
-        store.setProposedDirection(session, {
-          ...result,
-          reason: "Your answers across the quiz point most strongly to this direction.",
-        });
-      }
+    const previous = session.outputs.find((o) => o.id === outputId);
+    if (!previous) {
+      return res.status(400).json({ error: "Unknown output." });
     }
 
-    return sendSessionSnapshot(res, session);
-  } catch (error) {
-    return res.status(error.statusCode || 500).json({ error: error.message });
-  }
-});
-
-app.post("/api/direction/confirm", async (req, res) => {
-  try {
-    const { sessionId } = req.body || {};
-    const session = store.require(sessionId);
-    requireCompletedAssessment(session);
-
-    if (!session.direction) {
-      if (!session.proposedDirection) {
-        return res.status(400).json({ error: "Answer the direction questions first." });
-      }
-      store.confirmDirection(session, session.proposedDirection);
+    if (notSuitable && changes !== undefined) {
+      return res.status(400).json({
+        error: "Provide either notSuitable: true or parameter changes — not both.",
+      });
+    }
+    const normalizedChanges = notSuitable ? null : validateRefineChanges(changes);
+    if (!notSuitable && !normalizedChanges) {
+      return res.status(400).json({
+        error: "Provide either notSuitable: true or 1-7 valid parameter changes.",
+      });
     }
 
-    if (!session.narrowingQuestions.length) {
-      const questions = await aiEngine.generateNarrowingQuestions({ session });
-      store.setNarrowingQuestions(session, questions);
+    let raw;
+    if (notSuitable) {
+      // A genuinely different field family: exclude every family already shown.
+      const used = session.outputs.map((o) => o.directionId).filter(Boolean);
+      raw = await aiEngine.generateFirstOutput({ session, excludeDirectionIds: used });
+    } else {
+      raw = await aiEngine.refineOutput({ session, previousOutput: previous, changes: normalizedChanges });
     }
-
-    return sendSessionSnapshot(res, session);
-  } catch (error) {
-    console.error("[direction/confirm]", error);
-    return res
-      .status(error.statusCode || 500)
-      .json({ error: error.statusCode ? error.message : "Failed to confirm direction." });
-  }
-});
-
-app.post("/api/direction/refine", async (req, res) => {
-  try {
-    const { sessionId, reasonChoice, feedbackText } = req.body || {};
-    const session = store.require(sessionId);
-    requireCompletedAssessment(session);
-
-    if (session.direction) {
-      return res.status(400).json({ error: "Direction already confirmed." });
-    }
-    if (!session.proposedDirection) {
-      return res.status(400).json({ error: "No proposed direction to refine." });
-    }
-    if (!REFINE_REASON_VALUES.includes(reasonChoice)) {
-      return res.status(400).json({ error: "Invalid reason." });
-    }
-
-    const note = {
-      reasonChoice,
-      feedbackText: typeof feedbackText === "string" ? feedbackText.trim().slice(0, 500) : "",
-    };
-
-    store.rejectProposedDirection(session, note);
-
-    const refined = await aiEngine.refineDirection({
-      session,
-      reasonChoice: note.reasonChoice,
-      feedbackText: note.feedbackText,
-    });
-    store.setProposedDirection(session, refined);
-
-    return sendSessionSnapshot(res, session);
-  } catch (error) {
-    console.error("[direction/refine]", error);
-    return res
-      .status(error.statusCode || 500)
-      .json({ error: error.statusCode ? error.message : "Failed to refine direction." });
-  }
-});
-
-app.post("/api/direction/choose", (req, res) => {
-  try {
-    const { sessionId, directionId } = req.body || {};
-    const session = store.require(sessionId);
-    requireCompletedAssessment(session);
-
-    if (session.direction) {
-      return res.status(400).json({ error: "Direction already confirmed." });
-    }
-    const chosen = getDirection(directionId);
-    if (!chosen) {
-      return res.status(400).json({ error: "Unknown direction." });
-    }
-    if (session.rejectedDirections.some((d) => d.id === directionId)) {
-      return res.status(400).json({ error: "You already rejected this direction." });
-    }
-
-    store.setProposedDirection(session, {
-      id: chosen.id,
-      label: chosen.label,
-      reason: "Chosen by you.",
+    const scored = await buildScoredOutput(session, raw);
+    const appended = store.appendOutput(session, scored);
+    store.recordRefinement(session, {
+      fromOutputId: outputId,
+      notSuitable: Boolean(notSuitable),
+      changedParams: normalizedChanges || [],
+      toOutputId: appended.id,
     });
 
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ error: error.message });
-  }
-});
-
-app.post("/api/professions/narrow", async (req, res) => {
-  try {
-    const { sessionId, questionId, value } = req.body || {};
-    const session = store.require(sessionId);
-
-    if (!session.direction) {
-      return res.status(400).json({ error: "Confirm a direction first." });
-    }
-
-    const question = session.narrowingQuestions.find((q) => q.id === questionId);
-    if (!question) {
-      return res.status(400).json({ error: "Unknown narrowing question." });
-    }
-    if (!question.options.some((o) => o.value === value)) {
-      return res.status(400).json({ error: "Invalid answer option." });
-    }
-
-    store.recordNarrowingAnswer(session, questionId, value);
-
-    const allAnswered = session.narrowingQuestions.every(
-      (q) => session.narrowingAnswers[q.id] !== undefined
-    );
-    if (allAnswered && !session.professionOptions.length) {
-      const professions = await aiEngine.generateProfessions({ session });
-      store.setProfessionOptions(session, professions);
-    }
-
-    return sendSessionSnapshot(res, session);
-  } catch (error) {
-    console.error("[professions/narrow]", error);
+    if (!error.statusCode) console.error("[output/refine]", error);
     return res
       .status(error.statusCode || 500)
-      .json({ error: error.statusCode ? error.message : "Failed to narrow professions." });
+      .json({ error: error.statusCode ? error.message : "Failed to regenerate the output." });
   }
 });
 
-app.post("/api/professions/select", (req, res) => {
+app.post("/api/output/accept", async (req, res) => {
   try {
-    const { sessionId, professionId } = req.body || {};
+    const { sessionId, outputId } = req.body || {};
     const session = store.require(sessionId);
+    requireCompletedAssessment(session);
 
-    const profession = session.professionOptions.find((p) => p.id === professionId);
-    if (!profession) {
-      return res.status(400).json({ error: "Unknown profession." });
+    if (session.acceptedOutputId) {
+      return res.status(400).json({ error: "An output is already accepted." });
+    }
+    const output = session.outputs.find((o) => o.id === outputId);
+    if (!output) {
+      return res.status(400).json({ error: "Unknown output." });
     }
 
-    store.selectProfession(session, profession);
+    const detail = await aiEngine.generateOutputDetail({ session, output });
+    store.acceptOutput(session, outputId, detail);
 
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ error: error.message });
+    if (!error.statusCode) console.error("[output/accept]", error);
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.statusCode ? error.message : "Failed to build the advice blocks." });
   }
 });
 
 app.post("/api/roadmap/generate", async (req, res) => {
   try {
-    const { sessionId } = req.body || {};
+    const { sessionId, outputId } = req.body || {};
     const session = store.require(sessionId);
 
-    if (!session.selectedProfession) {
-      return res.status(400).json({ error: "Select a profession first." });
+    if (!session.acceptedOutputId || session.acceptedOutputId !== outputId) {
+      return res.status(400).json({ error: "Accept this output before building its roadmap." });
     }
+    const output = session.outputs.find((o) => o.id === outputId);
 
-    if (!session.roadmaps[session.selectedProfession.id]) {
-      const roadmap = await aiEngine.generateRoadmap({ session });
+    if (!session.roadmaps[outputId]) {
+      const roadmap = await aiEngine.generateRoadmap({ session, output });
       store.setRoadmap(session, roadmap);
     }
 
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    console.error("[roadmap/generate]", error);
+    if (!error.statusCode) console.error("[roadmap/generate]", error);
     return res
       .status(error.statusCode || 500)
       .json({ error: error.statusCode ? error.message : "Failed to generate roadmap." });

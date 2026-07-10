@@ -39,9 +39,9 @@ test("AI-priced routes return 429 once the strict limit is exceeded", async () =
   const sessionId = data.sessionId;
 
   // The limiter runs before the handler, so even guard-rejected calls count.
-  const first = await post("/api/direction/question", { sessionId });
-  const second = await post("/api/direction/question", { sessionId });
-  const third = await post("/api/direction/question", { sessionId });
+  const first = await post("/api/output/first", { sessionId });
+  const second = await post("/api/output/first", { sessionId });
+  const third = await post("/api/output/first", { sessionId });
 
   assert.notEqual(first.status, 429);
   assert.notEqual(second.status, 429);

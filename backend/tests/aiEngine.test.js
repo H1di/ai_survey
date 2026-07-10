@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createAiEngine } = require("../aiEngine");
 const { DIRECTION_IDS } = require("../directions");
+const { JOB_CHAR_PARAM_IDS } = require("../questionPool");
 
 // No apiKey -> client is null -> every call takes the deterministic fallback.
 const engine = createAiEngine({ apiKey: undefined, model: "test" });
@@ -10,112 +11,130 @@ function fakeSession(overrides = {}) {
   return {
     entryChoice: "find",
     dreamAnswer: "build things",
-    demographics: { age: 30, country: "Testland" },
+    cvIntent: "new",
+    demographics: { age: 30, country: "Testland", city: "Testville" },
     bigFiveScores: { O: 70, C: 60, E: 40, A: 55, N: 45 },
     derivedTraits: null,
-    direction: { id: "tech", label: "Programming & Technology" },
-    directionQuestions: [],
-    directionAnswers: {},
-    narrowingQuestions: [],
-    narrowingAnswers: {},
-    selectedProfession: { id: "prof_1", title: "Software Developer", summary: "s", whyFit: "w", dayToDay: "d" },
+    riasecScores: { R: 30, I: 80, A: 55, S: 40, E: 35, C: 45 },
+    riasecCode: "IAC",
+    riasecInferred: false,
+    jobCharRanking: [...JOB_CHAR_PARAM_IDS],
+    jobCharProfile: { compensation: 60, work_mode: 80, job_security: 40, career_growth: 55, complexity: 85, meaning_impact: 70, social: 30 },
+    cvAnalysis: null,
+    cvText: null,
+    careerJourneyAnswers: {},
+    outputs: [],
     ...overrides,
   };
 }
 
-test("fallback direction questions: 3 questions, 4 options each, valid directionIds, >=10 directions covered", async () => {
-  const questions = await engine.generateDirectionQuestions({ session: fakeSession() });
-  assert.equal(questions.length, 3);
-  const covered = new Set();
-  questions.forEach((q, i) => {
-    assert.equal(q.id, `dir_q${i + 1}`);
-    assert.ok(q.text.length > 0);
-    assert.equal(q.options.length, 4);
-    for (const o of q.options) {
-      assert.ok(o.value && o.label);
-      assert.ok(DIRECTION_IDS.includes(o.directionId), `bad directionId ${o.directionId}`);
-      covered.add(o.directionId);
-    }
-  });
-  assert.ok(covered.size >= 10, `only ${covered.size} directions covered`);
+// --- output loop (Phase 3) ---
+
+test("keyless first output: grounded in the top-ranked direction with full parameterFit", async () => {
+  const output = await engine.generateFirstOutput({ session: fakeSession() });
+  assert.ok(DIRECTION_IDS.includes(output.directionId));
+  assert.ok(output.orientedField && output.jobTitle && output.thesis);
+  assert.ok(output.whyFit && output.firstMilestone && output.constraintsNote);
+  for (const param of JOB_CHAR_PARAM_IDS) {
+    assert.ok(output.parameterFit[param], `parameterFit missing ${param}`);
+  }
+  // High-Investigative profile should not land in a Social/Enterprising family
+  assert.ok(["science", "tech", "finance", "design"].includes(output.directionId), output.directionId);
 });
 
-test("fallback narrowing questions: 2 questions, ids nar_q1/nar_q2, no directionId on options", async () => {
-  const questions = await engine.generateNarrowingQuestions({ session: fakeSession() });
-  assert.equal(questions.length, 2);
-  questions.forEach((q, i) => {
-    assert.equal(q.id, `nar_q${i + 1}`);
-    assert.equal(q.options.length, 4);
-    for (const o of q.options) assert.equal(o.directionId, undefined);
+test("keyless first output honors excluded direction ids (notSuitable path)", async () => {
+  const session = fakeSession();
+  const first = await engine.generateFirstOutput({ session });
+  const second = await engine.generateFirstOutput({
+    session: fakeSession({ outputs: [{ jobTitle: first.jobTitle }] }),
+    excludeDirectionIds: [first.directionId],
   });
+  assert.notEqual(second.directionId, first.directionId, "excluded family must not repeat");
 });
 
-test("fallback professions: exactly 3 from the direction's seeds with generated whyFit/dayToDay", async () => {
-  const professions = await engine.generateProfessions({ session: fakeSession() });
-  assert.equal(professions.length, 3);
-  professions.forEach((p, i) => {
-    assert.equal(p.id, `prof_${i + 1}`);
-    assert.ok(p.title && p.summary && p.whyFit && p.dayToDay);
+test("keyless refineOutput: same family next seed, changed params rewritten, changeSummary present", async () => {
+  const session = fakeSession();
+  const first = await engine.generateFirstOutput({ session });
+  session.outputs = [first];
+  const refined = await engine.refineOutput({
+    session,
+    previousOutput: first,
+    changes: [{ param: "compensation", reason: "need more upside" }],
   });
-  assert.equal(professions[0].title, "Software Developer");
+  assert.notEqual(refined.jobTitle, first.jobTitle, "must move to a different seed");
+  assert.match(refined.parameterFit.compensation, /need more upside/);
+  assert.ok(refined.changeSummary);
 });
 
-test("fallback professions for an unknown direction still returns 3 (first catalog direction)", async () => {
-  const professions = await engine.generateProfessions({
-    session: fakeSession({ direction: { id: "nope", label: "Nope" } }),
-  });
-  assert.equal(professions.length, 3);
+test("keyless output detail: four blocks with 2+ entries, localized", async () => {
+  const output = { jobTitle: "Agronomist", orientedField: "Agriculture & Environment", thesis: "t" };
+  const detail = await engine.generateOutputDetail({ session: fakeSession(), output });
+  for (const block of ["aiRecommendations", "events", "universities", "courses"]) {
+    assert.ok(Array.isArray(detail[block]) && detail[block].length >= 2, `${block} too small`);
+  }
+  assert.match(detail.aiRecommendations[0].detail, /Testville/);
 });
 
-test("fallback roadmap: 6 ordered stages tied to the selected profession", async () => {
-  const roadmap = await engine.generateRoadmap({ session: fakeSession() });
-  assert.equal(roadmap.professionId, "prof_1");
-  assert.equal(roadmap.stages.length, 6);
+test("keyless roadmap targets the accepted output", async () => {
+  const output = { id: "output_2", jobTitle: "Data Analyst", orientedField: "Finance", thesis: "t" };
+  const roadmap = await engine.generateRoadmap({ session: fakeSession(), output });
+  assert.equal(roadmap.professionId, "output_2");
+  assert.ok(roadmap.stages.length >= 4);
   roadmap.stages.forEach((s, i) => {
     assert.equal(s.id, `stage_${i + 1}`);
-    assert.ok(s.title && s.description && s.timeframe && s.milestone);
+    assert.ok(s.title && s.description);
   });
-  assert.match(roadmap.stages[5].title, /Software Developer/);
 });
 
-test("generateBigFiveItems still works (Page 2 untouched)", async () => {
-  const items = await engine.generateBigFiveItems({ depth: "short" });
-  assert.equal(items.length, 20);
+test("direction-era generators are gone", () => {
+  assert.equal(engine.generateDirectionQuestions, undefined);
+  assert.equal(engine.generateNarrowingQuestions, undefined);
+  assert.equal(engine.generateProfessions, undefined);
+  assert.equal(engine.refineDirection, undefined);
 });
 
-test("old branch methods are gone", () => {
-  assert.equal(engine.generateInitialBranch, undefined);
-  assert.equal(engine.evolveBranch, undefined);
+// --- output normalizers ---
+
+const { normalizeOutputPayload, normalizeOutputDetailPayload } = require("../aiEngine");
+
+function goodOutputPayload() {
+  return {
+    orientedField: "Healthcare",
+    jobTitle: "Hospice Nurse",
+    thesis: "Care work.",
+    parameterFit: Object.fromEntries(JOB_CHAR_PARAM_IDS.map((p) => [p, `${p} line`])),
+    whyFit: "Fits.",
+    firstMilestone: "Shadow a nurse.",
+    constraintsNote: "Licensing required.",
+  };
+}
+
+test("normalizeOutputPayload requires every field and all 7 fit lines", () => {
+  const output = normalizeOutputPayload(goodOutputPayload());
+  assert.equal(output.jobTitle, "Hospice Nurse");
+  assert.equal(output.changeSummary, undefined, "absent changeSummary stays absent");
+
+  const withSummary = normalizeOutputPayload({ ...goodOutputPayload(), changeSummary: "Moved pay up." });
+  assert.equal(withSummary.changeSummary, "Moved pay up.");
+
+  assert.throws(() => normalizeOutputPayload({ ...goodOutputPayload(), jobTitle: " " }), /jobTitle/);
+  const missingFit = goodOutputPayload();
+  delete missingFit.parameterFit.social;
+  assert.throws(() => normalizeOutputPayload(missingFit), /social/);
 });
 
-test("refineDirection fallback: excludes rejected ids and carries a reason", async () => {
-  const session = fakeSession({
-    directionQuestions: [
-      { id: "dir_q1", text: "q", options: [
-        { value: "a", label: "A", directionId: "tech" },
-        { value: "b", label: "B", directionId: "design" },
-      ]},
-    ],
-    directionAnswers: { dir_q1: "a" },
-    rejectedDirections: [{ id: "tech", label: "Programming & Technology" }],
-  });
-  const refined = await engine.refineDirection({ session, reasonChoice: "interests", feedbackText: "" });
-  assert.notEqual(refined.id, "tech");
-  assert.ok(DIRECTION_IDS.includes(refined.id));
-  assert.equal(refined.reason, "Based on your quiz answers, this is your next strongest match.");
-});
+test("normalizeOutputDetailPayload enforces 2-4 valid entries per block", () => {
+  const good = {
+    aiRecommendations: [{ title: "a", detail: "b" }, { title: "c", detail: "d" }],
+    events: [{ name: "a", why: "b" }, { name: "c", why: "d" }, { name: "e", why: "f" }],
+    universities: [{ name: "a", program: "b" }, { name: "c", program: "d" }],
+    courses: [{ name: "a", provider: "b", why: "c" }, { name: "d", provider: "e", why: "f" }],
+  };
+  const detail = normalizeOutputDetailPayload(good);
+  assert.equal(detail.events.length, 3);
 
-test("refineDirection fallback: all quiz votes rejected -> first non-rejected catalog direction", async () => {
-  const session = fakeSession({
-    directionQuestions: [],
-    directionAnswers: {},
-    rejectedDirections: [
-      { id: "tech", label: "x" },
-      { id: "healthcare", label: "y" },
-    ],
-  });
-  const refined = await engine.refineDirection({ session, reasonChoice: "environment", feedbackText: "" });
-  assert.equal(refined.id, "agriculture");
+  const bad = { ...good, courses: [{ name: "a", provider: "", why: "c" }, { name: "d" }] };
+  assert.throws(() => normalizeOutputDetailPayload(bad), /courses/);
 });
 
 // --- AI Big Five item validator (P1-1) ---
@@ -177,6 +196,11 @@ test("generateBigFiveItems: AI_BIG_FIVE_ITEMS=false forces static IPIP even with
   } finally {
     delete process.env.AI_BIG_FIVE_ITEMS;
   }
+});
+
+test("generateBigFiveItems keyless still serves the static set", async () => {
+  const items = await engine.generateBigFiveItems({ depth: "short" });
+  assert.equal(items.length, 20);
 });
 
 // --- v2 generators (RIASEC, job characteristics, CV) ---
@@ -248,6 +272,17 @@ test("keyless engine: riasec items fall back to the static pool, analyzeCV to em
   assert.deepEqual(analysis, { skills: [], domains: [], seniority: "" });
 });
 
+test("keyless engine: inferRiasecProfile derives from Big Five; jobChar questions from the bank", async () => {
+  const scores = await engine.inferRiasecProfile({ session: fakeSession({ riasecScores: null }) });
+  for (const key of ["R", "I", "A", "S", "E", "C"]) {
+    assert.ok(scores[key] >= 0 && scores[key] <= 100);
+  }
+  const ranking = ["social", "compensation", "work_mode", "job_security", "career_growth", "complexity", "meaning_impact"];
+  const questions = await engine.generateJobCharQuestions({ session: fakeSession(), ranking, count: 5 });
+  assert.equal(questions.length, 5);
+  assert.equal(questions[0].param, "social");
+});
+
 // --- Schwartz values (Phase 2) ---
 
 const { normalizeSchwartzValuesPayload } = require("../aiEngine");
@@ -302,15 +337,4 @@ test("keyless scoreProfessionValues: prototype-based profile + top-value rationa
     assert.ok(schwartzValues[key] >= 0 && schwartzValues[key] <= 100);
   }
   assert.equal(Object.keys(valuesRationale).length, 1, "fallback carries one top-value line");
-});
-
-test("keyless engine: inferRiasecProfile derives from Big Five; jobChar questions from the bank", async () => {
-  const scores = await engine.inferRiasecProfile({ session: fakeSession() });
-  for (const key of ["R", "I", "A", "S", "E", "C"]) {
-    assert.ok(scores[key] >= 0 && scores[key] <= 100);
-  }
-  const ranking = ["social", "compensation", "work_mode", "job_security", "career_growth", "complexity", "meaning_impact"];
-  const questions = await engine.generateJobCharQuestions({ session: fakeSession(), ranking, count: 5 });
-  assert.equal(questions.length, 5);
-  assert.equal(questions[0].param, "social");
 });

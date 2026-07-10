@@ -108,13 +108,11 @@ test("answer snapshots omit static question banks; start/GET include them", asyn
   assert.ok(data.demographicQuestions, "start carries question banks");
   assert.ok(data.careerJourneyQuestions);
   assert.ok(data.jobCharParams);
-  assert.ok(data.directionCatalog);
 
   ({ data } = await post("/api/session/demographics", { sessionId, questionId: "sex", value: "male" }));
   assert.equal(data.demographicQuestions, undefined, "answer response is trimmed");
   assert.equal(data.careerJourneyQuestions, undefined);
   assert.equal(data.jobCharParams, undefined);
-  assert.equal(data.directionCatalog, undefined);
   assert.ok(data.demographics, "dynamic state still present");
 
   const res = await fetch(`${base}/api/session/${sessionId}`);
@@ -249,194 +247,143 @@ test("cv upload rejects oversized files with a 400", async () => {
   assert.equal(res.status, 400);
 });
 
-test("full Page 3 flow: direction -> narrowing -> professions -> select -> roadmap", async () => {
+test("full output loop: first -> refine param -> notSuitable -> accept -> detail -> roadmap", async () => {
   const { sessionId } = await completeAssessment();
 
-  // Stage A: direction questions (fallback: deterministic 3)
-  let { status, data } = await post("/api/direction/question", { sessionId });
+  // 1st Output (idempotent)
+  let { status, data } = await post("/api/output/first", { sessionId });
   assert.equal(status, 200);
-  assert.equal(data.directionQuestions.length, 3);
-  assert.equal(data.pathStage, "direction");
-
-  // idempotent: second call does not regenerate/reset
-  ({ data } = await post("/api/direction/question", { sessionId }));
-  assert.equal(data.directionQuestions.length, 3);
-
-  // answer all 3 with the first option
-  for (const q of data.directionQuestions) {
-    ({ status, data } = await post("/api/direction/answer", { sessionId, questionId: q.id, value: q.options[0].value }));
-    assert.equal(status, 200);
+  assert.equal(data.outputs.length, 1);
+  assert.equal(data.pathStage, "output");
+  const first = data.outputs[0];
+  assert.equal(first.id, "output_1");
+  assert.equal(first.parentId, null);
+  assert.ok(first.orientedField && first.jobTitle && first.thesis);
+  for (const param of RANKING) {
+    assert.ok(first.parameterFit[param], `parameterFit missing ${param}`);
   }
-  // fallback q1/q2/q3 first options vote tech/finance/healthcare: a 1-1-1
-  // tie is surfaced to the user instead of silently resolved by alphabet
-  assert.equal(data.proposedDirection, null);
-  assert.deepEqual(
-    data.directionTieCandidates.map((c) => c.id),
-    ["finance", "healthcare", "tech"]
-  );
+  // Schwartz layer: 10 scores, backend-derived aggregates, fit vs userValues
+  assert.equal(Object.keys(first.schwartzValues).length, 10);
+  const nums = Object.values(first.schwartzValues);
+  assert.ok(Math.max(...nums) - Math.min(...nums) >= 8, "profile must not be flat");
+  assert.ok(first.higherOrder && first.axes && first.dominantPole);
+  assert.equal(first.topValues.length, 3);
+  assert.ok(first.valuesFit.overall >= 0 && first.valuesFit.overall <= 100);
 
-  // confirming during an unresolved tie is rejected
-  let tieConfirm = await post("/api/direction/confirm", { sessionId });
-  assert.equal(tieConfirm.status, 400);
+  ({ data } = await post("/api/output/first", { sessionId }));
+  assert.equal(data.outputs.length, 1, "idempotent");
 
-  // the user resolves the tie -> proposal, tie cleared
-  ({ status, data } = await post("/api/direction/choose", { sessionId, directionId: "finance" }));
+  // No -> change one parameter
+  ({ status, data } = await post("/api/output/refine", {
+    sessionId,
+    outputId: "output_1",
+    changes: [{ param: "compensation", reason: "need more upside" }],
+  }));
   assert.equal(status, 200);
-  assert.equal(data.proposedDirection.id, "finance");
-  assert.deepEqual(data.directionTieCandidates, []);
+  assert.equal(data.outputs.length, 2);
+  assert.equal(data.outputs[1].parentId, "output_1");
+  assert.ok(data.outputs[1].changeSummary, "refinement carries a changeSummary");
+  assert.equal(Object.keys(data.outputs[1].schwartzValues).length, 10, "re-scored on Schwartz");
+  assert.equal(data.refinementHistory.length, 1);
+  assert.equal(data.refinementHistory[0].changedParams[0].param, "compensation");
 
-  // Stage A confirm -> narrowing questions generated
-  ({ status, data } = await post("/api/direction/confirm", { sessionId }));
+  // No -> not suitable overall: a genuinely different field family
+  ({ status, data } = await post("/api/output/refine", {
+    sessionId,
+    outputId: "output_2",
+    notSuitable: true,
+  }));
   assert.equal(status, 200);
-  assert.equal(data.direction.id, "finance");
-  assert.equal(data.pathStage, "narrowing");
-  assert.equal(data.narrowingQuestions.length, 2);
+  assert.equal(data.outputs.length, 3);
+  const families = data.outputs.map((o) => o.directionId);
+  assert.notEqual(families[2], families[0], "notSuitable must leave the rejected family");
+  assert.equal(data.refinementHistory[1].notSuitable, true);
 
-  // Stage B: answer narrowing questions -> exactly 3 professions
-  for (const q of data.narrowingQuestions) {
-    ({ status, data } = await post("/api/professions/narrow", { sessionId, questionId: q.id, value: q.options[0].value }));
-    assert.equal(status, 200);
+  // Yes -> accept output_3, get the 4 advice blocks
+  ({ status, data } = await post("/api/output/accept", { sessionId, outputId: "output_3" }));
+  assert.equal(status, 200);
+  assert.equal(data.acceptedOutputId, "output_3");
+  assert.equal(data.pathStage, "detail");
+  const detail = data.outputs[2].detail;
+  for (const block of ["aiRecommendations", "events", "universities", "courses"]) {
+    assert.ok(detail[block].length >= 2, `${block} too small`);
   }
-  assert.equal(data.pathStage, "professions");
-  assert.equal(data.professionOptions.length, 3);
 
-  // Stage C: select a profession
-  const chosen = data.professionOptions[1];
-  ({ status, data } = await post("/api/professions/select", { sessionId, professionId: chosen.id }));
+  // Roadmap for the accepted output, cached under its id
+  ({ status, data } = await post("/api/roadmap/generate", { sessionId, outputId: "output_3" }));
   assert.equal(status, 200);
-  assert.equal(data.selectedProfession.id, chosen.id);
-
-  // Stage D: roadmap (map keyed by professionId)
-  ({ status, data } = await post("/api/roadmap/generate", { sessionId }));
-  assert.equal(status, 200);
-  assert.equal(data.pathStage, "roadmap");
-  assert.ok(data.roadmaps[chosen.id], "roadmap stored under its professionId");
-  assert.ok(data.roadmaps[chosen.id].stages.length >= 4);
-
-  // cached: repeat call returns the same stages
-  const firstStageTitle = data.roadmaps[chosen.id].stages[0].title;
-  ({ data } = await post("/api/roadmap/generate", { sessionId }));
-  assert.equal(data.roadmaps[chosen.id].stages[0].title, firstStageTitle);
-
-  // second profession: selecting + generating keeps the first roadmap
-  const other = data.professionOptions.find((p) => p.id !== chosen.id);
-  ({ data } = await post("/api/professions/select", { sessionId, professionId: other.id }));
-  assert.ok(data.roadmaps[chosen.id], "first roadmap survives selecting another profession");
-  ({ data } = await post("/api/roadmap/generate", { sessionId }));
-  assert.ok(data.roadmaps[other.id], "second roadmap generated");
-  assert.ok(data.roadmaps[chosen.id], "first roadmap still present");
-  assert.equal(Object.keys(data.roadmaps).length, 2);
+  assert.ok(data.roadmaps.output_3.stages.length >= 4);
+  const firstStageTitle = data.roadmaps.output_3.stages[0].title;
+  ({ data } = await post("/api/roadmap/generate", { sessionId, outputId: "output_3" }));
+  assert.equal(data.roadmaps.output_3.stages[0].title, firstStageTitle, "cached");
 });
 
-test("guards: ordering and validation", async () => {
+test("output guards: ordering, XOR body, accept-once, roadmap gating", async () => {
   const { data: start } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "x", cvIntent: "new" });
-  const sessionId = start.sessionId;
-
-  // direction endpoints require completed assessment
-  let res = await post("/api/direction/question", { sessionId });
+  // outputs require a completed assessment
+  let res = await post("/api/output/first", { sessionId: start.sessionId });
   assert.equal(res.status, 400);
 
-  // confirm without proposal
-  const done = await completeAssessment();
-  res = await post("/api/direction/confirm", { sessionId: done.sessionId });
+  const { sessionId } = await completeAssessment();
+  await post("/api/output/first", { sessionId });
+
+  // refine: unknown output
+  res = await post("/api/output/refine", { sessionId, outputId: "output_99", notSuitable: true });
+  assert.equal(res.status, 400);
+  // refine: neither notSuitable nor changes
+  res = await post("/api/output/refine", { sessionId, outputId: "output_1" });
+  assert.equal(res.status, 400);
+  // refine: both notSuitable and changes
+  res = await post("/api/output/refine", {
+    sessionId, outputId: "output_1", notSuitable: true, changes: [{ param: "social", reason: "" }],
+  });
+  assert.equal(res.status, 400);
+  // refine: invalid param / duplicate params
+  res = await post("/api/output/refine", { sessionId, outputId: "output_1", changes: [{ param: "salary" }] });
+  assert.equal(res.status, 400);
+  res = await post("/api/output/refine", {
+    sessionId, outputId: "output_1",
+    changes: [{ param: "social", reason: "a" }, { param: "social", reason: "b" }],
+  });
   assert.equal(res.status, 400);
 
-  // roadmap without selection
-  res = await post("/api/roadmap/generate", { sessionId: done.sessionId });
+  // roadmap before accept
+  res = await post("/api/roadmap/generate", { sessionId, outputId: "output_1" });
+  assert.equal(res.status, 400);
+
+  // accept unknown output
+  res = await post("/api/output/accept", { sessionId, outputId: "output_99" });
+  assert.equal(res.status, 400);
+
+  // accept, then refine/accept again must 400
+  await post("/api/output/accept", { sessionId, outputId: "output_1" });
+  res = await post("/api/output/refine", { sessionId, outputId: "output_1", notSuitable: true });
+  assert.equal(res.status, 400);
+  res = await post("/api/output/accept", { sessionId, outputId: "output_1" });
   assert.equal(res.status, 400);
 
   // unknown session
-  res = await post("/api/direction/question", { sessionId: "nope" });
+  res = await post("/api/output/first", { sessionId: "nope" });
   assert.equal(res.status, 404);
 });
 
-test("select rejects a professionId that is not one of the options", async () => {
-  const { sessionId } = await completeAssessment();
-  await post("/api/direction/question", { sessionId });
-  let { data } = await post("/api/direction/question", { sessionId });
-  for (const q of data.directionQuestions) {
-    ({ data } = await post("/api/direction/answer", { sessionId, questionId: q.id, value: q.options[0].value }));
-  }
-  ({ data } = await post("/api/direction/choose", { sessionId, directionId: data.directionTieCandidates[0].id }));
-  ({ data } = await post("/api/direction/confirm", { sessionId }));
-  for (const q of data.narrowingQuestions) {
-    ({ data } = await post("/api/professions/narrow", { sessionId, questionId: q.id, value: q.options[0].value }));
-  }
-  const res = await post("/api/professions/select", { sessionId, professionId: "prof_99" });
-  assert.equal(res.status, 400);
-});
-
-test("monetization and branch routes are gone", async () => {
-  for (const path of ["/api/payment/unlock-theme", "/api/branches/initial", "/api/branches/create", "/api/branches/evolve"]) {
+test("monetization, branch, and direction-era routes are gone", async () => {
+  for (const path of [
+    "/api/payment/unlock-theme",
+    "/api/branches/initial",
+    "/api/branches/create",
+    "/api/branches/evolve",
+    "/api/direction/question",
+    "/api/direction/answer",
+    "/api/direction/confirm",
+    "/api/direction/refine",
+    "/api/direction/choose",
+    "/api/professions/narrow",
+    "/api/professions/select",
+  ]) {
     const res = await post(path, {});
     assert.equal(res.status, 404, `${path} should be removed`);
   }
-});
-
-test("direction refinement: reject twice, then manual choose", async () => {
-  const { sessionId } = await completeAssessment();
-  let { data } = await post("/api/direction/question", { sessionId });
-  for (const q of data.directionQuestions) {
-    ({ data } = await post("/api/direction/answer", { sessionId, questionId: q.id, value: q.options[0].value }));
-  }
-  // resolve the 1-1-1 tie, then exercise the refine cycle from a proposal
-  ({ data } = await post("/api/direction/choose", { sessionId, directionId: data.directionTieCandidates[0].id }));
-  assert.ok(data.proposedDirection.reason, "proposal carries a reason");
-  const first = data.proposedDirection.id;
-
-  // guards
-  let res = await post("/api/direction/refine", { sessionId, reasonChoice: "nope", feedbackText: "" });
-  assert.equal(res.status, 400, "invalid reason rejected");
-
-  // reject #1
-  ({ data } = await post("/api/direction/refine", { sessionId, reasonChoice: "interests", feedbackText: "I want to work with people" }));
-  assert.equal(data.rejectedDirections.length, 1);
-  assert.equal(data.rejectedDirections[0].id, first);
-  assert.notEqual(data.proposedDirection.id, first);
-  assert.ok(data.proposedDirection.reason);
-  const second = data.proposedDirection.id;
-
-  // reject #2
-  ({ data } = await post("/api/direction/refine", { sessionId, reasonChoice: "environment", feedbackText: "" }));
-  assert.equal(data.rejectedDirections.length, 2);
-  assert.notEqual(data.proposedDirection.id, first);
-  assert.notEqual(data.proposedDirection.id, second);
-
-  // choose: rejected id -> 400; valid -> proposal "Chosen by you."
-  res = await post("/api/direction/choose", { sessionId, directionId: first });
-  assert.equal(res.status, 400);
-  // the catalog is a static-snapshot field; refine responses no longer carry it
-  const catalogRes = await fetch(`${base}/api/session/${sessionId}`);
-  const { directionCatalog } = await catalogRes.json();
-  const pick = directionCatalog.find(
-    (d) => ![first, second].includes(d.id)
-  );
-  ({ data } = await post("/api/direction/choose", { sessionId, directionId: pick.id }));
-  assert.equal(data.proposedDirection.id, pick.id);
-  assert.equal(data.proposedDirection.reason, "Chosen by you.");
-
-  // confirm still works after choose
-  ({ data } = await post("/api/direction/confirm", { sessionId }));
-  assert.equal(data.direction.id, pick.id);
-});
-
-test("refine guards: no proposal and confirmed direction", async () => {
-  const { sessionId } = await completeAssessment();
-  // no proposal yet
-  let res = await post("/api/direction/refine", { sessionId, reasonChoice: "interests", feedbackText: "" });
-  assert.equal(res.status, 400);
-
-  // confirm a direction, then refine/choose must 400
-  let { data } = await post("/api/direction/question", { sessionId });
-  for (const q of data.directionQuestions) {
-    ({ data } = await post("/api/direction/answer", { sessionId, questionId: q.id, value: q.options[0].value }));
-  }
-  ({ data } = await post("/api/direction/choose", { sessionId, directionId: data.directionTieCandidates[0].id }));
-  await post("/api/direction/confirm", { sessionId });
-  res = await post("/api/direction/refine", { sessionId, reasonChoice: "interests", feedbackText: "" });
-  assert.equal(res.status, 400);
-  res = await post("/api/direction/choose", { sessionId, directionId: "media" });
-  assert.equal(res.status, 400);
 });
 
 test("GET /api/session/:id returns enough state to resume after a reload", async () => {
