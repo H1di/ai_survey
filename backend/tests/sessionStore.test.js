@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const { SessionStore } = require("../sessionStore");
 
 function makeSession(store) {
-  return store.createSession({ entryChoice: "find", dreamAnswer: "build things" });
+  return store.createSession({ entryChoice: "find", dreamAnswer: "build things", cvIntent: "new" });
 }
 
 test("createSession initializes Page 3 fields and keeps Page 1/2 fields", () => {
@@ -15,7 +15,24 @@ test("createSession initializes Page 3 fields and keeps Page 1/2 fields", () => 
   assert.equal(s.step, "demographics");
   assert.deepEqual(s.demographics, {});
   assert.deepEqual(s.bigFiveAnswers, {});
-  assert.deepEqual(s.valuesAnswers, {});
+  // v2 assessment fields
+  assert.equal(s.cvIntent, "new");
+  assert.equal(s.cvText, null);
+  assert.equal(s.cvAnalysis, null);
+  assert.deepEqual(s.riasecItems, []);
+  assert.deepEqual(s.riasecAnswers, {});
+  assert.equal(s.riasecScores, null);
+  assert.equal(s.riasecCode, null);
+  assert.equal(s.riasecInferred, false);
+  assert.equal(s.jobCharRanking, null);
+  assert.equal(s.jobCharDepth, null);
+  assert.deepEqual(s.jobCharItems, []);
+  assert.deepEqual(s.jobCharAnswers, {});
+  assert.equal(s.jobCharProfile, null);
+  assert.deepEqual(s.careerJourneyAnswers, {});
+  // Old values model gone
+  assert.equal("valuesAnswers" in s, false);
+  assert.equal("valuesScores" in s, false);
   // New Page 3 fields
   assert.equal(s.pathStage, "direction");
   assert.deepEqual(s.directionQuestions, []);
@@ -131,12 +148,11 @@ test("serializeSessionState exposes question lists and answers for back-navigati
     { id: "bf1", text: "Item one", trait: "O", reverse: true },
   ]);
   store.recordBigFiveAnswer(s, "bf1", 4);
-  store.recordValuesAnswer(s, "values_1", "A");
   store.setDemographicAnswer(s, "sex", "female");
 
   const snapshot = store.serializeSessionState(s, { done: false }, {});
 
-  assert.equal(snapshot.demographicQuestions.length, 3);
+  assert.equal(snapshot.demographicQuestions.length, 4);
   for (const q of snapshot.demographicQuestions) {
     assert.ok(q.id && q.kind && q.question);
   }
@@ -146,11 +162,62 @@ test("serializeSessionState exposes question lists and answers for back-navigati
   assert.deepEqual(snapshot.bigFiveItems, [{ id: "bf1", text: "Item one" }]);
   assert.deepEqual(snapshot.bigFiveAnswers, { bf1: 4 });
 
-  assert.equal(snapshot.valuesQuestions.length, 40);
-  for (const q of snapshot.valuesQuestions) {
-    assert.ok(q.id && q.dimension && q.optionA && q.optionB);
-  }
-  assert.deepEqual(snapshot.valuesAnswers, { values_1: "A" });
+  assert.equal("valuesQuestions" in snapshot, false, "values bank is gone");
+  assert.equal("valuesAnswers" in snapshot, false);
+});
+
+test("createSession initializes v2 fields and serialization exposes them", () => {
+  const store = new SessionStore();
+  const session = store.createSession({ entryChoice: "find", dreamAnswer: "x", cvIntent: "use_skills" });
+  assert.equal(session.step, "demographics");
+  assert.equal(session.cvIntent, "use_skills");
+
+  const snap = store.serializeSessionState(session, {}, {}, { includeStatic: true });
+  assert.ok(Array.isArray(snap.careerJourneyQuestions) && snap.careerJourneyQuestions.length === 7);
+  assert.equal(snap.jobCharParams.length, 7);
+  assert.equal(snap.valuesQuestions, undefined, "values bank is gone");
+  assert.equal(snap.cvProvided, false);
+
+  const trimmed = store.serializeSessionState(session, {}, {}, { includeStatic: false });
+  assert.equal(trimmed.careerJourneyQuestions, undefined);
+  assert.ok("riasecAnswers" in trimmed, "dynamic riasec state always travels");
+  assert.ok("jobCharItems" in trimmed, "jobChar items travel on every snapshot");
+});
+
+test("riasec items serialize without the scoring type", () => {
+  const store = new SessionStore();
+  const s = makeSession(store);
+  store.setRiasecItems(s, [{ id: "ri_1", type: "R", text: "Fixing things" }]);
+  const snap = store.serializeSessionState(s, {}, {}, { includeStatic: true });
+  assert.deepEqual(snap.riasecItems, [{ id: "ri_1", text: "Fixing things" }]);
+});
+
+test("v2 mutators: riasec, jobChar, cv, journey", () => {
+  const store = new SessionStore();
+  const s = makeSession(store);
+
+  store.setRiasecItems(s, [{ id: "ri_1", type: "R", text: "x" }]);
+  store.recordRiasecAnswer(s, "ri_1", 5);
+  assert.equal(s.riasecAnswers.ri_1, 5);
+  store.setRiasecScores(s, { R: 100, I: 0, A: 0, S: 0, E: 0, C: 0 }, "RIA", { inferred: true });
+  assert.equal(s.riasecCode, "RIA");
+  assert.equal(s.riasecInferred, true);
+  // re-setting items resets downstream riasec state
+  store.setRiasecItems(s, [{ id: "ri_1", type: "R", text: "y" }]);
+  assert.deepEqual(s.riasecAnswers, {});
+  assert.equal(s.riasecScores, null);
+  assert.equal(s.riasecInferred, false);
+
+  const items = [{ id: "jc_1", param: "social", text: "q", options: [{ value: 80, label: "l" }] }];
+  store.setJobCharRanking(s, ["social"], 5, items);
+  store.recordJobCharAnswer(s, "jc_1", 80);
+  store.setJobCharProfile(s, { social: 80 });
+  assert.equal(s.jobCharProfile.social, 80);
+
+  store.setCvAnalysis(s, "raw cv", { skills: ["a"], domains: [], seniority: "mid" });
+  assert.equal(s.cvText, "raw cv");
+  store.recordCareerJourneyAnswer(s, "cj_education", "BSc");
+  assert.equal(s.careerJourneyAnswers.cj_education, "BSc");
 });
 
 test("rejectProposedDirection records the rejection and clears the proposal", () => {

@@ -3,15 +3,21 @@ const { randomUUID } = require("node:crypto");
 const { DIRECTIONS, REFINE_REASONS } = require("./directions");
 const {
   DEMOGRAPHIC_QUESTIONS,
-  VALUES_QUESTIONS,
-  VALUES_DIMENSIONS,
+  JOB_CHAR_PARAMS,
+  CAREER_JOURNEY_QUESTIONS,
 } = require("./questionPool");
-const { serializeDemographic, serializeValueQuestion } = require("./questionEngine");
+const {
+  serializeDemographic,
+  serializeRiasecItem,
+  serializeJobCharItem,
+} = require("./questionEngine");
 
 const DIRECTION_CATALOG = DIRECTIONS.map(({ id, label }) => ({ id, label }));
 
 const SERIALIZED_DEMOGRAPHIC_QUESTIONS = DEMOGRAPHIC_QUESTIONS.map(serializeDemographic);
-const SERIALIZED_VALUES_QUESTIONS = VALUES_QUESTIONS.map(serializeValueQuestion);
+const SERIALIZED_JOURNEY_QUESTIONS = CAREER_JOURNEY_QUESTIONS.map(
+  ({ id, question, placeholder }) => ({ id, question, placeholder })
+);
 
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
@@ -48,7 +54,7 @@ class SessionStore {
     this.sweepTimer = null;
   }
 
-  createSession({ entryChoice, dreamAnswer }) {
+  createSession({ entryChoice, dreamAnswer, cvIntent }) {
     const id = randomUUID();
     const now = new Date().toISOString();
 
@@ -63,8 +69,20 @@ class SessionStore {
       bigFiveAnswers: {},
       bigFiveScores: null,
       derivedTraits: null,
-      valuesAnswers: {},
-      valuesScores: null,
+      cvIntent: cvIntent || "new",
+      cvText: null,
+      cvAnalysis: null,
+      riasecItems: [],
+      riasecAnswers: {},
+      riasecScores: null,
+      riasecCode: null,
+      riasecInferred: false,
+      jobCharRanking: null,
+      jobCharDepth: null,
+      jobCharItems: [],
+      jobCharAnswers: {},
+      jobCharProfile: null,
+      careerJourneyAnswers: {},
       // Page 3 — Life Path Engine
       pathStage: "direction",
       directionQuestions: [],
@@ -137,13 +155,54 @@ class SessionStore {
     this.touch(session);
   }
 
-  recordValuesAnswer(session, questionId, choice) {
-    session.valuesAnswers[questionId] = choice;
+  setRiasecItems(session, items) {
+    session.riasecItems = items;
+    session.riasecAnswers = {};
+    session.riasecScores = null;
+    session.riasecCode = null;
+    session.riasecInferred = false;
     this.touch(session);
   }
 
-  setValuesScores(session, scores) {
-    session.valuesScores = scores;
+  recordRiasecAnswer(session, itemId, value) {
+    session.riasecAnswers[itemId] = value;
+    this.touch(session);
+  }
+
+  setRiasecScores(session, scores, code, { inferred = false } = {}) {
+    session.riasecScores = scores;
+    session.riasecCode = code;
+    session.riasecInferred = inferred;
+    this.touch(session);
+  }
+
+  setJobCharRanking(session, ranking, depth, items) {
+    session.jobCharRanking = ranking;
+    session.jobCharDepth = depth;
+    session.jobCharItems = items;
+    session.jobCharAnswers = {};
+    session.jobCharProfile = null;
+    this.touch(session);
+  }
+
+  recordJobCharAnswer(session, itemId, value) {
+    session.jobCharAnswers[itemId] = value;
+    this.touch(session);
+  }
+
+  setJobCharProfile(session, profile) {
+    session.jobCharProfile = profile;
+    this.touch(session);
+  }
+
+  setCvAnalysis(session, cvText, analysis) {
+    session.cvText = cvText;
+    session.cvAnalysis = analysis;
+    this.touch(session);
+  }
+
+  recordCareerJourneyAnswer(session, questionId, value) {
+    session.careerJourneyAnswers[questionId] = value;
     this.touch(session);
   }
 
@@ -227,9 +286,10 @@ class SessionStore {
       ? {
           demographicQuestions: SERIALIZED_DEMOGRAPHIC_QUESTIONS,
           bigFiveItems: session.bigFiveItems.map((i) => ({ id: i.id, text: i.text })),
-          valuesQuestions: SERIALIZED_VALUES_QUESTIONS,
+          riasecItems: session.riasecItems.map(serializeRiasecItem),
+          jobCharParams: JOB_CHAR_PARAMS,
+          careerJourneyQuestions: SERIALIZED_JOURNEY_QUESTIONS,
           directionCatalog: DIRECTION_CATALOG,
-          valuesDimensions: VALUES_DIMENSIONS,
           refineReasons: REFINE_REASONS,
         }
       : {};
@@ -245,8 +305,19 @@ class SessionStore {
       bigFiveAnswers: session.bigFiveAnswers,
       bigFiveScores: session.bigFiveScores,
       derivedTraits: session.derivedTraits,
-      valuesAnswers: session.valuesAnswers,
-      valuesScores: session.valuesScores,
+      cvIntent: session.cvIntent,
+      cvProvided: Boolean(session.cvText),
+      cvAnalysis: session.cvAnalysis,
+      riasecAnswers: session.riasecAnswers,
+      riasecScores: session.riasecScores,
+      riasecCode: session.riasecCode,
+      riasecInferred: session.riasecInferred,
+      jobCharRanking: session.jobCharRanking,
+      jobCharDepth: session.jobCharDepth,
+      jobCharItems: session.jobCharItems.map(serializeJobCharItem),
+      jobCharAnswers: session.jobCharAnswers,
+      jobCharProfile: session.jobCharProfile,
+      careerJourneyAnswers: session.careerJourneyAnswers,
       progress,
       summary,
       pathStage: session.pathStage,
