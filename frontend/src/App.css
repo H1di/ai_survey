@@ -482,3 +482,7 @@
 .rank-meaning { font-size: 12px; opacity: 0.65; }
 .rank-controls { display: flex; gap: 4px; }
 .rank-controls .ghost-action { min-width: 40px; min-height: 40px; }
+
+/* CV stage */
+.cv-input { min-height: 180px; }
+.cv-upload { cursor: pointer; }

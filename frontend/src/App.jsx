@@ -20,9 +20,12 @@ import {
   startSession,
   submitBigFiveAnswer,
   submitDemographics,
+  submitCvText,
   submitJobCharAnswer,
   submitJobCharRanking,
+  submitJourneyAnswer,
   submitRiasecAnswer,
+  uploadCvFile,
 } from "./api";
 import { buildLifePathGraph, firstUnansweredIndex, moveRankItem, selectDockCard } from "./lifePath";
 import "./App.css";
@@ -181,7 +184,7 @@ function DepthChoiceCard({ busy, onChoose }) {
         >
           <p className="depth-title">Short</p>
           <p className="depth-meta">20 personality questions • 3–5 minutes</p>
-          <p className="depth-meta">63 questions overall • ~10 minutes to your paths</p>
+          <p className="depth-meta">≈50 questions overall • ~12 minutes to your paths</p>
         </button>
         <button
           type="button"
@@ -191,7 +194,7 @@ function DepthChoiceCard({ busy, onChoose }) {
         >
           <p className="depth-title">Deep</p>
           <p className="depth-meta">50 personality questions • 8–12 minutes</p>
-          <p className="depth-meta">93 questions overall • ~18 minutes to your paths</p>
+          <p className="depth-meta">≈90 questions overall • ~22 minutes to your paths</p>
         </button>
       </div>
       {busy && <p className="depth-loading">Generating items…</p>}
@@ -265,6 +268,59 @@ function RiasecQuestionCard({ q, savedValue, busy, onSubmit, onBack, canGoBack, 
           Skip the quiz — estimate my interests from my answers so far
         </button>
       )}
+    </div>
+  );
+}
+
+function CvCard({ mode, setMode, cvDraft, setCvDraft, busy, onSubmitText, onUploadFile }) {
+  if (mode === "paste") {
+    return (
+      <div className="question-card">
+        <div className="question-card-top">
+          <button type="button" className="ghost-action back-action" onClick={() => setMode("choice")} disabled={busy}>
+            ← Back
+          </button>
+          <p className="question-category">Your experience</p>
+        </div>
+        <h3>Paste your CV</h3>
+        <textarea
+          className="dream-input cv-input"
+          value={cvDraft}
+          maxLength={6000}
+          onChange={(e) => setCvDraft(e.target.value)}
+          placeholder="Paste the text of your CV or a summary of your experience"
+        />
+        <div className="question-actions single">
+          <button type="button" className="primary-action" onClick={onSubmitText} disabled={busy || !cvDraft.trim()}>
+            {busy ? "Analysing..." : "Analyse my CV"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="question-card">
+      <p className="question-category">Your experience</p>
+      <h3>Let's factor in what you already have.</h3>
+      <div className="option-list">
+        <button type="button" className="option-button" onClick={() => setMode("paste")} disabled={busy}>
+          Paste my CV as text
+        </button>
+        <label className="option-button cv-upload">
+          Upload a file (.pdf, .docx, .txt — max 2 MB)
+          <input
+            type="file"
+            accept=".pdf,.docx,.txt"
+            hidden
+            disabled={busy}
+            onChange={(e) => e.target.files?.[0] && onUploadFile(e.target.files[0])}
+          />
+        </label>
+        <button type="button" className="option-button" onClick={() => setMode("journey")} disabled={busy}>
+          No CV — ask me 7 quick questions instead
+        </button>
+      </div>
+      {busy && <p className="dock-busy">Reading your CV…</p>}
     </div>
   );
 }
@@ -750,6 +806,62 @@ function App() {
       setError(e.message || "Could not save.");
     } finally {
       setBusy((p) => ({ ...p, jobChar: false }));
+    }
+  };
+
+  const handleSubmitCvText = async () => {
+    if (!sessionId || !cvDraft.trim()) return;
+    setError("");
+    setBusy((p) => ({ ...p, cv: true }));
+    try {
+      const data = await submitCvText({ sessionId, cvText: cvDraft.trim() });
+      applySessionSnapshot(data);
+      setRetryAction(null);
+    } catch (e) {
+      setError(e.message || "Could not analyse the CV.");
+      setRetryAction(() => handleSubmitCvText);
+    } finally {
+      setBusy((p) => ({ ...p, cv: false }));
+    }
+  };
+
+  const handleUploadCv = async (file) => {
+    if (!sessionId) return;
+    setError("");
+    setBusy((p) => ({ ...p, cv: true }));
+    try {
+      const data = await uploadCvFile({ sessionId, file });
+      applySessionSnapshot(data);
+      setRetryAction(null);
+    } catch (e) {
+      setError(e.message || "Could not read the file.");
+    } finally {
+      setBusy((p) => ({ ...p, cv: false }));
+    }
+  };
+
+  const handleSubmitJourney = async (rawValue) => {
+    if (!sessionId) return;
+    const q = careerJourneyQuestions[journeyIndex];
+    if (!q || !String(rawValue).trim()) return;
+    setError("");
+    setBusy((p) => ({ ...p, journey: true }));
+    try {
+      const data = await submitJourneyAnswer({
+        sessionId,
+        questionId: q.id,
+        value: String(rawValue).trim(),
+      });
+      applySessionSnapshot(data);
+      if (journeyIndex < careerJourneyQuestions.length - 1) {
+        const nextQ = careerJourneyQuestions[journeyIndex + 1];
+        setJourneyDraft(data.careerJourneyAnswers?.[nextQ.id] || "");
+        setJourneyIndex((i) => i + 1);
+      }
+    } catch (e) {
+      setError(e.message || "Could not save.");
+    } finally {
+      setBusy((p) => ({ ...p, journey: false }));
     }
   };
 
@@ -1394,6 +1506,72 @@ function App() {
               canGoBack={jcIndex > 0}
               progress={{ index: jcIndex, total: jobCharItems.length }}
             />
+          )}
+
+          {step === "cv" && cvMode !== "journey" && (
+            <CvCard
+              mode={cvMode}
+              setMode={setCvMode}
+              cvDraft={cvDraft}
+              setCvDraft={setCvDraft}
+              busy={busy.cv}
+              onSubmitText={handleSubmitCvText}
+              onUploadFile={handleUploadCv}
+            />
+          )}
+
+          {step === "cv" && cvMode === "journey" && careerJourneyQuestions[journeyIndex] && (
+            <div className="question-card">
+              <div className="question-card-top">
+                <button
+                  type="button"
+                  className="ghost-action back-action"
+                  onClick={() => {
+                    if (journeyIndex === 0) {
+                      setCvMode("choice");
+                    } else {
+                      const prevQ = careerJourneyQuestions[journeyIndex - 1];
+                      setJourneyDraft(careerJourneyAnswers[prevQ.id] || "");
+                      setJourneyIndex((i) => i - 1);
+                    }
+                  }}
+                  disabled={busy.journey}
+                >
+                  ← Back
+                </button>
+                <p className="question-category">
+                  Question {journeyIndex + 1} of {careerJourneyQuestions.length}
+                </p>
+              </div>
+              <h3>{careerJourneyQuestions[journeyIndex].question}</h3>
+              <form
+                key={careerJourneyQuestions[journeyIndex].id}
+                className="question-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSubmitJourney(journeyDraft);
+                }}
+              >
+                <textarea
+                  autoFocus
+                  className="question-textarea"
+                  value={journeyDraft}
+                  maxLength={400}
+                  placeholder={careerJourneyQuestions[journeyIndex].placeholder}
+                  onChange={(e) => setJourneyDraft(e.target.value)}
+                  disabled={busy.journey}
+                />
+                <div className="question-actions single">
+                  <button
+                    type="submit"
+                    className="primary-action"
+                    disabled={busy.journey || !journeyDraft.trim()}
+                  >
+                    {busy.journey ? "Saving..." : "Next"}
+                  </button>
+                </div>
+              </form>
+            </div>
           )}
 
           {step === "tree" && (
