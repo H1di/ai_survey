@@ -11,6 +11,7 @@ import {
   Cell,
   ResponsiveContainer,
 } from "recharts";
+import SchwartzMap from "./SchwartzMap";
 import "./ProfileCharts.css";
 
 const ACCENT = "#863bff";
@@ -131,7 +132,7 @@ export function RiasecBarChart({ scores, code, inferred }) {
   );
 }
 
-export default function ProfilePanel({ profile, onClose }) {
+export default function ProfilePanel({ profile, valuesMap, onClose }) {
   const { bigFiveScores, derivedTraits, riasecScores, riasecCode, riasecInferred, bigFiveDepth } =
     profile || {};
 
@@ -152,6 +153,7 @@ export default function ProfilePanel({ profile, onClose }) {
         </p>
       )}
       <RiasecBarChart scores={riasecScores} code={riasecCode} inferred={riasecInferred} />
+      {valuesMap && <SchwartzMap userPoint={valuesMap.userPoint} jobs={valuesMap.jobs} />}
       {derivedTraits?.summary && <p className="profile-panel-summary">{derivedTraits.summary}</p>}
       <p className="profile-panel-note">
         Directions and professions are picked from these survey scores — your dream answer only

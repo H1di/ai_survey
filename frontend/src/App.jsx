@@ -1089,6 +1089,23 @@ function App() {
     onStageOpen: handleStageOpen,
   });
 
+  // Points for the Schwartz circumplex map: the user's inferred plane point
+  // plus every generated output, all pre-derived by the backend.
+  const valuesMap = profile?.userValuesAxes
+    ? {
+        userPoint: profile.userValuesAxes,
+        jobs: outputs
+          .filter((o) => o.axes)
+          .map((o) => ({
+            id: o.id,
+            label: o.jobTitle,
+            point: o.axes,
+            fit: o.valuesFit ? o.valuesFit.overall : null,
+            accepted: o.id === acceptedOutputId,
+          })),
+      }
+    : null;
+
   const selectedRoadmap = acceptedOutputId ? roadmaps[acceptedOutputId] : null;
   const roadmapVisible = Boolean(selectedRoadmap);
 
@@ -1532,6 +1549,7 @@ function App() {
             {profileOpen && (
               <ProfilePanel
                 profile={profile}
+                valuesMap={valuesMap}
                 onClose={() => setProfileOpen(false)}
               />
             )}
