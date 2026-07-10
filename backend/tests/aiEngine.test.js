@@ -13,7 +13,6 @@ function fakeSession(overrides = {}) {
     demographics: { age: 30, country: "Testland" },
     bigFiveScores: { O: 70, C: 60, E: 40, A: 55, N: 45 },
     derivedTraits: null,
-    valuesScores: null,
     direction: { id: "tech", label: "Programming & Technology" },
     directionQuestions: [],
     directionAnswers: {},
@@ -165,12 +164,97 @@ test("item validator rejects duplicate texts and wrong counts", () => {
   assert.throws(() => normalizeBigFiveItemsPayload({}, 20), /Expected 20/);
 });
 
-test("generateBigFiveItems serves static IPIP by default even with a client", async () => {
-  // A key is present but the AI_BIG_FIVE_ITEMS flag is not set -> static set,
-  // and no network call is attempted (a fake key would explode otherwise).
-  delete process.env.AI_BIG_FIVE_ITEMS;
-  const keyedEngine = createAiEngine({ apiKey: "sk-fake", model: "test" });
-  const items = await keyedEngine.generateBigFiveItems({ depth: "deep" });
-  assert.equal(items.length, 50);
-  assert.equal(items[0].id, "ipip_1");
+test("generateBigFiveItems: AI_BIG_FIVE_ITEMS=false forces static IPIP even with a client", async () => {
+  // AI-generated items are the default when a key exists (v2); the flag set
+  // to false must force the static set with no network call attempted (a
+  // fake key would explode otherwise).
+  process.env.AI_BIG_FIVE_ITEMS = "false";
+  try {
+    const keyedEngine = createAiEngine({ apiKey: "sk-fake", model: "test" });
+    const items = await keyedEngine.generateBigFiveItems({ depth: "deep" });
+    assert.equal(items.length, 50);
+    assert.equal(items[0].id, "ipip_1");
+  } finally {
+    delete process.env.AI_BIG_FIVE_ITEMS;
+  }
+});
+
+// --- v2 generators (RIASEC, job characteristics, CV) ---
+
+const {
+  normalizeRiasecItemsPayload,
+  normalizeRiasecScoresPayload,
+  normalizeJobCharQuestionsPayload,
+  normalizeCvAnalysisPayload,
+} = require("../aiEngine");
+const { getFallbackRiasecItems } = require("../riasecItems");
+
+test("normalizeRiasecItemsPayload enforces count, per-type balance, unique texts", () => {
+  const good = { items: getFallbackRiasecItems("short").map(({ type, text }) => ({ type, text })) };
+  const items = normalizeRiasecItemsPayload(good, 12);
+  assert.equal(items.length, 12);
+  assert.deepEqual(items.map((i) => i.id), items.map((_, n) => `ri_${n + 1}`));
+
+  assert.throws(() => normalizeRiasecItemsPayload({ items: good.items.slice(0, 11) }, 12), /Expected 12/);
+  const lopsided = { items: good.items.map((i) => ({ ...i, type: "R" })) };
+  assert.throws(() => normalizeRiasecItemsPayload(lopsided, 12), /type R/);
+  const dupes = { items: good.items.map((i) => ({ ...i, text: "Same text" })) };
+  assert.throws(() => normalizeRiasecItemsPayload(dupes, 12), /Duplicate/);
+});
+
+test("normalizeRiasecScoresPayload clamps and requires all six keys", () => {
+  const scores = normalizeRiasecScoresPayload({ scores: { R: -5, I: 200, A: 50.6, S: 0, E: 100, C: 33 } });
+  assert.deepEqual(scores, { R: 0, I: 100, A: 51, S: 0, E: 100, C: 33 });
+  assert.throws(() => normalizeRiasecScoresPayload({ scores: { R: 1, I: 2, A: 3, S: 4, E: 5 } }), /missing/i);
+  assert.throws(
+    () => normalizeRiasecScoresPayload({ scores: { R: "high", I: 2, A: 3, S: 4, E: 5, C: 6 } }),
+    /missing|number/i
+  );
+});
+
+test("normalizeJobCharQuestionsPayload validates params, options, and sorts by ranking", () => {
+  const ranking = ["social", "compensation", "work_mode", "job_security", "career_growth", "complexity", "meaning_impact"];
+  const payload = {
+    items: [
+      { param: "compensation", text: "Money?", options: [{ value: 90, label: "Max" }, { value: 40, label: "Med" }, { value: 10, label: "Low" }] },
+      { param: "social", text: "People?", options: [{ value: 80, label: "Lots" }, { value: 20, label: "Few" }, { value: 50, label: "Some" }] },
+    ],
+  };
+  const items = normalizeJobCharQuestionsPayload(payload, { count: 2, ranking });
+  assert.equal(items[0].param, "social", "items re-sorted into ranking order");
+  assert.deepEqual(items.map((i) => i.id), ["jc_1", "jc_2"]);
+
+  assert.throws(() => normalizeJobCharQuestionsPayload({ items: [payload.items[0]] }, { count: 2, ranking }), /Expected 2/);
+  const badParam = { items: [{ ...payload.items[0], param: "salary" }, payload.items[1]] };
+  assert.throws(() => normalizeJobCharQuestionsPayload(badParam, { count: 2, ranking }), /param/);
+  const twoOptions = { items: [{ ...payload.items[0], options: payload.items[0].options.slice(0, 2) }, payload.items[1]] };
+  assert.throws(() => normalizeJobCharQuestionsPayload(twoOptions, { count: 2, ranking }), /3–4 options/);
+});
+
+test("normalizeCvAnalysisPayload trims, caps, and requires at least one skill", () => {
+  const parsed = normalizeCvAnalysisPayload({
+    skills: ["  welding ", "", 42, "safety"],
+    domains: ["construction"],
+    seniority: "senior",
+  });
+  assert.deepEqual(parsed, { skills: ["welding", "safety"], domains: ["construction"], seniority: "senior" });
+  assert.throws(() => normalizeCvAnalysisPayload({ skills: [], domains: [], seniority: "" }), /skill/);
+});
+
+test("keyless engine: riasec items fall back to the static pool, analyzeCV to empty signal", async () => {
+  const items = await engine.generateRiasecItems({ depth: "deep" });
+  assert.equal(items.length, 18);
+  const analysis = await engine.analyzeCV({ cvText: "whatever" });
+  assert.deepEqual(analysis, { skills: [], domains: [], seniority: "" });
+});
+
+test("keyless engine: inferRiasecProfile derives from Big Five; jobChar questions from the bank", async () => {
+  const scores = await engine.inferRiasecProfile({ session: fakeSession() });
+  for (const key of ["R", "I", "A", "S", "E", "C"]) {
+    assert.ok(scores[key] >= 0 && scores[key] <= 100);
+  }
+  const ranking = ["social", "compensation", "work_mode", "job_security", "career_growth", "complexity", "meaning_impact"];
+  const questions = await engine.generateJobCharQuestions({ session: fakeSession(), ranking, count: 5 });
+  assert.equal(questions.length, 5);
+  assert.equal(questions[0].param, "social");
 });

@@ -8,10 +8,15 @@ const {
   buildProfessionsPrompt,
   buildRoadmapPrompt,
   buildDirectionRefinePrompt,
+  buildRiasecItemsPrompt,
+  buildRiasecInferencePrompt,
+  buildJobCharQuestionsPrompt,
+  buildCvParsePrompt,
 } = require("./prompts");
-const { VALUES_DIMENSIONS } = require("./questionPool");
+const { selectFallbackJobCharQuestions } = require("./questionPool");
 const { DIRECTIONS, DIRECTION_IDS, getDirection, computeDirection } = require("./directions");
 const { getFallbackItems } = require("./bigFiveItems");
+const { getFallbackRiasecItems } = require("./riasecItems");
 const { rankDirections, inferRiasecScores } = require("./riasec");
 
 function cleanText(value, fallback = "") {
@@ -62,11 +67,18 @@ function buildSessionDigest(session) {
   return buildProfileDigest({
     entryChoice: session.entryChoice,
     dreamAnswer: session.dreamAnswer,
+    cvIntent: session.cvIntent,
     demographics: session.demographics,
     bigFiveScores: session.bigFiveScores,
     derivedTraits: session.derivedTraits,
-    valuesScores: session.valuesScores,
-    valuesDimensions: VALUES_DIMENSIONS,
+    riasecScores: session.riasecScores,
+    riasecCode: session.riasecCode,
+    riasecInferred: session.riasecInferred,
+    jobCharRanking: session.jobCharRanking,
+    jobCharProfile: session.jobCharProfile,
+    cvAnalysis: session.cvAnalysis,
+    cvText: session.cvText,
+    careerJourneyAnswers: session.careerJourneyAnswers,
   });
 }
 
@@ -360,6 +372,85 @@ function normalizeBigFiveItemsPayload(payload, expected) {
   return items;
 }
 
+const RIASEC_TYPES = ["R", "I", "A", "S", "E", "C"];
+
+function normalizeRiasecItemsPayload(payload, count) {
+  const raw = Array.isArray(payload?.items) ? payload.items : [];
+  const items = raw
+    .filter((i) => i && typeof i.text === "string" && i.text.trim() && RIASEC_TYPES.includes(i.type))
+    .map((i, idx) => ({ id: `ri_${idx + 1}`, type: i.type, text: i.text.trim().slice(0, 120) }));
+
+  if (items.length !== count) throw new Error(`Expected ${count} valid items, got ${items.length}.`);
+
+  const seen = new Set();
+  for (const item of items) {
+    const key = item.text.toLowerCase();
+    if (seen.has(key)) throw new Error(`Duplicate RIASEC item text: "${item.text}"`);
+    seen.add(key);
+  }
+  const perType = count / RIASEC_TYPES.length;
+  for (const type of RIASEC_TYPES) {
+    const n = items.filter((i) => i.type === type).length;
+    if (n !== perType) throw new Error(`Expected ${perType} items of type ${type}, got ${n}.`);
+  }
+  return items;
+}
+
+function normalizeRiasecScoresPayload(payload) {
+  const raw = payload?.scores || {};
+  const scores = {};
+  for (const key of RIASEC_TYPES) {
+    const n = Number(raw[key]);
+    if (!Number.isFinite(n)) throw new Error(`RIASEC score ${key} missing or not a number.`);
+    scores[key] = Math.max(0, Math.min(100, Math.round(n)));
+  }
+  return scores;
+}
+
+function normalizeJobCharQuestionsPayload(payload, { count, ranking }) {
+  const raw = Array.isArray(payload?.items) ? payload.items : [];
+  if (raw.length !== count) throw new Error(`Expected ${count} questions, got ${raw.length}.`);
+
+  const items = raw.map((item) => {
+    if (!ranking.includes(item?.param)) throw new Error(`Invalid param: ${item?.param}`);
+    const text = cleanText(item?.text);
+    if (!text) throw new Error("Question missing text.");
+    const options = Array.isArray(item?.options) ? item.options : [];
+    if (options.length < 3 || options.length > 4) {
+      throw new Error(`Question needs 3–4 options, got ${options.length}.`);
+    }
+    return {
+      param: item.param,
+      text,
+      options: options.map((o) => {
+        const value = Number(o?.value);
+        const label = cleanText(o?.label);
+        if (!Number.isFinite(value) || !label) throw new Error("Option needs a numeric value and a label.");
+        return { value: Math.max(0, Math.min(100, Math.round(value))), label };
+      }),
+    };
+  });
+
+  // Serve questions in the user's importance order regardless of AI ordering.
+  items.sort((a, b) => ranking.indexOf(a.param) - ranking.indexOf(b.param));
+  return items.map((item, index) => ({ id: `jc_${index + 1}`, ...item }));
+}
+
+function normalizeCvAnalysisPayload(payload) {
+  const strings = (list, max) =>
+    (Array.isArray(list) ? list : [])
+      .filter((s) => typeof s === "string" && s.trim())
+      .map((s) => s.trim().slice(0, 60))
+      .slice(0, max);
+  const analysis = {
+    skills: strings(payload?.skills, 12),
+    domains: strings(payload?.domains, 6),
+    seniority: cleanText(payload?.seniority, "").slice(0, 80),
+  };
+  if (!analysis.skills.length) throw new Error("CV analysis produced no skills.");
+  return analysis;
+}
+
 function normalizeRefinePayload(payload, rejectedIds) {
   const directionId = payload?.directionId;
   if (!DIRECTION_IDS.includes(directionId) || rejectedIds.includes(directionId)) {
@@ -527,11 +618,66 @@ function createAiEngine({ apiKey, model }) {
     }
   }
 
+  async function generateRiasecItems({ depth }) {
+    if (!client) return getFallbackRiasecItems(depth);
+    try {
+      const count = depth === "deep" ? 18 : 12;
+      const { system, user } = buildRiasecItemsPrompt(count);
+      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.85 });
+      return normalizeRiasecItemsPayload(parsed, count);
+    } catch (error) {
+      console.error("[AI riasec items fallback]", error.message);
+      return getFallbackRiasecItems(depth);
+    }
+  }
+
+  async function inferRiasecProfile({ session }) {
+    if (!client) return inferRiasecScores(session.bigFiveScores);
+    try {
+      const { system, user } = buildRiasecInferencePrompt({
+        bigFiveScores: session.bigFiveScores,
+        dreamAnswer: session.dreamAnswer,
+      });
+      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.4 });
+      return normalizeRiasecScoresPayload(parsed);
+    } catch (error) {
+      console.error("[AI riasec inference fallback]", error.message);
+      return inferRiasecScores(session.bigFiveScores);
+    }
+  }
+
+  async function generateJobCharQuestions({ session, ranking, count }) {
+    if (!client) return selectFallbackJobCharQuestions(ranking, count);
+    try {
+      const { system, user } = buildJobCharQuestionsPrompt({ ranking, count });
+      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.8 });
+      return normalizeJobCharQuestionsPayload(parsed, { count, ranking });
+    } catch (error) {
+      console.error("[AI jobChar questions fallback]", error.message);
+      return selectFallbackJobCharQuestions(ranking, count);
+    }
+  }
+
+  // Keyless fallback returns an EMPTY signal on purpose: the profile digest
+  // then quotes a raw excerpt instead of pretending a parse happened.
+  async function analyzeCV({ cvText }) {
+    const empty = { skills: [], domains: [], seniority: "" };
+    if (!client) return empty;
+    try {
+      const { system, user } = buildCvParsePrompt(cvText);
+      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.2 });
+      return normalizeCvAnalysisPayload(parsed);
+    } catch (error) {
+      console.error("[AI cv parse fallback]", error.message);
+      return empty;
+    }
+  }
+
   async function generateBigFiveItems({ depth }) {
-    // Validated public-domain IPIP sets are the default instrument: every
-    // session gets identical, psychometrically anchored items. AI-generated
-    // items are experimental and must be opted into explicitly.
-    if (!client || process.env.AI_BIG_FIVE_ITEMS !== "true") {
+    // AI-generated items are the default instrument (v2); the validated
+    // static IPIP sets remain the fallback and can be forced with
+    // AI_BIG_FIVE_ITEMS=false.
+    if (!client || process.env.AI_BIG_FIVE_ITEMS === "false") {
       return getFallbackItems(depth);
     }
     try {
@@ -556,10 +702,18 @@ function createAiEngine({ apiKey, model }) {
     generateRoadmap,
     refineDirection,
     generateBigFiveItems,
+    generateRiasecItems,
+    inferRiasecProfile,
+    generateJobCharQuestions,
+    analyzeCV,
   };
 }
 
 module.exports = {
   createAiEngine,
   normalizeBigFiveItemsPayload,
+  normalizeRiasecItemsPayload,
+  normalizeRiasecScoresPayload,
+  normalizeJobCharQuestionsPayload,
+  normalizeCvAnalysisPayload,
 };
