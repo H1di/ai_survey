@@ -56,3 +56,43 @@ test("flip flag never leaks through serializeValueQuestion", () => {
     assert.equal(serializeValueQuestion(q).flip, undefined);
   }
 });
+
+const {
+  serializeRiasecItem,
+  validateRiasecAnswer,
+  computeRiasecScores,
+  deriveRiasecCode,
+} = require("../questionEngine");
+const { getFallbackRiasecItems } = require("../riasecItems");
+
+test("serializeRiasecItem strips the scoring type", () => {
+  const item = { id: "ri_1", type: "R", text: "Fixing things" };
+  assert.deepEqual(serializeRiasecItem(item), { id: "ri_1", text: "Fixing things" });
+});
+
+test("validateRiasecAnswer rejects unknown items and out-of-range values", () => {
+  const session = { riasecItems: getFallbackRiasecItems("short"), riasecAnswers: {} };
+  assert.equal(validateRiasecAnswer(session, "ri_1", 4), 4);
+  assert.throws(() => validateRiasecAnswer(session, "nope", 3), /Unknown RIASEC item/);
+  assert.throws(() => validateRiasecAnswer(session, "ri_1", 0), /1–5/);
+  assert.throws(() => validateRiasecAnswer(session, "ri_1", 3.5), /1–5/);
+});
+
+test("computeRiasecScores: null until complete, then per-type 0–100 means", () => {
+  const items = getFallbackRiasecItems("short");
+  const session = { riasecItems: items, riasecAnswers: {} };
+  assert.equal(computeRiasecScores(session).scores, null);
+
+  // All R items -> 5, everything else -> 1
+  for (const item of items) session.riasecAnswers[item.id] = item.type === "R" ? 5 : 1;
+  const { scores, answered } = computeRiasecScores(session);
+  assert.equal(answered, 12);
+  assert.equal(scores.R, 100);
+  assert.equal(scores.I, 0);
+});
+
+test("deriveRiasecCode returns top-3 with stable R,I,A,S,E,C tie-break", () => {
+  assert.equal(deriveRiasecCode({ R: 10, I: 90, A: 80, S: 70, E: 10, C: 10 }), "IAS");
+  // full tie -> catalog order
+  assert.equal(deriveRiasecCode({ R: 50, I: 50, A: 50, S: 50, E: 50, C: 50 }), "RIA");
+});

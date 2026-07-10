@@ -163,6 +163,45 @@ function computeValuesScores(session) {
   return { scores: totals, answered };
 }
 
+const RIASEC_TYPE_KEYS = ["R", "I", "A", "S", "E", "C"];
+
+function serializeRiasecItem(item) {
+  return { id: item.id, text: item.text };
+}
+
+function validateRiasecAnswer(session, itemId, value) {
+  const item = (session.riasecItems || []).find((i) => i.id === itemId);
+  if (!item) throw httpErr(404, "Unknown RIASEC item.");
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1 || n > 5) {
+    throw httpErr(400, "RIASEC answer must be an integer 1–5.");
+  }
+  return n;
+}
+
+function computeRiasecScores(session) {
+  const items = session.riasecItems || [];
+  const answered = items.filter((i) => session.riasecAnswers[i.id] !== undefined).length;
+  if (!items.length || answered < items.length) return { scores: null, answered };
+
+  const scores = {};
+  for (const type of RIASEC_TYPE_KEYS) {
+    const group = items.filter((i) => i.type === type);
+    const mean = group.reduce((sum, i) => sum + session.riasecAnswers[i.id], 0) / group.length;
+    scores[type] = Math.round(((mean - 1) / 4) * 100);
+  }
+  return { scores, answered };
+}
+
+function deriveRiasecCode(scores) {
+  return RIASEC_TYPE_KEYS
+    .map((key, index) => ({ key, index, score: scores[key] ?? 0 }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .slice(0, 3)
+    .map((e) => e.key)
+    .join("");
+}
+
 function buildProgress(session) {
   const demographicTotal = DEMOGRAPHIC_QUESTIONS.length;
   const demographicAnswered = session.demographics
@@ -201,6 +240,10 @@ function summarizeAnswersForClient(session) {
 module.exports = {
   serializeDemographic,
   serializeValueQuestion,
+  serializeRiasecItem,
+  validateRiasecAnswer,
+  computeRiasecScores,
+  deriveRiasecCode,
   validateDemographicAnswer,
   validateBigFiveAnswer,
   validateValuesAnswer,
