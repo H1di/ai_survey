@@ -15,10 +15,12 @@ import {
   generateRoadmap,
   refineDirection,
   selectProfession,
+  skipRiasec,
+  startRiasec,
   startSession,
   submitBigFiveAnswer,
   submitDemographics,
-  submitValuesAnswer,
+  submitRiasecAnswer,
 } from "./api";
 import { buildLifePathGraph, firstUnansweredIndex, selectDockCard } from "./lifePath";
 import "./App.css";
@@ -29,6 +31,11 @@ const ENTRY_OPTIONS = [
   { value: "find", label: "Find my career" },
 ];
 
+const CV_INTENT_OPTIONS = [
+  { value: "new", label: "Something completely new" },
+  { value: "use_skills", label: "Use the skills I already have" },
+];
+
 const LIKERT = [
   { value: 1, label: "Strongly disagree" },
   { value: 2, label: "Disagree" },
@@ -37,13 +44,23 @@ const LIKERT = [
   { value: 5, label: "Strongly agree" },
 ];
 
+const ENJOY_LIKERT = [
+  { value: 1, label: "Not at all" },
+  { value: 2, label: "Not really" },
+  { value: 3, label: "Maybe" },
+  { value: 4, label: "Quite a bit" },
+  { value: 5, label: "Very much" },
+];
+
 function stepHeading(step) {
   switch (step) {
     case "demographics": return "About you";
     case "depth_choice": return "Choose depth";
     case "big_five":     return "Personality";
-    case "values":       return "Values";
-    case "complete":     return "Ready";
+    case "riasec":              return "Interests";
+    case "job_characteristics": return "What matters in a job";
+    case "cv":                  return "Your experience";
+    case "tree":                return "Ready";
     default:             return "Deep Analysis";
   }
 }
@@ -54,22 +71,35 @@ function stepProgressText(step, progress) {
     return `${progress.demographics.answered} / ${progress.demographics.total}`;
   if (step === "big_five")
     return `${progress.bigFive.answered} / ${progress.bigFive.total}`;
-  if (step === "values")
-    return `${progress.values.answered} / ${progress.values.total}`;
+  if (step === "riasec" && progress.riasec.total)
+    return `${progress.riasec.answered} / ${progress.riasec.total}`;
+  if (step === "job_characteristics" && progress.jobChar.ranked)
+    return `${progress.jobChar.answered} / ${progress.jobChar.total}`;
+  if (step === "cv" && progress.journey.answered)
+    return `${progress.journey.answered} / ${progress.journey.total}`;
   return "";
 }
 
-// One journey, one bar: demographics + Big Five + values combined. Before the
-// depth choice the Big Five length is unknown, so assume the short set — the
-// bar can only get more accurate, never jump backwards.
+// One journey, one bar. Unknown-yet block sizes assume the short variants so
+// the bar can only get more accurate, never jump backwards. The rank step
+// counts as one "question"; the CV block counts as the 7 journey questions
+// until a CV text makes them moot.
 function overallProgress(progress) {
   if (!progress) return null;
   const bigFiveTotal = progress.bigFive.total || 20;
-  const total = progress.demographics.total + bigFiveTotal + progress.values.total;
+  const riasecTotal = progress.riasec.total || 12;
+  const jobCharTotal = progress.jobChar.total || 5;
+  const journeyTotal = progress.journey.active ? progress.journey.total : 0;
+  const total = progress.demographics.total + bigFiveTotal + riasecTotal + 1 + jobCharTotal + journeyTotal;
   const answered =
-    progress.demographics.answered + progress.bigFive.answered + progress.values.answered;
+    progress.demographics.answered +
+    progress.bigFive.answered +
+    progress.riasec.answered +
+    (progress.jobChar.ranked ? 1 : 0) +
+    progress.jobChar.answered +
+    (progress.journey.active ? progress.journey.answered : 0);
   if (!total) return null;
-  return { answered, total, percent: Math.round((answered / total) * 100) };
+  return { answered, total, percent: Math.min(100, Math.round((answered / total) * 100)) };
 }
 
 function DemographicQuestionCard({ q, savedValue, draft, setDraft, busy, onSubmit, onBack, canGoBack, progress }) {
@@ -199,12 +229,9 @@ function BigFiveQuestionCard({ q, savedValue, busy, onSubmit, onBack, canGoBack,
   );
 }
 
-// The measured dimension is deliberately NOT shown while answering — naming
-// the construct invites answering for the desired self-image. Dimensions are
-// revealed afterwards in the profile panel.
-function ValuesQuestionCard({ q, savedValue, busy, onChoose, onBack, canGoBack, progress }) {
+function RiasecQuestionCard({ q, savedValue, busy, onSubmit, onBack, canGoBack, onSkip, canSkip, progress }) {
   return (
-    <div className="question-card values-card">
+    <div className="question-card">
       <div className="question-card-top">
         {canGoBack && (
           <button type="button" className="ghost-action back-action" onClick={onBack} disabled={busy}>
@@ -212,30 +239,30 @@ function ValuesQuestionCard({ q, savedValue, busy, onChoose, onBack, canGoBack, 
           </button>
         )}
         <p className="question-category">
-          {progress ? `Question ${progress.index + 1} of ${progress.total}` : "Values"}
+          {progress ? `Activity ${progress.index + 1} of ${progress.total}` : "Interests"}
         </p>
       </div>
-      <h3>Which feels more like you?</h3>
-      <div className="ab-pair">
-        <button
-          type="button"
-          className={`ab-option ${savedValue === "A" ? "selected" : ""}`}
-          onClick={() => onChoose("A")}
-          disabled={busy}
-        >
-          <span className="ab-tag">A</span>
-          <span className="ab-text">{q.optionA}</span>
-        </button>
-        <button
-          type="button"
-          className={`ab-option ${savedValue === "B" ? "selected" : ""}`}
-          onClick={() => onChoose("B")}
-          disabled={busy}
-        >
-          <span className="ab-tag">B</span>
-          <span className="ab-text">{q.optionB}</span>
-        </button>
+      <p className="entry-prompt">How much would you enjoy…</p>
+      <h3>{q.text}</h3>
+      <div className="likert-row">
+        {ENJOY_LIKERT.map((l) => (
+          <button
+            key={l.value}
+            type="button"
+            className={`option-button likert-button ${savedValue === l.value ? "selected" : ""}`}
+            onClick={() => onSubmit(l.value)}
+            disabled={busy}
+          >
+            <span className="likert-value">{l.value}</span>
+            <span className="likert-label">{l.label}</span>
+          </button>
+        ))}
       </div>
+      {canSkip && (
+        <button type="button" className="ghost-action" onClick={onSkip} disabled={busy}>
+          Skip the quiz — estimate my interests from my answers so far
+        </button>
+      )}
     </div>
   );
 }
@@ -277,6 +304,7 @@ function App() {
 
   const [entryChoice, setEntryChoice] = useState("");
   const [dreamAnswer, setDreamAnswer] = useState("");
+  const [cvIntent, setCvIntent] = useState("");
 
   const [sessionId, setSessionId] = useState("");
   const [step, setStep] = useState("entry");
@@ -289,9 +317,21 @@ function App() {
   const [bigFiveItems, setBigFiveItems] = useState([]);
   const [bigFiveAnswers, setBigFiveAnswers] = useState({});
   const [bigFiveIndex, setBigFiveIndex] = useState(0);
-  const [valuesQuestions, setValuesQuestions] = useState([]);
-  const [valuesAnswers, setValuesAnswers] = useState({});
-  const [valuesIndex, setValuesIndex] = useState(0);
+  const [riasecItems, setRiasecItems] = useState([]);
+  const [riasecAnswers, setRiasecAnswers] = useState({});
+  const [riasecIndex, setRiasecIndex] = useState(0);
+  const [jobCharParams, setJobCharParams] = useState([]);
+  const [jobCharRanking, setJobCharRanking] = useState(null);
+  const [jobCharItems, setJobCharItems] = useState([]);
+  const [jobCharAnswers, setJobCharAnswers] = useState({});
+  const [jcIndex, setJcIndex] = useState(0);
+  const [rankDraft, setRankDraft] = useState([]);
+  const [careerJourneyQuestions, setCareerJourneyQuestions] = useState([]);
+  const [careerJourneyAnswers, setCareerJourneyAnswers] = useState({});
+  const [journeyIndex, setJourneyIndex] = useState(0);
+  const [journeyDraft, setJourneyDraft] = useState("");
+  const [cvMode, setCvMode] = useState("choice"); // choice | paste | journey
+  const [cvDraft, setCvDraft] = useState("");
 
   const [directionQuestions, setDirectionQuestions] = useState([]);
   const [directionAnswers, setDirectionAnswers] = useState({});
@@ -306,10 +346,8 @@ function App() {
 
   const [rejectedDirections, setRejectedDirections] = useState([]);
   const [directionCatalog, setDirectionCatalog] = useState([]);
-  // Served by the backend (single source): refine reason options and the
-  // values dimension metadata used by the profile charts.
+  // Served by the backend (single source): refine reason options.
   const [refineReasons, setRefineReasons] = useState([]);
-  const [valuesDimensionsMeta, setValuesDimensionsMeta] = useState([]);
   const [refineMode, setRefineMode] = useState(false);
   const [refineReason, setRefineReason] = useState("");
   const [refineText, setRefineText] = useState("");
@@ -327,7 +365,13 @@ function App() {
     demo: false,
     depth: "",
     bigFive: false,
-    values: false,
+    riasecStart: false,
+    riasec: false,
+    riasecSkip: false,
+    rank: false,
+    jobChar: false,
+    cv: false,
+    journey: false,
     enterTree: false,
     direction: false,
     confirmDirection: false,
@@ -349,13 +393,18 @@ function App() {
     // snapshots; answer responses omit them, so merge instead of replacing.
     if (data.demographicQuestions) setDemographicQuestions(data.demographicQuestions);
     if (data.bigFiveItems) setBigFiveItems(data.bigFiveItems);
-    if (data.valuesQuestions) setValuesQuestions(data.valuesQuestions);
+    if (data.riasecItems) setRiasecItems(data.riasecItems);
+    if (data.jobCharParams) setJobCharParams(data.jobCharParams);
+    if (data.careerJourneyQuestions) setCareerJourneyQuestions(data.careerJourneyQuestions);
     if (data.directionCatalog) setDirectionCatalog(data.directionCatalog);
     if (data.refineReasons) setRefineReasons(data.refineReasons);
-    if (data.valuesDimensions) setValuesDimensionsMeta(data.valuesDimensions);
     setDemoAnswers(data.demographics || {});
     setBigFiveAnswers(data.bigFiveAnswers || {});
-    setValuesAnswers(data.valuesAnswers || {});
+    setRiasecAnswers(data.riasecAnswers || {});
+    setJobCharRanking(data.jobCharRanking || null);
+    setJobCharItems(data.jobCharItems || []);
+    setJobCharAnswers(data.jobCharAnswers || {});
+    setCareerJourneyAnswers(data.careerJourneyAnswers || {});
     setDirectionQuestions(data.directionQuestions || []);
     setDirectionAnswers(data.directionAnswers || {});
     setDirectionTieCandidates(data.directionTieCandidates || []);
@@ -370,7 +419,9 @@ function App() {
     setProfile({
       bigFiveScores: data.bigFiveScores || null,
       derivedTraits: data.derivedTraits || null,
-      valuesScores: data.valuesScores || null,
+      riasecScores: data.riasecScores || null,
+      riasecCode: data.riasecCode || null,
+      riasecInferred: Boolean(data.riasecInferred),
       bigFiveDepth: data.bigFiveDepth || null,
     });
     if (data.aiEnabled !== undefined) setAiEnabled(Boolean(data.aiEnabled));
@@ -389,12 +440,18 @@ function App() {
         applySessionSnapshot(data);
         setEntryChoice(data.entryChoice || "");
         setDreamAnswer(data.dreamAnswer || "");
+        setCvIntent(data.cvIntent || "");
         setDemoIndex(firstUnansweredIndex(data.demographicQuestions || [], data.demographics));
         setBigFiveIndex(firstUnansweredIndex(data.bigFiveItems || [], data.bigFiveAnswers));
-        setValuesIndex(firstUnansweredIndex(data.valuesQuestions || [], data.valuesAnswers));
+        setRiasecIndex(firstUnansweredIndex(data.riasecItems || [], data.riasecAnswers));
+        setJcIndex(firstUnansweredIndex(data.jobCharItems || [], data.jobCharAnswers));
+        setJourneyIndex(
+          firstUnansweredIndex(data.careerJourneyQuestions || [], data.careerJourneyAnswers)
+        );
+        if (Object.keys(data.careerJourneyAnswers || {}).length) setCvMode("journey");
         setNarrowIntent(Object.keys(data.narrowingAnswers || {}).length > 0);
         const inTree =
-          data.step === "complete" &&
+          data.step === "tree" &&
           ((data.directionQuestions || []).length > 0 || data.direction);
         setStage(inTree ? "tree" : "survey");
       } catch {
@@ -412,7 +469,7 @@ function App() {
   }, []);
 
   const handleStartSession = async () => {
-    if (!entryChoice || !dreamAnswer.trim()) {
+    if (!entryChoice || !cvIntent || !dreamAnswer.trim()) {
       return;
     }
     setError("");
@@ -421,6 +478,7 @@ function App() {
       const data = await startSession({
         entryChoice,
         dreamAnswer: dreamAnswer.trim(),
+        cvIntent,
       });
       applySessionSnapshot(data);
       localStorage.setItem(SESSION_STORAGE_KEY, data.sessionId);
@@ -482,7 +540,7 @@ function App() {
       applySessionSnapshot(data);
       setRetryAction(null);
       setBigFiveIndex(0);
-      setValuesIndex(0);
+      setRiasecIndex(0);
     } catch (e) {
       setError(e.message || "Could not start Big Five.");
       setRetryAction(() => () => handleChooseDepth(depth));
@@ -514,31 +572,60 @@ function App() {
     setBigFiveIndex((i) => Math.max(0, i - 1));
   };
 
-  const handleSubmitValues = async (choice) => {
+  const handleStartRiasec = async () => {
     if (!sessionId) return;
-    const question = valuesQuestions[valuesIndex];
-    if (!question) return;
     setError("");
-    setBusy((p) => ({ ...p, values: true }));
+    setBusy((p) => ({ ...p, riasecStart: true }));
     try {
-      const data = await submitValuesAnswer({
-        sessionId,
-        questionId: question.id,
-        choice,
-      });
+      const data = await startRiasec({ sessionId });
       applySessionSnapshot(data);
-      if (valuesIndex < valuesQuestions.length - 1) {
-        setValuesIndex((i) => i + 1);
-      }
+      setRetryAction(null);
+      setRiasecIndex(0);
     } catch (e) {
-      setError(e.message || "Could not save.");
+      setError(e.message || "Could not load the interests quiz.");
+      setRetryAction(() => handleStartRiasec);
     } finally {
-      setBusy((p) => ({ ...p, values: false }));
+      setBusy((p) => ({ ...p, riasecStart: false }));
     }
   };
 
-  const handleBackValues = () => {
-    setValuesIndex((i) => Math.max(0, i - 1));
+  // Item generation is server-side; kick it off the moment the step arrives.
+  useEffect(() => {
+    if (stage !== "survey" || step !== "riasec") return;
+    if (riasecItems.length || busy.riasecStart) return;
+    handleStartRiasec();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, step, riasecItems.length]);
+
+  const handleSubmitRiasec = async (value) => {
+    if (!sessionId) return;
+    const item = riasecItems[riasecIndex];
+    if (!item) return;
+    setError("");
+    setBusy((p) => ({ ...p, riasec: true }));
+    try {
+      const data = await submitRiasecAnswer({ sessionId, itemId: item.id, value });
+      applySessionSnapshot(data);
+      if (riasecIndex < riasecItems.length - 1) setRiasecIndex((i) => i + 1);
+    } catch (e) {
+      setError(e.message || "Could not save.");
+    } finally {
+      setBusy((p) => ({ ...p, riasec: false }));
+    }
+  };
+
+  const handleSkipRiasec = async () => {
+    if (!sessionId) return;
+    setError("");
+    setBusy((p) => ({ ...p, riasecSkip: true }));
+    try {
+      const data = await skipRiasec({ sessionId });
+      applySessionSnapshot(data);
+    } catch (e) {
+      setError(e.message || "Could not estimate interests.");
+    } finally {
+      setBusy((p) => ({ ...p, riasecSkip: false }));
+    }
   };
 
   const handleEnterLifePath = async () => {
@@ -560,7 +647,6 @@ function App() {
 
   const currentDemographicQuestion = demographicQuestions[demoIndex] || null;
   const currentBigFiveItem = bigFiveItems[bigFiveIndex] || null;
-  const currentValuesQuestion = valuesQuestions[valuesIndex] || null;
 
   const currentDirectionQuestion =
     directionQuestions.find((q) => directionAnswers[q.id] === undefined) || null;
@@ -716,9 +802,22 @@ function App() {
     setBigFiveItems([]);
     setBigFiveAnswers({});
     setBigFiveIndex(0);
-    setValuesQuestions([]);
-    setValuesAnswers({});
-    setValuesIndex(0);
+    setRiasecItems([]);
+    setRiasecAnswers({});
+    setRiasecIndex(0);
+    setJobCharParams([]);
+    setJobCharRanking(null);
+    setJobCharItems([]);
+    setJobCharAnswers({});
+    setJcIndex(0);
+    setRankDraft([]);
+    setCareerJourneyQuestions([]);
+    setCareerJourneyAnswers({});
+    setJourneyIndex(0);
+    setJourneyDraft("");
+    setCvMode("choice");
+    setCvDraft("");
+    setCvIntent("");
     setDirectionQuestions([]);
     setDirectionAnswers({});
     setDirectionTieCandidates([]);
@@ -732,7 +831,6 @@ function App() {
     setRejectedDirections([]);
     setDirectionCatalog([]);
     setRefineReasons([]);
-    setValuesDimensionsMeta([]);
     setRefineMode(false);
     setRefineReason("");
     setRefineText("");
@@ -748,7 +846,13 @@ function App() {
       demo: false,
       depth: "",
       bigFive: false,
-      values: false,
+      riasecStart: false,
+      riasec: false,
+      riasecSkip: false,
+      rank: false,
+      jobChar: false,
+      cv: false,
+      journey: false,
       enterTree: false,
       direction: false,
       confirmDirection: false,
@@ -1034,11 +1138,25 @@ function App() {
             placeholder="Write your honest answer"
           />
 
+          <p className="entry-prompt">Where should we start from?</p>
+          <div className="entry-options">
+            {CV_INTENT_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={`entry-option ${cvIntent === option.value ? "selected" : ""}`}
+                onClick={() => setCvIntent(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
           <button
             type="button"
             className="primary-action"
             onClick={handleStartSession}
-            disabled={busy.start || !entryChoice || !dreamAnswer.trim()}
+            disabled={busy.start || !entryChoice || !cvIntent || !dreamAnswer.trim()}
           >
             {busy.start ? "Entering..." : "Help to explore my career"}
           </button>
@@ -1059,7 +1177,7 @@ function App() {
             <p>{stepProgressText(step, progress)}</p>
           </header>
 
-          {step !== "complete" && (() => {
+          {step !== "tree" && (() => {
             const overall = overallProgress(progress);
             return overall ? (
               <div
@@ -1111,19 +1229,27 @@ function App() {
             />
           )}
 
-          {step === "values" && currentValuesQuestion && (
-            <ValuesQuestionCard
-              q={currentValuesQuestion}
-              savedValue={valuesAnswers[currentValuesQuestion.id] ?? null}
-              busy={busy.values}
-              onChoose={handleSubmitValues}
-              onBack={handleBackValues}
-              canGoBack={valuesIndex > 0}
-              progress={{ index: valuesIndex, total: valuesQuestions.length }}
+          {step === "riasec" && !riasecItems.length && (
+            <div className="question-card">
+              <h3>Preparing the interests quiz…</h3>
+            </div>
+          )}
+
+          {step === "riasec" && riasecItems[riasecIndex] && (
+            <RiasecQuestionCard
+              q={riasecItems[riasecIndex]}
+              savedValue={riasecAnswers[riasecItems[riasecIndex].id] ?? null}
+              busy={busy.riasec || busy.riasecSkip}
+              onSubmit={handleSubmitRiasec}
+              onBack={() => setRiasecIndex((i) => Math.max(0, i - 1))}
+              canGoBack={riasecIndex > 0}
+              onSkip={handleSkipRiasec}
+              canSkip={Object.keys(riasecAnswers).length === 0}
+              progress={{ index: riasecIndex, total: riasecItems.length }}
             />
           )}
 
-          {step === "complete" && (
+          {step === "tree" && (
             <div className="question-card">
               <h3>Assessment complete.</h3>
               <p>You're ready to generate your first life path branch.</p>
@@ -1189,7 +1315,6 @@ function App() {
             {profileOpen && (
               <ProfilePanel
                 profile={profile}
-                dimensions={valuesDimensionsMeta}
                 onClose={() => setProfileOpen(false)}
               />
             )}
