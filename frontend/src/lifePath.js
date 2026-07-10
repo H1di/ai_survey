@@ -27,6 +27,16 @@ export function firstUnansweredIndex(questions, answers) {
   return index === -1 ? Math.max(0, questions.length - 1) : index;
 }
 
+// Reorder helper for the job-characteristics ranking list. Pure: returns the
+// input list unchanged when the move would fall off either end.
+export function moveRankItem(list, index, delta) {
+  const target = index + delta;
+  if (target < 0 || target >= list.length) return list;
+  const next = [...list];
+  [next[index], next[target]] = [next[target], next[index]];
+  return next;
+}
+
 export function buildLifePathGraph({
   direction,
   professionOptions,

@@ -20,9 +20,11 @@ import {
   startSession,
   submitBigFiveAnswer,
   submitDemographics,
+  submitJobCharAnswer,
+  submitJobCharRanking,
   submitRiasecAnswer,
 } from "./api";
-import { buildLifePathGraph, firstUnansweredIndex, selectDockCard } from "./lifePath";
+import { buildLifePathGraph, firstUnansweredIndex, moveRankItem, selectDockCard } from "./lifePath";
 import "./App.css";
 import "./components/GraphView/GraphPage.css";
 
@@ -263,6 +265,89 @@ function RiasecQuestionCard({ q, savedValue, busy, onSubmit, onBack, canGoBack, 
           Skip the quiz — estimate my interests from my answers so far
         </button>
       )}
+    </div>
+  );
+}
+
+function RankCard({ params, ranking, onMove, busy, onChooseDepth }) {
+  const byId = new Map(params.map((p) => [p.id, p]));
+  return (
+    <div className="question-card">
+      <p className="question-category">Rank what matters</p>
+      <h3>Order these from most to least important in your next job.</h3>
+      <ol className="rank-list">
+        {ranking.map((id, index) => (
+          <li key={id} className="rank-row">
+            <span className="rank-pos">{index + 1}</span>
+            <span className="rank-label">
+              {byId.get(id)?.label}
+              <span className="rank-meaning">{byId.get(id)?.meaning}</span>
+            </span>
+            <span className="rank-controls">
+              <button
+                type="button"
+                className="ghost-action"
+                onClick={() => onMove(index, -1)}
+                disabled={busy || index === 0}
+                aria-label={`Move ${byId.get(id)?.label} up`}
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                className="ghost-action"
+                onClick={() => onMove(index, 1)}
+                disabled={busy || index === ranking.length - 1}
+                aria-label={`Move ${byId.get(id)?.label} down`}
+              >
+                ↓
+              </button>
+            </span>
+          </li>
+        ))}
+      </ol>
+      <div className="depth-options">
+        <button type="button" className="depth-card" onClick={() => onChooseDepth(5)} disabled={busy}>
+          <p className="depth-title">Quick</p>
+          <p className="depth-meta">5 targeted questions on your top priorities</p>
+        </button>
+        <button type="button" className="depth-card" onClick={() => onChooseDepth(10)} disabled={busy}>
+          <p className="depth-title">Thorough</p>
+          <p className="depth-meta">10 questions, finer-grained targets</p>
+        </button>
+      </div>
+      {busy && <p className="depth-loading">Building your questions…</p>}
+    </div>
+  );
+}
+
+function JobCharQuestionCard({ q, savedValue, busy, onSubmit, onBack, canGoBack, progress }) {
+  return (
+    <div className="question-card">
+      <div className="question-card-top">
+        {canGoBack && (
+          <button type="button" className="ghost-action back-action" onClick={onBack} disabled={busy}>
+            ← Back
+          </button>
+        )}
+        <p className="question-category">
+          {progress ? `Question ${progress.index + 1} of ${progress.total}` : "Priorities"}
+        </p>
+      </div>
+      <h3>{q.text}</h3>
+      <div className="option-list">
+        {q.options.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            className={`option-button ${savedValue === o.value ? "selected" : ""}`}
+            onClick={() => onSubmit(o.value)}
+            disabled={busy}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -625,6 +710,46 @@ function App() {
       setError(e.message || "Could not estimate interests.");
     } finally {
       setBusy((p) => ({ ...p, riasecSkip: false }));
+    }
+  };
+
+  // Seed the reorderable ranking with the canonical order once the step opens.
+  useEffect(() => {
+    if (step !== "job_characteristics" || jobCharRanking || rankDraft.length) return;
+    setRankDraft(jobCharParams.map((p) => p.id));
+  }, [step, jobCharRanking, rankDraft.length, jobCharParams]);
+
+  const handleSubmitRanking = async (depth) => {
+    if (!sessionId || rankDraft.length !== 7) return;
+    setError("");
+    setBusy((p) => ({ ...p, rank: true }));
+    try {
+      const data = await submitJobCharRanking({ sessionId, ranking: rankDraft, depth });
+      applySessionSnapshot(data);
+      setRetryAction(null);
+      setJcIndex(0);
+    } catch (e) {
+      setError(e.message || "Could not build the questions.");
+      setRetryAction(() => () => handleSubmitRanking(depth));
+    } finally {
+      setBusy((p) => ({ ...p, rank: false }));
+    }
+  };
+
+  const handleSubmitJobChar = async (value) => {
+    if (!sessionId) return;
+    const item = jobCharItems[jcIndex];
+    if (!item) return;
+    setError("");
+    setBusy((p) => ({ ...p, jobChar: true }));
+    try {
+      const data = await submitJobCharAnswer({ sessionId, itemId: item.id, value });
+      applySessionSnapshot(data);
+      if (jcIndex < jobCharItems.length - 1) setJcIndex((i) => i + 1);
+    } catch (e) {
+      setError(e.message || "Could not save.");
+    } finally {
+      setBusy((p) => ({ ...p, jobChar: false }));
     }
   };
 
@@ -1246,6 +1371,28 @@ function App() {
               onSkip={handleSkipRiasec}
               canSkip={Object.keys(riasecAnswers).length === 0}
               progress={{ index: riasecIndex, total: riasecItems.length }}
+            />
+          )}
+
+          {step === "job_characteristics" && !jobCharItems.length && rankDraft.length === 7 && (
+            <RankCard
+              params={jobCharParams}
+              ranking={rankDraft}
+              onMove={(index, delta) => setRankDraft((l) => moveRankItem(l, index, delta))}
+              busy={busy.rank}
+              onChooseDepth={handleSubmitRanking}
+            />
+          )}
+
+          {step === "job_characteristics" && jobCharItems[jcIndex] && (
+            <JobCharQuestionCard
+              q={jobCharItems[jcIndex]}
+              savedValue={jobCharAnswers[jobCharItems[jcIndex].id] ?? null}
+              busy={busy.jobChar}
+              onSubmit={handleSubmitJobChar}
+              onBack={() => setJcIndex((i) => Math.max(0, i - 1))}
+              canGoBack={jcIndex > 0}
+              progress={{ index: jcIndex, total: jobCharItems.length }}
             />
           )}
 
