@@ -73,6 +73,86 @@ test("old branch templates are removed, Page 2 templates kept", () => {
   assert.equal(typeof prompts.buildBigFiveItemsPrompt, "function");
 });
 
+const DIGEST_FIXTURE = {
+  entryChoice: "change",
+  dreamAnswer: "open a bakery",
+  cvIntent: "use_skills",
+  demographics: { sex: "female", age: 34, country: "Poland", city: "Kraków" },
+  bigFiveScores: { O: 80, C: 55, E: 40, A: 70, N: 45 },
+  derivedTraits: { behaviourTendencies: 60, decisionPriorities: 60, summary: "Balanced." },
+  riasecScores: { R: 30, I: 60, A: 85, S: 70, E: 40, C: 35 },
+  riasecCode: "ASI",
+  riasecInferred: false,
+  jobCharRanking: ["meaning_impact", "work_mode", "compensation", "social", "complexity", "career_growth", "job_security"],
+  jobCharProfile: { compensation: 45, work_mode: 90, job_security: 50, career_growth: 50, complexity: 60, meaning_impact: 95, social: 65 },
+  cvAnalysis: { skills: ["pastry", "team leadership"], domains: ["food service"], seniority: "mid" },
+  cvText: "…",
+  careerJourneyAnswers: {},
+};
+
+test("profile digest carries city, RIASEC, ranked jobChar targets, CV signal", () => {
+  const digest = prompts.buildProfileDigest(DIGEST_FIXTURE);
+  assert.match(digest, /City: Kraków/);
+  assert.match(digest, /code ASI \(measured\)/);
+  assert.match(digest, /1\. Meaning \/ Impact: 95\/100/);
+  assert.match(digest, /7\. Job Security: 50\/100/);
+  assert.match(digest, /skills \[pastry, team leadership\]/);
+  assert.ok(!/Values inventory/.test(digest), "old values block is gone");
+});
+
+test("digest falls back to journey summary / raw excerpt without cvAnalysis", () => {
+  const journey = prompts.buildProfileDigest({
+    ...DIGEST_FIXTURE,
+    cvAnalysis: null,
+    cvText: null,
+    careerJourneyAnswers: { cj_education: "BSc economics" },
+  });
+  assert.match(journey, /Career journey:/);
+  assert.match(journey, /BSc economics/);
+
+  const unparsed = prompts.buildProfileDigest({
+    ...DIGEST_FIXTURE,
+    cvAnalysis: { skills: [], domains: [], seniority: "" },
+  });
+  assert.match(unparsed, /CV provided \(unparsed excerpt\)/);
+});
+
+test("inferred RIASEC is flagged low-confidence in the digest", () => {
+  const digest = prompts.buildProfileDigest({ ...DIGEST_FIXTURE, riasecInferred: true });
+  assert.match(digest, /code ASI \(inferred, low confidence\)/);
+});
+
+test("riasec items prompt pins count and JSON schema", () => {
+  const { system, user } = prompts.buildRiasecItemsPrompt(12);
+  assert.match(system, /exactly 12 items/);
+  assert.match(system, /"type":"R\|I\|A\|S\|E\|C"/);
+  assert.match(user, /12/);
+});
+
+test("jobChar questions prompt embeds ranking order and count", () => {
+  const { system, user } = prompts.buildJobCharQuestionsPrompt({
+    ranking: DIGEST_FIXTURE.jobCharRanking,
+    count: 5,
+  });
+  assert.match(system, /exactly 5 questions/);
+  assert.match(user, /meaning_impact, work_mode, compensation/);
+});
+
+test("cv parse prompt embeds the text and the target schema", () => {
+  const { system, user } = prompts.buildCvParsePrompt("10 years as a nurse");
+  assert.match(system, /"skills":\[/);
+  assert.match(user, /10 years as a nurse/);
+});
+
+test("riasec inference prompt includes Big Five and dream", () => {
+  const { user } = prompts.buildRiasecInferencePrompt({
+    bigFiveScores: DIGEST_FIXTURE.bigFiveScores,
+    dreamAnswer: "open a bakery",
+  });
+  assert.match(user, /O=80/);
+  assert.match(user, /open a bakery/);
+});
+
 test("refine prompt excludes rejected ids, includes feedback, and demands the refine schema", () => {
   const { system, user } = prompts.buildDirectionRefinePrompt({
     profileDigest: PROFILE,

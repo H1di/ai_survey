@@ -1,10 +1,16 @@
+const { JOB_CHAR_PARAMS, CAREER_JOURNEY_QUESTIONS } = require("./questionPool");
+
+const JOB_CHAR_LABEL = new Map(JOB_CHAR_PARAMS.map((p) => [p.id, p.label]));
+const JOURNEY_QUESTION_BY_ID = new Map(CAREER_JOURNEY_QUESTIONS.map((q) => [q.id, q.question]));
+
 const BASE_SYSTEM = [
   "You are an elite career strategist and life-design psychologist.",
   "This is not a quiz. You are building realistic, emotionally honest, practical futures.",
+  "Integrate the user's Big Five personality, RIASEC interests, ranked job-characteristic targets, demographics, and CV or career-journey signal.",
   "You know the FULL range of human work — creative and artistic fields, science, care and healthcare, skilled trades, education, hospitality, agriculture, law and public service, sports, media, business, and technology alike.",
   "Never default to technology or tech-adjacent careers because they feel safe; recommend tech only when the user's survey profile clearly points there.",
-  "The survey profile (personality, values, demographics) is the primary basis for every recommendation; the user's stated dream is emotional colour, not a domain filter.",
-  "Respect constraints. Do not hallucinate impossible paths.",
+  "The survey profile (personality, interests, targets, demographics) is the primary basis for every recommendation; the user's stated dream is emotional colour, not a domain filter.",
+  "Respect all constraints. Do not hallucinate impossible paths.",
   "Tone: elegant, calm, intelligent, specific.",
   "Write concise outputs and avoid buzzwords.",
 ].join(" ");
@@ -12,11 +18,18 @@ const BASE_SYSTEM = [
 function buildProfileDigest({
   entryChoice,
   dreamAnswer,
+  cvIntent,
   demographics,
   bigFiveScores,
   derivedTraits,
-  valuesScores,
-  valuesDimensions,
+  riasecScores,
+  riasecCode,
+  riasecInferred,
+  jobCharRanking,
+  jobCharProfile,
+  cvAnalysis,
+  cvText,
+  careerJourneyAnswers,
 }) {
   const lines = [];
   lines.push(`Entry intent: ${entryChoice}`);
@@ -29,6 +42,7 @@ function buildProfileDigest({
     if (demographics.sex !== undefined) lines.push(`- Sex: ${demographics.sex}`);
     if (demographics.age !== undefined) lines.push(`- Age: ${demographics.age}`);
     if (demographics.country !== undefined) lines.push(`- Country: ${demographics.country}`);
+    if (demographics.city !== undefined) lines.push(`- City: ${demographics.city}`);
   }
 
   if (bigFiveScores) {
@@ -47,16 +61,107 @@ function buildProfileDigest({
     if (derivedTraits.summary) lines.push(`Trait summary: ${derivedTraits.summary}`);
   }
 
-  if (valuesScores && valuesDimensions) {
-    lines.push("Values inventory (0–5, alignment per dimension):");
-    for (const dim of valuesDimensions) {
-      const score = valuesScores[dim.id];
-      if (score === undefined) continue;
-      lines.push(`- ${dim.emoji} ${dim.label}: ${score}/5`);
+  if (riasecScores) {
+    const flag = riasecInferred ? "inferred, low confidence" : "measured";
+    lines.push(
+      `RIASEC interests (0–100): R=${riasecScores.R} I=${riasecScores.I} A=${riasecScores.A} ` +
+        `S=${riasecScores.S} E=${riasecScores.E} C=${riasecScores.C} → code ${riasecCode} (${flag})`
+    );
+  }
+
+  if (jobCharRanking && jobCharProfile) {
+    lines.push("Job-characteristic targets (0–100, ranked most→least important):");
+    jobCharRanking.forEach((param, index) => {
+      lines.push(`${index + 1}. ${JOB_CHAR_LABEL.get(param)}: ${jobCharProfile[param]}/100`);
+    });
+  }
+
+  const hasParsedCv =
+    cvAnalysis && (cvAnalysis.skills?.length || cvAnalysis.domains?.length || cvAnalysis.seniority);
+  if (hasParsedCv) {
+    lines.push(
+      `CV signal: skills [${(cvAnalysis.skills || []).join(", ")}]; ` +
+        `domains [${(cvAnalysis.domains || []).join(", ")}]; seniority "${cvAnalysis.seniority || "unknown"}"`
+    );
+  } else if (cvText) {
+    lines.push(`CV provided (unparsed excerpt): "${cvText.slice(0, 300)}"`);
+  } else if (careerJourneyAnswers && Object.keys(careerJourneyAnswers).length) {
+    lines.push("Career journey:");
+    for (const [qId, answer] of Object.entries(careerJourneyAnswers)) {
+      lines.push(`- ${JOURNEY_QUESTION_BY_ID.get(qId) || qId} → ${answer}`);
     }
+  }
+  if (cvIntent) {
+    lines.push(
+      cvIntent === "use_skills"
+        ? "Intent: build on existing skills and experience."
+        : "Intent: open to something completely new."
+    );
   }
 
   return lines.join("\n");
+}
+
+function buildRiasecItemsPrompt(count) {
+  const perType = count / 6;
+  const system = [
+    "You generate Holland Code (RIASEC) interest items.",
+    "Return valid JSON only. No prose, no markdown fences.",
+    'JSON schema: {"items":[{"id":"riasec_1","type":"R|I|A|S|E|C","text":"..."}]}',
+    `Generate exactly ${count} items, exactly ${perType} per type, interleaved across the six types.`,
+    "Each text is a concrete activity a person rates for enjoyment on a 1–5 scale.",
+    "Use concrete activities, never job titles. Keep each item under 90 characters.",
+    "Vary phrasing per session; do not reuse canonical inventory wordings.",
+  ].join(" ");
+  return { system, user: `Generate ${count} RIASEC items now.` };
+}
+
+function buildRiasecInferencePrompt({ bigFiveScores, dreamAnswer }) {
+  const system = [
+    "You estimate a person's Holland RIASEC interest profile from limited signal.",
+    "Return valid JSON only.",
+    'JSON schema: {"scores":{"R":0,"I":0,"A":0,"S":0,"E":0,"C":0}} with each value an integer 0-100.',
+    "Base the estimate on established Big Five ↔ RIASEC links (Openness→Artistic/Investigative, Extraversion→Enterprising/Social, Conscientiousness→Conventional); the dream answer only nudges.",
+    "Use the full range; avoid a flat all-50 profile.",
+  ].join(" ");
+  const user = [
+    `Big Five (0–100): O=${bigFiveScores.O} C=${bigFiveScores.C} E=${bigFiveScores.E} A=${bigFiveScores.A} N=${bigFiveScores.N}`,
+    `Dream answer: ${dreamAnswer}`,
+    "Estimate the RIASEC scores now.",
+  ].join("\n");
+  return { system, user };
+}
+
+function buildJobCharQuestionsPrompt({ ranking, count }) {
+  const catalog = ranking
+    .map((id, i) => `${i + 1}. ${id} — ${JOB_CHAR_LABEL.get(id)}`)
+    .join("\n");
+  const system = [
+    "You generate job-preference questions for a ranked set of career parameters.",
+    "Return valid JSON only.",
+    'JSON schema: {"items":[{"id":"jc_1","param":"compensation|work_mode|job_security|career_growth|complexity|meaning_impact|social","text":"...","options":[{"value":50,"label":"..."}]}]}',
+    `Generate exactly ${count} questions, weighted toward the top-ranked parameters (the most important parameter comes first and gets the most questions).`,
+    "Each question is a realistic tradeoff about ONE parameter; each option encodes a 0–100 target on that parameter (value = the target).",
+    "3–4 options each, labels under 90 characters, concrete situations, no buzzwords.",
+  ].join(" ");
+  const user = [
+    `Ranking (most→least important): ${ranking.join(", ")}`,
+    catalog,
+    `Generate ${count} questions now.`,
+  ].join("\n");
+  return { system, user };
+}
+
+function buildCvParsePrompt(cvText) {
+  const system = [
+    "You extract a structured career signal from a raw CV text.",
+    "Return valid JSON only.",
+    'JSON schema: {"skills":["..."],"domains":["..."],"seniority":"..."}',
+    "skills: up to 12 concrete skills. domains: up to 6 industries/fields worked in.",
+    'seniority: one of "student", "junior", "mid", "senior", "lead", "executive", or a short honest label.',
+    "Extract only what the text supports; do not invent.",
+  ].join(" ");
+  return { system, user: `CV text:\n${cvText}\n\nExtract the signal now.` };
 }
 
 function buildBigFiveItemsPrompt(depth) {
@@ -251,6 +356,10 @@ function buildRoadmapPrompt({ profileDigest, direction, profession, narrowingDig
 module.exports = {
   buildProfileDigest,
   buildBigFiveItemsPrompt,
+  buildRiasecItemsPrompt,
+  buildRiasecInferencePrompt,
+  buildJobCharQuestionsPrompt,
+  buildCvParsePrompt,
   buildAnswersDigest,
   buildDirectionQuestionsPrompt,
   buildDirectionRefinePrompt,
