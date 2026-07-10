@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const {
   RIASEC_KEYS,
   DIRECTION_RIASEC,
-  deriveRiasecScores,
+  inferRiasecScores,
   rankDirections,
 } = require("../riasec");
 const { DIRECTION_IDS } = require("../directions");
@@ -18,49 +18,43 @@ test("every catalog direction has a RIASEC mapping and vice versa", () => {
   }
 });
 
-test("deriveRiasecScores returns all six dimensions clamped to 0-100", () => {
-  const scores = deriveRiasecScores({
-    bigFiveScores: { O: 90, C: 20, E: 80, A: 70, N: 40 },
-    valuesScores: { intellectual_stimulation: 5, meaning_impact: 4, structure: 0 },
-  });
-  for (const key of RIASEC_KEYS) {
-    assert.ok(scores[key] >= 0 && scores[key] <= 100, `${key}=${scores[key]} out of range`);
+test("inferRiasecScores: neutral profile -> all 50, extremes move sanely", () => {
+  assert.deepEqual(inferRiasecScores(undefined), { R: 50, I: 50, A: 50, S: 50, E: 50, C: 50 });
+  const artist = inferRiasecScores({ O: 95, C: 30, E: 40, A: 55, N: 50 });
+  assert.ok(artist.A > 70, "high O drives Artistic");
+  assert.ok(artist.R < 40, "high O suppresses Realistic");
+  const organizer = inferRiasecScores({ O: 20, C: 90, E: 60, A: 50, N: 40 });
+  assert.ok(organizer.C > 70, "high C drives Conventional");
+});
+
+test("inferRiasecScores stays clamped to 0-100 at the extremes", () => {
+  for (const profile of [
+    { O: 100, C: 100, E: 100, A: 100, N: 100 },
+    { O: 0, C: 0, E: 0, A: 0, N: 0 },
+  ]) {
+    const scores = inferRiasecScores(profile);
+    for (const key of RIASEC_KEYS) {
+      assert.ok(scores[key] >= 0 && scores[key] <= 100, `${key}=${scores[key]} out of range`);
+    }
   }
 });
 
-test("a partial/empty profile still yields a neutral vector (no throw)", () => {
-  const scores = deriveRiasecScores({});
-  for (const key of RIASEC_KEYS) {
-    assert.equal(typeof scores[key], "number");
-  }
-});
-
-test("high-Openness, low-Conscientiousness profile ranks Arts/Design above Finance/Trades", () => {
-  const ranked = rankDirections({
-    bigFiveScores: { O: 95, C: 15, E: 55, A: 60, N: 45 },
-    valuesScores: { intellectual_stimulation: 5, structure: 0, economic_return: 1 },
-  });
-  const pos = Object.fromEntries(ranked.map((r, i) => [r.id, i]));
-  assert.ok(pos.arts < pos.finance, "arts should outrank finance for a high-O artist");
-  assert.ok(pos.design < pos.trades, "design should outrank trades");
-});
-
-test("high-Conscientiousness + structure profile ranks Finance/Business high", () => {
-  const ranked = rankDirections({
-    bigFiveScores: { O: 30, C: 95, E: 55, A: 50, N: 40 },
-    valuesScores: { structure: 5, economic_return: 5, achievement: 5, intellectual_stimulation: 1 },
-  });
-  const top5 = ranked.slice(0, 5).map((r) => r.id);
-  assert.ok(top5.includes("finance") || top5.includes("business"), `got top5 ${top5}`);
-});
-
-test("rankDirections honors excludeIds and stays sorted high-to-low", () => {
-  const ranked = rankDirections(
-    { bigFiveScores: { O: 70, C: 60, E: 50, A: 50, N: 50 }, valuesScores: {} },
-    { excludeIds: ["arts", "science"] }
-  );
-  assert.ok(!ranked.some((r) => r.id === "arts" || r.id === "science"));
+test("rankDirections ranks by weighted dot product over measured scores", () => {
+  const scientist = { R: 20, I: 95, A: 40, S: 30, E: 20, C: 40 };
+  const ranked = rankDirections(scientist);
+  assert.equal(ranked[0].id, "science");
+  assert.ok(ranked.every((r) => Number.isFinite(r.score)));
   for (let i = 1; i < ranked.length; i++) {
     assert.ok(ranked[i - 1].score >= ranked[i].score, "scores must be non-increasing");
   }
+});
+
+test("rankDirections excludes rejected ids and tolerates a missing vector", () => {
+  const ranked = rankDirections(
+    { R: 20, I: 95, A: 40, S: 30, E: 20, C: 40 },
+    { excludeIds: ["science"] }
+  );
+  assert.ok(!ranked.some((r) => r.id === "science"));
+  const neutral = rankDirections(undefined);
+  assert.equal(neutral.length, Object.keys(DIRECTION_RIASEC).length);
 });

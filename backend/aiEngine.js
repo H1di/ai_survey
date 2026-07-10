@@ -12,7 +12,7 @@ const {
 const { VALUES_DIMENSIONS } = require("./questionPool");
 const { DIRECTIONS, DIRECTION_IDS, getDirection, computeDirection } = require("./directions");
 const { getFallbackItems } = require("./bigFiveItems");
-const { rankDirections } = require("./riasec");
+const { rankDirections, inferRiasecScores } = require("./riasec");
 
 function cleanText(value, fallback = "") {
   if (typeof value !== "string") {
@@ -401,10 +401,9 @@ function createAiEngine({ apiKey, model }) {
     try {
       const prompts = buildDirectionQuestionsPrompt({
         profileDigest: buildSessionDigest(session),
-        riasecRanking: rankDirections({
-          bigFiveScores: session.bigFiveScores,
-          valuesScores: session.valuesScores,
-        }),
+        riasecRanking: rankDirections(
+          session.riasecScores ?? inferRiasecScores(session.bigFiveScores)
+        ),
       });
       const parsed = await runJsonCompletion(client, {
         model,
