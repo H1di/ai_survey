@@ -220,6 +220,19 @@ test("v2 mutators: riasec, jobChar, cv, journey", () => {
   assert.equal(s.careerJourneyAnswers.cj_education, "BSc");
 });
 
+test("setUserValues wraps scores as an inferred low-confidence vector and serializes", () => {
+  const store = new SessionStore();
+  const s = makeSession(store);
+  assert.equal(s.userValues, null);
+
+  const scores = { self_direction: 80, stimulation: 60, hedonism: 50, achievement: 55, power: 30, security: 40, conformity: 35, tradition: 30, benevolence: 65, universalism: 70 };
+  store.setUserValues(s, scores);
+  assert.deepEqual(s.userValues, { scores, confidence: "low", source: "inferred" });
+
+  const trimmed = store.serializeSessionState(s, {}, {}, { includeStatic: false });
+  assert.deepEqual(trimmed.userValues.scores, scores, "userValues travels in the dynamic part");
+});
+
 test("rejectProposedDirection records the rejection and clears the proposal", () => {
   const store = new SessionStore();
   const s = makeSession(store);

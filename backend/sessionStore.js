@@ -83,6 +83,7 @@ class SessionStore {
       jobCharAnswers: {},
       jobCharProfile: null,
       careerJourneyAnswers: {},
+      userValues: null,
       // Page 3 — Life Path Engine
       pathStage: "direction",
       directionQuestions: [],
@@ -206,6 +207,13 @@ class SessionStore {
     this.touch(session);
   }
 
+  // No PVQ instrument yet — the Schwartz vector is always inferred from the
+  // rest of the assessment, so the confidence flag is fixed at "low".
+  setUserValues(session, scores) {
+    session.userValues = { scores, confidence: "low", source: "inferred" };
+    this.touch(session);
+  }
+
   setDirectionQuestions(session, questions) {
     session.directionQuestions = questions;
     session.directionAnswers = {};
@@ -318,6 +326,7 @@ class SessionStore {
       jobCharAnswers: session.jobCharAnswers,
       jobCharProfile: session.jobCharProfile,
       careerJourneyAnswers: session.careerJourneyAnswers,
+      userValues: session.userValues,
       progress,
       summary,
       pathStage: session.pathStage,

@@ -361,6 +361,9 @@ app.post("/api/cv", cvUpload.single("file"), async (req, res) => {
     }
     const analysis = await aiEngine.analyzeCV({ cvText });
     store.setCvAnalysis(session, cvText, analysis);
+    // The Schwartz user vector must exist before the graph renders.
+    const userValues = await aiEngine.inferUserValues({ session });
+    store.setUserValues(session, userValues);
     store.advanceStep(session, "tree");
     return sendSessionSnapshot(res, session);
   } catch (error) {
@@ -371,7 +374,7 @@ app.post("/api/cv", cvUpload.single("file"), async (req, res) => {
   }
 });
 
-app.post("/api/cv/journey", (req, res) => {
+app.post("/api/cv/journey", async (req, res) => {
   try {
     const { sessionId, questionId, value } = req.body || {};
     const session = store.require(sessionId);
@@ -385,6 +388,9 @@ app.post("/api/cv/journey", (req, res) => {
       (q) => session.careerJourneyAnswers[q.id] !== undefined
     );
     if (allAnswered) {
+      // The Schwartz user vector must exist before the graph renders.
+      const userValues = await aiEngine.inferUserValues({ session });
+      store.setUserValues(session, userValues);
       store.advanceStep(session, "tree");
     }
     return sendSessionSnapshot(res, session);

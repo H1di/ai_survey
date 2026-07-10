@@ -96,6 +96,9 @@ async function completeAssessment() {
     ({ data } = await post("/api/cv/journey", { sessionId, questionId: q.id, value: "test answer" }));
   }
   assert.equal(data.step, "tree");
+  assert.ok(data.userValues, "userValues inferred the moment step becomes tree");
+  assert.equal(data.userValues.confidence, "low");
+  assert.equal(Object.keys(data.userValues.scores).length, 10);
   return { sessionId, data };
 }
 
@@ -208,6 +211,12 @@ test("cv with pasted text stores analysis and reaches tree", async () => {
   assert.equal(data.cvProvided, true);
   // keyless: analysis is the honest empty signal
   assert.deepEqual(data.cvAnalysis, { skills: [], domains: [], seniority: "" });
+  // Schwartz user vector exists on BOTH cv paths before the graph renders
+  assert.equal(data.userValues.source, "inferred");
+  assert.equal(Object.keys(data.userValues.scores).length, 10);
+  for (const v of Object.values(data.userValues.scores)) {
+    assert.ok(v >= 0 && v <= 100);
+  }
 });
 
 test("cv accepts a multipart .txt upload", async () => {
