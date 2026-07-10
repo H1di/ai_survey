@@ -31,52 +31,183 @@ async function post(path, body) {
   return { status: res.status, data };
 }
 
-// Fast-forwards Page 1 + Page 2 (fallback Big Five items are deterministic).
-// Static question banks arrive on start and depth-choice snapshots only —
-// answer responses are trimmed, so iterate over the captured lists.
-async function completeAssessment() {
-  let { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "build useful things" });
-  const sessionId = data.sessionId;
-  const { demographicQuestions, valuesQuestions } = data;
+const RANKING = [
+  "compensation",
+  "work_mode",
+  "job_security",
+  "career_growth",
+  "complexity",
+  "meaning_impact",
+  "social",
+];
 
-  const demoValues = { sex: "female", age: 30, country: "Testland" };
-  for (const q of demographicQuestions) {
+// Fast-forwards Page 1 + Page 2 up to the job-characteristics step.
+// Static question banks arrive on start / depth / riasec-start snapshots
+// only — answer responses are trimmed, so iterate over the captured lists.
+async function walkToJobChar() {
+  let { data } = await post("/api/session/start", {
+    entryChoice: "find",
+    dreamAnswer: "build useful things",
+    cvIntent: "new",
+  });
+  const sessionId = data.sessionId;
+  const careerJourneyQuestions = data.careerJourneyQuestions;
+
+  const demoValues = { sex: "female", age: 30, country: "Testland", city: "Testville" };
+  for (const q of data.demographicQuestions) {
     ({ data } = await post("/api/session/demographics", { sessionId, questionId: q.id, value: demoValues[q.id] }));
   }
   assert.equal(data.step, "depth_choice");
 
   ({ data } = await post("/api/session/big-five-depth", { sessionId, depth: "short" }));
-  const bigFiveItems = data.bigFiveItems;
-
-  for (const item of bigFiveItems) {
+  for (const item of data.bigFiveItems) {
     ({ data } = await post("/api/big-five/answer", { sessionId, itemId: item.id, value: 3 }));
   }
-  assert.equal(data.step, "values");
+  assert.equal(data.step, "riasec");
 
-  for (const q of valuesQuestions) {
-    ({ data } = await post("/api/values/answer", { sessionId, questionId: q.id, choice: "A" }));
+  ({ data } = await post("/api/riasec/start", { sessionId }));
+  assert.equal(data.riasecItems.length, 12);
+  for (const item of data.riasecItems) {
+    ({ data } = await post("/api/riasec/answer", { sessionId, itemId: item.id, value: 4 }));
   }
+  assert.equal(data.step, "job_characteristics");
+  assert.ok(data.riasecCode, "code derived on completion");
 
-  assert.equal(data.step, "complete");
+  return { sessionId, data, careerJourneyQuestions };
+}
+
+async function walkToCv() {
+  const walked = await walkToJobChar();
+  const { sessionId, careerJourneyQuestions } = walked;
+  let { data } = await post("/api/job-characteristics/rank", { sessionId, ranking: RANKING, depth: 5 });
+  assert.equal(data.jobCharItems.length, 5);
+  for (const item of data.jobCharItems) {
+    ({ data } = await post("/api/job-characteristics/answer", { sessionId, itemId: item.id, value: item.options[0].value }));
+  }
+  assert.equal(data.step, "cv");
+  return { sessionId, data, careerJourneyQuestions };
+}
+
+async function completeAssessment() {
+  const walked = await walkToCv();
+  const { sessionId, careerJourneyQuestions } = walked;
+  let data = walked.data;
+  for (const q of careerJourneyQuestions) {
+    ({ data } = await post("/api/cv/journey", { sessionId, questionId: q.id, value: "test answer" }));
+  }
+  assert.equal(data.step, "tree");
   return { sessionId, data };
 }
 
 test("answer snapshots omit static question banks; start/GET include them", async () => {
-  let { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "trim me" });
+  let { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "trim me", cvIntent: "new" });
   const sessionId = data.sessionId;
   assert.ok(data.demographicQuestions, "start carries question banks");
-  assert.ok(data.valuesQuestions);
+  assert.ok(data.careerJourneyQuestions);
+  assert.ok(data.jobCharParams);
   assert.ok(data.directionCatalog);
 
   ({ data } = await post("/api/session/demographics", { sessionId, questionId: "sex", value: "male" }));
   assert.equal(data.demographicQuestions, undefined, "answer response is trimmed");
-  assert.equal(data.valuesQuestions, undefined);
+  assert.equal(data.careerJourneyQuestions, undefined);
+  assert.equal(data.jobCharParams, undefined);
   assert.equal(data.directionCatalog, undefined);
   assert.ok(data.demographics, "dynamic state still present");
 
   const res = await fetch(`${base}/api/session/${sessionId}`);
   const snapshot = await res.json();
   assert.ok(snapshot.demographicQuestions, "GET (resume) carries question banks");
+});
+
+test("session/start requires a valid cvIntent", async () => {
+  const bad = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "x" });
+  assert.equal(bad.status, 400);
+  const good = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "x", cvIntent: "use_skills" });
+  assert.equal(good.status, 200);
+  assert.equal(good.data.cvIntent, "use_skills");
+});
+
+test("values route is gone", async () => {
+  const res = await post("/api/values/answer", {});
+  assert.equal(res.status, 404);
+});
+
+test("step guards: riasec/jobchar/cv routes reject out-of-order calls", async () => {
+  const { data: start } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "x", cvIntent: "new" });
+  const sessionId = start.sessionId;
+  for (const [path, body] of [
+    ["/api/riasec/start", { sessionId }],
+    ["/api/riasec/skip", { sessionId }],
+    ["/api/job-characteristics/rank", { sessionId, ranking: RANKING, depth: 5 }],
+    ["/api/cv", { sessionId, cvText: "hi" }],
+    ["/api/cv/journey", { sessionId, questionId: "cj_education", value: "x" }],
+  ]) {
+    const res = await post(path, body);
+    assert.equal(res.status, 400, `${path} must reject before its step`);
+  }
+});
+
+test("riasec skip infers a low-confidence profile and advances", async () => {
+  let { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "x", cvIntent: "new" });
+  const sessionId = data.sessionId;
+  const demoValues = { sex: "male", age: 40, country: "Testland", city: "Testville" };
+  for (const q of data.demographicQuestions) {
+    ({ data } = await post("/api/session/demographics", { sessionId, questionId: q.id, value: demoValues[q.id] }));
+  }
+  ({ data } = await post("/api/session/big-five-depth", { sessionId, depth: "short" }));
+  for (const item of data.bigFiveItems) {
+    ({ data } = await post("/api/big-five/answer", { sessionId, itemId: item.id, value: 4 }));
+  }
+  assert.equal(data.step, "riasec");
+
+  ({ data } = await post("/api/riasec/skip", { sessionId }));
+  assert.equal(data.step, "job_characteristics");
+  assert.equal(data.riasecInferred, true);
+  assert.equal(data.riasecCode.length, 3);
+});
+
+test("job-characteristics/rank validates ranking permutation, depth, and re-rank", async () => {
+  const { sessionId } = await walkToJobChar();
+  let res = await post("/api/job-characteristics/rank", { sessionId, ranking: ["compensation"], depth: 5 });
+  assert.equal(res.status, 400);
+  res = await post("/api/job-characteristics/rank", { sessionId, ranking: RANKING, depth: 7 });
+  assert.equal(res.status, 400, "depth must be 5 or 10");
+  res = await post("/api/job-characteristics/rank", { sessionId, ranking: RANKING, depth: 10 });
+  assert.equal(res.status, 200);
+  assert.equal(res.data.jobCharItems.length, 10);
+  res = await post("/api/job-characteristics/rank", { sessionId, ranking: RANKING, depth: 5 });
+  assert.equal(res.status, 400, "ranking already submitted");
+});
+
+test("jobChar answers must be one of the option values; completion computes the profile", async () => {
+  const { sessionId, data: ranked } = await (async () => {
+    const walked = await walkToJobChar();
+    const { data } = await post("/api/job-characteristics/rank", { sessionId: walked.sessionId, ranking: RANKING, depth: 5 });
+    return { sessionId: walked.sessionId, data };
+  })();
+
+  const item = ranked.jobCharItems[0];
+  let res = await post("/api/job-characteristics/answer", { sessionId, itemId: item.id, value: 42.5 });
+  assert.equal(res.status, 400);
+
+  let data = ranked;
+  for (const q of ranked.jobCharItems) {
+    ({ data } = await post("/api/job-characteristics/answer", { sessionId, itemId: q.id, value: q.options[0].value }));
+  }
+  assert.equal(data.step, "cv");
+  assert.ok(data.jobCharProfile, "profile computed on completion");
+  for (const param of RANKING) {
+    assert.equal(typeof data.jobCharProfile[param], "number");
+  }
+});
+
+test("cv with pasted text stores analysis and reaches tree", async () => {
+  const { sessionId } = await walkToCv();
+  const { data } = await post("/api/cv", { sessionId, cvText: "Nurse for 10 years, ICU team lead." });
+  assert.equal(data.step, "tree");
+  assert.equal(data.cvProvided, true);
+  // keyless: analysis is the honest empty signal
+  assert.deepEqual(data.cvAnalysis, { skills: [], domains: [], seniority: "" });
 });
 
 test("full Page 3 flow: direction -> narrowing -> professions -> select -> roadmap", async () => {
@@ -159,7 +290,7 @@ test("full Page 3 flow: direction -> narrowing -> professions -> select -> roadm
 });
 
 test("guards: ordering and validation", async () => {
-  const { data: start } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "x" });
+  const { data: start } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "x", cvIntent: "new" });
   const sessionId = start.sessionId;
 
   // direction endpoints require completed assessment
@@ -271,7 +402,7 @@ test("refine guards: no proposal and confirmed direction", async () => {
 
 test("GET /api/session/:id returns enough state to resume after a reload", async () => {
   // Start and answer one demographic, then "reload".
-  let { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "resume me" });
+  let { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "resume me", cvIntent: "use_skills" });
   const sessionId = data.sessionId;
   ({ data } = await post("/api/session/demographics", { sessionId, questionId: "sex", value: "female" }));
 
@@ -283,9 +414,11 @@ test("GET /api/session/:id returns enough state to resume after a reload", async
   assert.equal(snapshot.step, "demographics");
   assert.equal(snapshot.entryChoice, "find");
   assert.equal(snapshot.dreamAnswer, "resume me");
-  assert.ok(snapshot.demographicQuestions.length >= 3, "question list present");
+  assert.equal(snapshot.cvIntent, "use_skills");
+  assert.ok(snapshot.demographicQuestions.length === 4, "question list present incl. city");
   assert.equal(snapshot.demographics.sex, "female", "saved answers present");
-  assert.ok(Array.isArray(snapshot.valuesQuestions) && snapshot.valuesQuestions.length === 40);
+  assert.ok(Array.isArray(snapshot.careerJourneyQuestions) && snapshot.careerJourneyQuestions.length === 7);
+  assert.equal(snapshot.jobCharParams.length, 7);
 
   const unknown = await fetch(`${base}/api/session/does-not-exist`);
   assert.equal(unknown.status, 404);
@@ -293,12 +426,12 @@ test("GET /api/session/:id returns enough state to resume after a reload", async
 
 test("dreamAnswer is capped at 500 chars before storage and prompts", async () => {
   const long = "x".repeat(10_000);
-  const { status, data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: long });
+  const { status, data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: long, cvIntent: "new" });
   assert.equal(status, 200);
   assert.equal(data.dreamAnswer.length, 500);
 });
 
 test("snapshots expose aiEnabled so the UI can label demo mode", async () => {
-  const { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "honesty" });
+  const { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "honesty", cvIntent: "new" });
   assert.equal(data.aiEnabled, false, "keyless test run must report aiEnabled=false");
 });

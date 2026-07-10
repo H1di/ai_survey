@@ -34,6 +34,7 @@ test("AI-priced routes return 429 once the strict limit is exceeded", async () =
   const { data } = await post("/api/session/start", {
     entryChoice: "find",
     dreamAnswer: "rate limit probe",
+    cvIntent: "new",
   });
   const sessionId = data.sessionId;
 
@@ -52,6 +53,7 @@ test("non-AI routes stay under the global limiter only", async () => {
   const { status } = await post("/api/session/start", {
     entryChoice: "find",
     dreamAnswer: "still fine",
+    cvIntent: "new",
   });
   assert.equal(status, 200);
 });

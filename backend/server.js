@@ -3,14 +3,19 @@ const dotenv = require("dotenv");
 const express = require("express");
 const rateLimit = require("express-rate-limit");
 const { createAiEngine } = require("./aiEngine");
-const { DEMOGRAPHIC_QUESTIONS } = require("./questionPool");
+const { DEMOGRAPHIC_QUESTIONS, CAREER_JOURNEY_QUESTIONS } = require("./questionPool");
 const {
   validateDemographicAnswer,
   validateBigFiveAnswer,
-  validateValuesAnswer,
+  validateRiasecAnswer,
+  computeRiasecScores,
+  deriveRiasecCode,
+  validateJobCharRanking,
+  validateJobCharAnswer,
+  computeJobCharProfile,
+  validateCareerJourneyAnswer,
   computeBigFiveScores,
   deriveBigFiveTraits,
-  computeValuesScores,
   buildProgress,
   summarizeAnswersForClient,
 } = require("./questionEngine");
@@ -69,6 +74,10 @@ const aiLimiter = rateLimit({
 });
 for (const path of [
   "/api/session/big-five-depth",
+  "/api/riasec/start",
+  "/api/riasec/skip",
+  "/api/job-characteristics/rank",
+  "/api/cv",
   "/api/direction/question",
   "/api/direction/confirm",
   "/api/direction/refine",
@@ -105,10 +114,13 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.post("/api/session/start", (req, res) => {
-  const { entryChoice, dreamAnswer } = req.body || {};
+  const { entryChoice, dreamAnswer, cvIntent } = req.body || {};
 
   if (!isValidEntryChoice(entryChoice)) {
     return res.status(400).json({ error: "entryChoice must be 'change' or 'find'." });
+  }
+  if (cvIntent !== "new" && cvIntent !== "use_skills") {
+    return res.status(400).json({ error: "cvIntent must be 'new' or 'use_skills'." });
   }
 
   // Capped like feedbackText: the dream is quoted inside every AI prompt.
@@ -122,6 +134,7 @@ app.post("/api/session/start", (req, res) => {
   const session = store.createSession({
     entryChoice,
     dreamAnswer: normalizedDream,
+    cvIntent,
   });
 
   return sendSessionSnapshot(res, session, { includeStatic: true });
@@ -208,7 +221,7 @@ app.post("/api/big-five/answer", (req, res) => {
       const scores = computeBigFiveScores(session);
       const derived = deriveBigFiveTraits(scores);
       store.setBigFiveScores(session, scores, derived);
-      store.advanceStep(session, "values");
+      store.advanceStep(session, "riasec");
     }
 
     return sendSessionSnapshot(res, session);
@@ -217,24 +230,152 @@ app.post("/api/big-five/answer", (req, res) => {
   }
 });
 
-app.post("/api/values/answer", (req, res) => {
+app.post("/api/riasec/start", async (req, res) => {
   try {
-    const { sessionId, questionId, choice } = req.body || {};
+    const { sessionId } = req.body || {};
     const session = store.require(sessionId);
-
-    if (session.step !== "values") {
-      return res.status(400).json({ error: "Not currently in the values step." });
+    if (session.step !== "riasec") {
+      return res.status(400).json({ error: "Not currently in the RIASEC step." });
     }
+    if (!session.riasecItems.length) {
+      const items = await aiEngine.generateRiasecItems({ depth: session.bigFiveDepth });
+      store.setRiasecItems(session, items);
+    }
+    // riasecItems just changed — one of the static-list snapshots.
+    return sendSessionSnapshot(res, session, { includeStatic: true });
+  } catch (error) {
+    if (!error.statusCode) console.error("[riasec/start]", error);
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.statusCode ? error.message : "Failed to start the interests quiz." });
+  }
+});
 
-    const normalized = validateValuesAnswer(questionId, choice);
-    store.recordValuesAnswer(session, questionId, normalized);
+app.post("/api/riasec/answer", (req, res) => {
+  try {
+    const { sessionId, itemId, value } = req.body || {};
+    const session = store.require(sessionId);
+    if (session.step !== "riasec") {
+      return res.status(400).json({ error: "Not currently in the RIASEC step." });
+    }
+    const normalized = validateRiasecAnswer(session, itemId, value);
+    store.recordRiasecAnswer(session, itemId, normalized);
 
-    const { scores } = computeValuesScores(session);
+    const { scores } = computeRiasecScores(session);
     if (scores) {
-      store.setValuesScores(session, scores);
-      store.advanceStep(session, "complete");
+      store.setRiasecScores(session, scores, deriveRiasecCode(scores));
+      store.advanceStep(session, "job_characteristics");
     }
+    return sendSessionSnapshot(res, session);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ error: error.message });
+  }
+});
 
+app.post("/api/riasec/skip", async (req, res) => {
+  try {
+    const { sessionId } = req.body || {};
+    const session = store.require(sessionId);
+    if (session.step !== "riasec") {
+      return res.status(400).json({ error: "Not currently in the RIASEC step." });
+    }
+    const scores = await aiEngine.inferRiasecProfile({ session });
+    store.setRiasecScores(session, scores, deriveRiasecCode(scores), { inferred: true });
+    store.advanceStep(session, "job_characteristics");
+    return sendSessionSnapshot(res, session);
+  } catch (error) {
+    if (!error.statusCode) console.error("[riasec/skip]", error);
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.statusCode ? error.message : "Failed to estimate your interests." });
+  }
+});
+
+app.post("/api/job-characteristics/rank", async (req, res) => {
+  try {
+    const { sessionId, ranking, depth } = req.body || {};
+    const session = store.require(sessionId);
+    if (session.step !== "job_characteristics") {
+      return res.status(400).json({ error: "Not currently in the job-characteristics step." });
+    }
+    if (session.jobCharItems.length) {
+      return res.status(400).json({ error: "Ranking already submitted." });
+    }
+    if (depth !== 5 && depth !== 10) {
+      return res.status(400).json({ error: "depth must be 5 or 10." });
+    }
+    const validRanking = validateJobCharRanking(ranking);
+    const items = await aiEngine.generateJobCharQuestions({ session, ranking: validRanking, count: depth });
+    store.setJobCharRanking(session, validRanking, depth, items);
+    return sendSessionSnapshot(res, session, { includeStatic: true });
+  } catch (error) {
+    if (!error.statusCode) console.error("[job-characteristics/rank]", error);
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.statusCode ? error.message : "Failed to build your priority questions." });
+  }
+});
+
+app.post("/api/job-characteristics/answer", (req, res) => {
+  try {
+    const { sessionId, itemId, value } = req.body || {};
+    const session = store.require(sessionId);
+    if (session.step !== "job_characteristics") {
+      return res.status(400).json({ error: "Not currently in the job-characteristics step." });
+    }
+    const normalized = validateJobCharAnswer(session, itemId, value);
+    store.recordJobCharAnswer(session, itemId, normalized);
+
+    const { profile } = computeJobCharProfile(session);
+    if (profile) {
+      store.setJobCharProfile(session, profile);
+      store.advanceStep(session, "cv");
+    }
+    return sendSessionSnapshot(res, session);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ error: error.message });
+  }
+});
+
+app.post("/api/cv", async (req, res) => {
+  try {
+    const { sessionId } = req.body || {};
+    const session = store.require(sessionId);
+    if (session.step !== "cv") {
+      return res.status(400).json({ error: "Not currently in the CV step." });
+    }
+    const cvText = typeof req.body.cvText === "string" ? req.body.cvText.trim().slice(0, 6000) : "";
+    if (!cvText) {
+      return res.status(400).json({ error: "cvText is required." });
+    }
+    const analysis = await aiEngine.analyzeCV({ cvText });
+    store.setCvAnalysis(session, cvText, analysis);
+    store.advanceStep(session, "tree");
+    return sendSessionSnapshot(res, session);
+  } catch (error) {
+    if (!error.statusCode) console.error("[cv]", error);
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.statusCode ? error.message : "Failed to analyse the CV." });
+  }
+});
+
+app.post("/api/cv/journey", (req, res) => {
+  try {
+    const { sessionId, questionId, value } = req.body || {};
+    const session = store.require(sessionId);
+    if (session.step !== "cv") {
+      return res.status(400).json({ error: "Not currently in the CV step." });
+    }
+    const normalized = validateCareerJourneyAnswer(questionId, value);
+    store.recordCareerJourneyAnswer(session, questionId, normalized);
+
+    const allAnswered = CAREER_JOURNEY_QUESTIONS.every(
+      (q) => session.careerJourneyAnswers[q.id] !== undefined
+    );
+    if (allAnswered) {
+      store.advanceStep(session, "tree");
+    }
     return sendSessionSnapshot(res, session);
   } catch (error) {
     return res.status(error.statusCode || 500).json({ error: error.message });
@@ -242,7 +383,7 @@ app.post("/api/values/answer", (req, res) => {
 });
 
 function requireCompletedAssessment(session) {
-  if (session.step !== "complete") {
+  if (session.step !== "tree") {
     const error = new Error("Complete the assessment before this step.");
     error.statusCode = 400;
     throw error;
