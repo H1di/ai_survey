@@ -78,3 +78,62 @@ test("valuesFit tolerates flat vectors (zero-norm cosine -> neutral, no crash)",
   assert.ok(Number.isFinite(fit.overall));
   assert.ok(fit.overall >= 0 && fit.overall <= 100);
 });
+
+// --- direction prototypes + deterministic fallbacks ---
+
+const {
+  SCHWARTZ_DIRECTION_PROTOTYPES,
+  buildFallbackProfessionValues,
+  inferUserValuesFallback,
+} = require("../schwartzValues");
+const { DIRECTION_IDS } = require("../directions");
+
+function spread(v) {
+  const nums = SCHWARTZ_ORDER.map((k) => v[k]);
+  return Math.max(...nums) - Math.min(...nums);
+}
+
+test("every catalog direction has a valid, non-flat, circumplex-respecting prototype", () => {
+  assert.deepEqual(Object.keys(SCHWARTZ_DIRECTION_PROTOTYPES).sort(), [...DIRECTION_IDS].sort());
+  for (const [id, proto] of Object.entries(SCHWARTZ_DIRECTION_PROTOTYPES)) {
+    for (const key of SCHWARTZ_ORDER) {
+      assert.ok(proto[key] >= 0 && proto[key] <= 100, `${id}.${key} out of range`);
+    }
+    assert.ok(spread(proto) >= 25, `${id} prototype too flat (${spread(proto)})`);
+    assert.ok(
+      !(proto.self_direction > 70 && proto.tradition > 70),
+      `${id}: self_direction and tradition both high`
+    );
+    assert.ok(
+      !(proto.power > 70 && proto.universalism > 70),
+      `${id}: power and universalism both high`
+    );
+  }
+});
+
+test("buildFallbackProfessionValues pulls the prototype toward jobChar targets", () => {
+  const jc = { compensation: 50, work_mode: 50, job_security: 50, career_growth: 50, complexity: 50, meaning_impact: 95, social: 50 };
+  const base = SCHWARTZ_DIRECTION_PROTOTYPES.tech;
+  const adjusted = buildFallbackProfessionValues("tech", jc);
+  assert.ok(adjusted.universalism > base.universalism, "meaning target raises universalism");
+  for (const key of SCHWARTZ_ORDER) {
+    assert.ok(adjusted[key] >= 0 && adjusted[key] <= 100);
+  }
+  // unknown direction still yields a usable non-flat profile
+  const unknown = buildFallbackProfessionValues("nope", jc);
+  assert.ok(spread(unknown) >= 15);
+});
+
+test("inferUserValuesFallback: varied profile -> in-range non-flat; empty -> all 50", () => {
+  const varied = inferUserValuesFallback({
+    bigFiveScores: { O: 90, C: 30, E: 65, A: 75, N: 40 },
+    riasecScores: { R: 20, I: 70, A: 85, S: 60, E: 40, C: 25 },
+    jobCharProfile: { compensation: 30, work_mode: 85, job_security: 20, career_growth: 45, complexity: 80, meaning_impact: 90, social: 60 },
+  });
+  for (const key of SCHWARTZ_ORDER) {
+    assert.ok(varied[key] >= 0 && varied[key] <= 100, `${key} out of range`);
+  }
+  assert.ok(spread(varied) >= 15, `too flat: ${spread(varied)}`);
+
+  assert.deepEqual(inferUserValuesFallback({}), V());
+});
