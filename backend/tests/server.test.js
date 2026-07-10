@@ -210,6 +210,36 @@ test("cv with pasted text stores analysis and reaches tree", async () => {
   assert.deepEqual(data.cvAnalysis, { skills: [], domains: [], seniority: "" });
 });
 
+test("cv accepts a multipart .txt upload", async () => {
+  const { sessionId } = await walkToCv();
+  const form = new FormData();
+  form.append("sessionId", sessionId);
+  form.append("file", new Blob([Buffer.from("Welder, 8 years, certified")], { type: "text/plain" }), "cv.txt");
+  const res = await fetch(`${base}/api/cv`, { method: "POST", body: form });
+  const data = await res.json();
+  assert.equal(res.status, 200);
+  assert.equal(data.step, "tree");
+  assert.equal(data.cvProvided, true);
+});
+
+test("cv upload rejects unsupported file types", async () => {
+  const { sessionId } = await walkToCv();
+  const form = new FormData();
+  form.append("sessionId", sessionId);
+  form.append("file", new Blob([Buffer.from("x")], { type: "image/jpeg" }), "cv.jpg");
+  const res = await fetch(`${base}/api/cv`, { method: "POST", body: form });
+  assert.equal(res.status, 400);
+});
+
+test("cv upload rejects oversized files with a 400", async () => {
+  const { sessionId } = await walkToCv();
+  const form = new FormData();
+  form.append("sessionId", sessionId);
+  form.append("file", new Blob([Buffer.alloc(3 * 1024 * 1024, "a")], { type: "text/plain" }), "cv.txt");
+  const res = await fetch(`${base}/api/cv`, { method: "POST", body: form });
+  assert.equal(res.status, 400);
+});
+
 test("full Page 3 flow: direction -> narrowing -> professions -> select -> roadmap", async () => {
   const { sessionId } = await completeAssessment();
 

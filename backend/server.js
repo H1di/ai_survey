@@ -1,7 +1,9 @@
 const cors = require("cors");
 const dotenv = require("dotenv");
 const express = require("express");
+const multer = require("multer");
 const rateLimit = require("express-rate-limit");
+const { extractCvText } = require("./cvExtract");
 const { createAiEngine } = require("./aiEngine");
 const { DEMOGRAPHIC_QUESTIONS, CAREER_JOURNEY_QUESTIONS } = require("./questionPool");
 const {
@@ -337,16 +339,25 @@ app.post("/api/job-characteristics/answer", (req, res) => {
   }
 });
 
-app.post("/api/cv", async (req, res) => {
+const cvUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024, files: 1 },
+});
+
+app.post("/api/cv", cvUpload.single("file"), async (req, res) => {
   try {
     const { sessionId } = req.body || {};
     const session = store.require(sessionId);
     if (session.step !== "cv") {
       return res.status(400).json({ error: "Not currently in the CV step." });
     }
-    const cvText = typeof req.body.cvText === "string" ? req.body.cvText.trim().slice(0, 6000) : "";
+    let rawText = typeof req.body.cvText === "string" ? req.body.cvText : "";
+    if (req.file) {
+      rawText = await extractCvText(req.file);
+    }
+    const cvText = rawText.trim().slice(0, 6000);
     if (!cvText) {
-      return res.status(400).json({ error: "cvText is required." });
+      return res.status(400).json({ error: "Provide cvText or upload a .pdf/.docx/.txt file." });
     }
     const analysis = await aiEngine.analyzeCV({ cvText });
     store.setCvAnalysis(session, cvText, analysis);
@@ -619,6 +630,14 @@ app.post("/api/roadmap/generate", async (req, res) => {
       .status(error.statusCode || 500)
       .json({ error: error.statusCode ? error.message : "Failed to generate roadmap." });
   }
+});
+
+// Multer failures (size cap, malformed multipart) are user errors, not 500s.
+app.use((error, _req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    return res.status(400).json({ error: "File too large (max 2 MB) or malformed upload." });
+  }
+  return next(error);
 });
 
 if (require.main === module) {
