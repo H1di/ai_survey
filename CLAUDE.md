@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Life Path Explorer** — a two-part web app. Part one is a psychological assessment (demographics → Big Five/OCEAN → RIASEC interests → ranked 7-parameter job-characteristics targets → CV/career-journey signal). Part two is the **Life Path Engine**: the assessment profile feeds AI prompts (OpenAI `gpt-4.1-mini`, JSON mode) that propose a broad career direction, three concrete professions, and a step-by-step roadmap, rendered as an interactive React Flow graph.
+**Life Path Explorer** — a two-part web app. Part one is a psychological assessment (demographics → Big Five/OCEAN → RIASEC interests → ranked 7-parameter job-characteristics targets → CV/career-journey signal). Part two is the **Life Path Engine**: the assessment profile feeds AI prompts (OpenAI `gpt-4.1-mini`, JSON mode) that produce an Oriented Field + concrete job (the "1st Output") explained through the 7 parameters and scored on Schwartz Basic Human Values; the user iterates it through a Yes/No refinement loop, and accepting an output reveals four advice blocks plus a step-by-step roadmap — all rendered as an interactive React Flow graph.
 
 Active code lives in `backend/` (Node + Express 5, CommonJS) and `frontend/` (React 19 + Vite + `@xyflow/react`). An older CRA implementation was removed in July 2026; if you ever need it, it is preserved at git tag `archive/legacy-cra-2026-07`.
 
@@ -58,13 +58,14 @@ entry → demographics → depth_choice → big_five → riasec → job_characte
 - **Job characteristics**: user ranks the 7 canonical parameters (`compensation, work_mode, job_security, career_growth, complexity, meaning_impact, social` — `JOB_CHAR_PARAMS`) and picks depth 5|10 → `/api/job-characteristics/rank` generates single-parameter tradeoff questions (AI, static bank fallback); each option encodes a 0–100 target; answers → `jobCharProfile` (unasked params default 50).
 - **CV**: `/api/cv` accepts pasted `cvText` (JSON) or a multipart file (`.pdf`/`.docx`/`.txt`, 2 MB cap, `backend/cvExtract.js`) and AI-parses it to `{skills, domains, seniority}`; without a CV, 7 static career-journey questions via `/api/cv/journey`. Completing either advances to `tree`.
 
-### Life Path Engine (Page 3)
+### Life Path Engine (Page 3 — output loop)
 
-After `tree`, a separate `pathStage` progression: `direction → narrowing → professions → roadmap`.
-- `POST /api/direction/question` — 3 AI-generated multiple-choice questions; every option is tagged with a `directionId` from the 15-direction catalog in `backend/directions.js`.
-- `POST /api/direction/answer` — deterministic tally (`computeDirection`) proposes a direction; user confirms (`/api/direction/confirm`), refines with a reason + free text (`/api/direction/refine`, max 2 rejections), or picks manually (`/api/direction/choose`).
-- `POST /api/professions/narrow` — 2 narrowing questions, then exactly 3 professions.
-- `POST /api/professions/select` + `POST /api/roadmap/generate` — per-profession roadmap (5–7 stages), cached in `session.roadmaps` keyed by profession id.
+After `tree`, a `pathStage` progression: `output → detail`. At the `cv → tree` transition the backend infers `session.userValues` (Schwartz 10-value vector, always low-confidence).
+- `POST /api/output/first` — generates the Oriented Field + 1st Output (idempotent). Grounding: `rankDirections(riasecScores)` over the 15-direction catalog feeds the prompt as a hint; keyless fallback picks the top-ranked direction's `professionSeeds`. Every output is Schwartz-scored (`scoreProfessionValues`) and the backend derives `higherOrder/axes/dominantPole/topValues/valuesFit` in `buildScoredOutput` — the AI never outputs aggregates.
+- `POST /api/output/refine` — the No-loop: `{ outputId, changes: [{param, reason}] }` (1–7 of the 7 canonical params) shifts named parameters while holding the rest, XOR `{ outputId, notSuitable: true }` regenerates from a different field family (all used `directionId`s excluded). Each regeneration appends a parent-linked `output_N` to `session.outputs` and logs `refinementHistory`.
+- `POST /api/output/accept` — the Yes-branch: marks the output accepted (`pathStage="detail"`, accept-once) and generates the four advice blocks (`aiRecommendations/events/universities/courses`) into `output.detail`.
+- `POST /api/roadmap/generate` — `{ sessionId, outputId }`; only for the accepted output, cached in `session.roadmaps` keyed by output id.
+- `backend/schwartzValues.js` — pure Schwartz module: circular order, higher-order poles (hedonism split 50/50), plane axes, `valuesFit` (0.6 axis + 0.4 centered cosine), per-direction prototypes + deterministic fallbacks.
 
 ### Backend modules
 
@@ -77,7 +78,8 @@ After `tree`, a separate `pathStage` progression: `direction → narrowing → p
 - `backend/cvExtract.js` — CV file → text (pdf-parse / mammoth / utf8), hard failures become 400s
 - `backend/aiEngine.js` — one generator per AI artifact, each with normalizer + deterministic fallback
 - `backend/prompts.js` — prompt builders; `buildProfileDigest` is the profile every prompt receives
-- `backend/directions.js` — direction catalog (alphabetical on purpose) + `computeDirection` tally
+- `backend/directions.js` — field-family catalog (alphabetical on purpose): prompt hints, fallback `professionSeeds`, Schwartz prototype keys
+- `backend/schwartzValues.js` — Schwartz derivations, values fit, direction prototypes, deterministic value fallbacks
 - `backend/riasec.js` — per-direction Holland weights + `rankDirections(riasecScores)` catalog ranking (direction-prompt hint); `inferRiasecScores` is the Big Five-only quiz-skip fallback
 
 ### Frontend
@@ -85,8 +87,8 @@ After `tree`, a separate `pathStage` progression: `direction → narrowing → p
 Single-page app, no router: `frontend/src/App.jsx` holds a `stage` machine (`entry → survey → tree`) and all state via `useState`. **The server snapshot is the single source of truth** — every mutating API call returns the full session snapshot, applied wholesale in `applySessionSnapshot`. Local state is only view state (current question indexes, busy flags, modal contexts).
 
 - `frontend/src/api.js` — thin fetch wrappers, one per endpoint
-- `frontend/src/components/GraphView/` — React Flow wrapper: node types `me`/`direction`/`profession`/`roadmap`/`loading`, custom `branch` edge, camera director that refits on stage changes
-- `frontend/src/components/ProfileCharts.jsx` — Big Five radar + RIASEC interest bars (recharts)
+- `frontend/src/components/GraphView/` — React Flow wrapper: node types `me`/`output`/`advice`/`roadmap`/`loading`, custom `branch` edge, camera director that refits on stage changes
+- `frontend/src/components/ProfileCharts.jsx` — Big Five radar + RIASEC interest bars (recharts) + the Schwartz circumplex map (`SchwartzMap.jsx`, plain SVG)
 
 The graph is rebuilt declaratively on each render by `buildLifePathGraph` in `App.jsx` from session data — do not mutate nodes/edges imperatively.
 
@@ -94,10 +96,11 @@ The graph is rebuilt declaratively on each render by `buildLifePathGraph` in `Ap
 
 - Answer payloads: demographics `questionId/value`, Big Five `itemId/value`, RIASEC `itemId/value 1-5`, jobChar `itemId/value` (value must equal one of the item's option values), journey `questionId/value`.
 - `session.step` and `pathStage` string values (backend ↔ frontend).
-- The 7 `JOB_CHAR_PARAMS` keys are a cross-layer contract (prompts, scoring, session, UI).
-- `REFINE_REASONS` labels in `App.jsx` ↔ `REFINE_REASON_VALUES` in `backend/directions.js`.
+- The 7 `JOB_CHAR_PARAMS` keys are a cross-layer contract (prompts, scoring, session, refine panel).
+- The 10 Schwartz value keys (`SCHWARTZ_ORDER`) are likewise shared backend ↔ frontend labels.
+- Refine payload: `{outputId, changes:[{param, reason}]}` XOR `{outputId, notSuitable: true}`.
 - Big Five items are serialized **without** `trait`/`reverse`; RIASEC items **without** `type` — never leak a scoring key.
 
 ## Testing
 
-`backend/tests/` uses `node:test` + supertest (100+ tests): route guards and step ordering, RIASEC/jobChar scoring, CV extraction, refine/reject/choose cycle, direction tally, AI payload normalizers, session serialization. Run with `cd backend && npm test`. Frontend: Vitest over `frontend/src/lifePath.js` (graph builder, dock state machine, rank-list helper) — `cd frontend && npm test -- --run`.
+`backend/tests/` uses `node:test` + supertest (110+ tests): route guards and step ordering, RIASEC/jobChar scoring, CV extraction, Schwartz derivations + fit properties, the full output loop (first → refine → notSuitable → accept → roadmap), AI payload normalizers, session serialization. Run with `cd backend && npm test`. Frontend: Vitest over `frontend/src/lifePath.js` (output-chain graph builder, dock state machine, rank-list helper) — `cd frontend && npm test -- --run`.
