@@ -75,18 +75,30 @@ npm run dev
 
 ## API Routes
 
-### Session + Survey
+### Session + Assessment
 - `POST /api/session/start`
-  - body: `{ "entryChoice": "change|find", "dreamAnswer": "..." }`
+  - body: `{ "entryChoice": "change|find", "dreamAnswer": "...", "cvIntent": "new|use_skills" }`
 - `GET /api/session/:sessionId` — full session snapshot (used to resume after reload)
 - `POST /api/session/demographics`
-  - body: `{ "sessionId": "...", "questionId": "sex|age|country", "value": ... }`
+  - body: `{ "sessionId": "...", "questionId": "sex|age|country|city", "value": ... }`
 - `POST /api/session/big-five-depth`
   - body: `{ "sessionId": "...", "depth": "short|deep" }` — 20 or 50 items
 - `POST /api/big-five/answer`
   - body: `{ "sessionId": "...", "itemId": "...", "value": 1-5 }`
-- `POST /api/values/answer`
-  - body: `{ "sessionId": "...", "questionId": "...", "choice": "A|B" }`
+- `POST /api/riasec/start`
+  - body: `{ "sessionId": "..." }` — generates the RIASEC activity items (12 short / 18 deep)
+- `POST /api/riasec/answer`
+  - body: `{ "sessionId": "...", "itemId": "...", "value": 1-5 }`
+- `POST /api/riasec/skip`
+  - body: `{ "sessionId": "..." }` — infers a low-confidence interest profile instead of the quiz
+- `POST /api/job-characteristics/rank`
+  - body: `{ "sessionId": "...", "ranking": [7 param ids most→least important], "depth": 5|10 }`
+- `POST /api/job-characteristics/answer`
+  - body: `{ "sessionId": "...", "itemId": "...", "value": <one of the option values> }`
+- `POST /api/cv`
+  - JSON body: `{ "sessionId": "...", "cvText": "..." }` — or multipart `sessionId` + `file` (.pdf/.docx/.txt, max 2 MB)
+- `POST /api/cv/journey`
+  - body: `{ "sessionId": "...", "questionId": "cj_...", "value": "..." }` — 7 career-journey questions when there is no CV
 
 ### Life Path Engine
 - `POST /api/direction/question`
