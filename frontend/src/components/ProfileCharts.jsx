@@ -80,23 +80,32 @@ export function PersonalityRadarChart({ scores, highlightKeys = [] }) {
   );
 }
 
-// `dimensions` metadata (ids, labels, emoji) is served by the backend in the
-// session snapshot — the single source shared with scoring and prompts.
-export function ValuesBarChart({ scores, dimensions = [] }) {
-  if (!scores || !dimensions.length) return null;
+const RIASEC_AXES = [
+  { key: "R", label: "Realistic (hands-on)" },
+  { key: "I", label: "Investigative (thinking)" },
+  { key: "A", label: "Artistic (creating)" },
+  { key: "S", label: "Social (helping)" },
+  { key: "E", label: "Enterprising (leading)" },
+  { key: "C", label: "Conventional (organizing)" },
+];
 
-  const data = dimensions.map((dim) => ({
-    id: dim.id,
-    name: `${dim.emoji} ${dim.label}`,
-    value: scores[dim.id] ?? 0,
+export function RiasecBarChart({ scores, code, inferred }) {
+  if (!scores) return null;
+
+  const data = RIASEC_AXES.map((axis) => ({
+    id: axis.key,
+    name: axis.label,
+    value: scores[axis.key] ?? 0,
   }));
 
   return (
     <div className="profile-chart">
-      <p className="profile-chart-title">Values (alignment per dimension)</p>
-      <ResponsiveContainer width="100%" height={248}>
+      <p className="profile-chart-title">
+        Interests (Holland{code ? ` · ${code}` : ""}{inferred ? " · estimated" : ""})
+      </p>
+      <ResponsiveContainer width="100%" height={200}>
         <BarChart data={data} layout="vertical" margin={{ top: 0, right: 12, bottom: 0, left: 0 }}>
-          <XAxis type="number" domain={[0, 5]} tickCount={6} tick={{ fontSize: 10, fill: MUTED }} />
+          <XAxis type="number" domain={[0, 100]} tickCount={6} tick={{ fontSize: 10, fill: MUTED }} />
           <YAxis
             type="category"
             dataKey="name"
@@ -108,19 +117,25 @@ export function ValuesBarChart({ scores, dimensions = [] }) {
           />
           <Bar dataKey="value" barSize={10} radius={[0, 2, 2, 0]} isAnimationActive={false}>
             {data.map((entry) => (
-              <Cell key={entry.id} fill={entry.value >= 4 ? ACCENT : ACCENT_SOFT} />
+              <Cell key={entry.id} fill={entry.value >= 65 ? ACCENT : ACCENT_SOFT} />
             ))}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+      {inferred && (
+        <p className="profile-panel-note">
+          Estimated from your personality answers — take it as a sketch.
+        </p>
+      )}
     </div>
   );
 }
 
-export default function ProfilePanel({ profile, dimensions = [], onClose }) {
-  const { bigFiveScores, derivedTraits, valuesScores, bigFiveDepth } = profile || {};
+export default function ProfilePanel({ profile, onClose }) {
+  const { bigFiveScores, derivedTraits, riasecScores, riasecCode, riasecInferred, bigFiveDepth } =
+    profile || {};
 
-  if (!bigFiveScores && !valuesScores) return null;
+  if (!bigFiveScores && !riasecScores) return null;
 
   return (
     <aside className="profile-panel">
@@ -136,7 +151,7 @@ export default function ProfilePanel({ profile, dimensions = [], onClose }) {
           Based on a 20-item short screen — a rough sketch, not a measured verdict.
         </p>
       )}
-      <ValuesBarChart scores={valuesScores} dimensions={dimensions} />
+      <RiasecBarChart scores={riasecScores} code={riasecCode} inferred={riasecInferred} />
       {derivedTraits?.summary && <p className="profile-panel-summary">{derivedTraits.summary}</p>}
       <p className="profile-panel-note">
         Directions and professions are picked from these survey scores — your dream answer only
