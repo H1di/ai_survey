@@ -330,3 +330,48 @@
     min-width: 250px;
   }
 }
+
+/* Output + advice nodes (v2 output loop) */
+.node--output {
+  width: 250px;
+  cursor: pointer;
+  text-align: left;
+}
+.node--output-latest { box-shadow: 0 0 0 2px rgba(134, 59, 255, 0.35); }
+.node--output-accepted { box-shadow: 0 0 0 2px #863bff; }
+.node-fit-badge {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(134, 59, 255, 0.12);
+  color: #863bff;
+  font-weight: 600;
+  font-size: 11px;
+}
+.node-top-values {
+  margin: 6px 0 0;
+  font-size: 11px;
+  opacity: 0.7;
+}
+.node-accepted-tag {
+  display: inline-block;
+  margin-top: 6px;
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #863bff;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.node--advice {
+  width: 220px;
+  cursor: pointer;
+  text-align: left;
+}
+.node-advice-count {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 11px;
+  opacity: 0.7;
+}

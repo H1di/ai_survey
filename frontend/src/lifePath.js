@@ -4,20 +4,29 @@
 
 export const ME_NODE = { id: "me", type: "me", position: { x: 0, y: 0 }, data: {} };
 
-// Vertical story: Me -> Direction -> 3 professions -> roadmap chain.
-const DIRECTION_Y = 240;
-const PROFESSION_Y = 500;
-const PROFESSION_GAP = 340;
-const ROADMAP_START_Y = 760;
+// Vertical story: Me -> output iteration chain (horizontal trail) -> the
+// accepted output grows 4 advice cards and its roadmap chain.
+const OUTPUT_Y = 240;
+const OUTPUT_GAP_X = 380;
+const ADVICE_Y = 520;
+const ADVICE_GAP = 300;
+const ROADMAP_START_Y = 780;
 const ROADMAP_GAP = 200;
 
 // Cascade timing: a node appears exactly when its edge finishes drawing.
 const EDGE_DRAW_MS = 600;
-const PROFESSION_STAGGER_MS = 180;
+const ADVICE_STAGGER_MS = 180;
 const ROADMAP_STEP_MS = 600;
 
-export function professionX(index, count) {
-  return (index - (count - 1) / 2) * PROFESSION_GAP;
+export const ADVICE_BLOCKS = [
+  { key: "aiRecommendations", label: "AI Recommendations" },
+  { key: "events", label: "Events" },
+  { key: "universities", label: "Universities & Majors" },
+  { key: "courses", label: "Courses" },
+];
+
+export function outputX(index) {
+  return index * OUTPUT_GAP_X;
 }
 
 // Index of the first unanswered question, so a restored session resumes
@@ -27,71 +36,105 @@ export function firstUnansweredIndex(questions, answers) {
   return index === -1 ? Math.max(0, questions.length - 1) : index;
 }
 
+// Reorder helper for the job-characteristics ranking list. Pure: returns the
+// input list unchanged when the move would fall off either end.
+export function moveRankItem(list, index, delta) {
+  const target = index + delta;
+  if (target < 0 || target >= list.length) return list;
+  const next = [...list];
+  [next[index], next[target]] = [next[target], next[index]];
+  return next;
+}
+
 export function buildLifePathGraph({
-  direction,
-  professionOptions,
-  selectedProfessionId,
-  roadmaps,
-  roadmapPending,
-  onProfessionOpen,
+  outputs = [],
+  acceptedOutputId = null,
+  roadmaps = {},
+  roadmapPending = false,
+  detailPending = false,
+  onOutputOpen,
+  onAdviceOpen,
   onStageOpen,
 }) {
   const nodes = [ME_NODE];
   const edges = [];
 
-  if (!direction) {
-    return { nodes, edges };
-  }
-
-  nodes.push({
-    id: "direction",
-    type: "direction",
-    position: { x: 0, y: DIRECTION_Y },
-    draggable: true,
-    style: { "--appear-delay": `${EDGE_DRAW_MS}ms` },
-    data: { label: direction.label },
-  });
-  edges.push({
-    id: "me-direction",
-    source: "me",
-    target: "direction",
-    type: "branch",
-    data: { delay: 0, active: true, flowDelayMs: EDGE_DRAW_MS },
-  });
-
-  professionOptions.forEach((profession, index) => {
-    const edgeDelay = index * PROFESSION_STAGGER_MS;
+  outputs.forEach((output, index) => {
+    const isLatest = index === outputs.length - 1;
+    const isAccepted = output.id === acceptedOutputId;
     nodes.push({
-      id: profession.id,
-      type: "profession",
-      position: { x: professionX(index, professionOptions.length), y: PROFESSION_Y },
+      id: output.id,
+      type: "output",
+      position: { x: outputX(index), y: OUTPUT_Y },
       draggable: true,
-      style: { "--appear-delay": `${edgeDelay + EDGE_DRAW_MS}ms` },
+      style: { "--appear-delay": `${EDGE_DRAW_MS}ms` },
       data: {
-        title: profession.title,
-        summary: profession.summary,
-        selected: profession.id === selectedProfessionId,
-        onOpen: () => onProfessionOpen(profession),
+        jobTitle: output.jobTitle,
+        orientedField: output.orientedField,
+        fit: output.valuesFit ? output.valuesFit.overall : null,
+        topValues: output.topValues || [],
+        accepted: isAccepted,
+        latest: isLatest,
+        onOpen: () => onOutputOpen(output),
       },
     });
     edges.push({
-      id: `direction-${profession.id}`,
-      source: "direction",
-      target: profession.id,
+      id: `${output.parentId || "me"}-${output.id}`,
+      source: output.parentId || "me",
+      target: output.id,
       type: "branch",
-      data: {
-        delay: edgeDelay,
-        active: profession.id === selectedProfessionId || Boolean(roadmaps[profession.id]),
-        flowDelayMs: 150,
-      },
+      data: { delay: 0, active: isAccepted || isLatest, flowDelayMs: EDGE_DRAW_MS },
     });
   });
 
-  const selectedIndex = professionOptions.findIndex((p) => p.id === selectedProfessionId);
+  const acceptedIndex = outputs.findIndex((o) => o.id === acceptedOutputId);
+  const accepted = acceptedIndex === -1 ? null : outputs[acceptedIndex];
+  if (!accepted) {
+    return { nodes, edges };
+  }
+  const anchorX = outputX(acceptedIndex);
 
-  if (roadmapPending && selectedIndex !== -1) {
-    const anchor = professionOptions[selectedIndex];
-    const anchorX = professionX(selectedIndex, professionOptions.length);
+  if (detailPending) {
+    nodes.push({
+      id: "detail-loading",
+      type: "loading",
+      position: { x: anchorX, y: ADVICE_Y },
+      data: {},
+    });
+    edges.push({
+      id: `${accepted.id}-detail-loading`,
+      source: accepted.id,
+      target: "detail-loading",
+      type: "branch",
+    });
+  } else if (accepted.detail) {
+    ADVICE_BLOCKS.forEach((block, index) => {
+      const items = accepted.detail[block.key] || [];
+      const edgeDelay = index * ADVICE_STAGGER_MS;
+      const nodeId = `advice-${block.key}`;
+      nodes.push({
+        id: nodeId,
+        type: "advice",
+        position: { x: anchorX + (index - (ADVICE_BLOCKS.length - 1) / 2) * ADVICE_GAP, y: ADVICE_Y },
+        draggable: true,
+        style: { "--appear-delay": `${edgeDelay + EDGE_DRAW_MS}ms` },
+        data: {
+          label: block.label,
+          count: items.length,
+          onOpen: () => onAdviceOpen(block.key),
+        },
+      });
+      edges.push({
+        id: `${accepted.id}-${nodeId}`,
+        source: accepted.id,
+        target: nodeId,
+        type: "branch",
+        data: { delay: edgeDelay, active: true, flowDelayMs: 150 },
+      });
+    });
+  }
+
+  if (roadmapPending) {
     nodes.push({
       id: "roadmap-loading",
       type: "loading",
@@ -99,37 +142,31 @@ export function buildLifePathGraph({
       data: {},
     });
     edges.push({
-      id: `${anchor.id}-roadmap-loading`,
-      source: anchor.id,
+      id: `${accepted.id}-roadmap-loading`,
+      source: accepted.id,
       target: "roadmap-loading",
       type: "branch",
     });
   }
 
-  // Every built roadmap stays on the graph, each under its own profession.
-  Object.entries(roadmaps).forEach(([professionId, professionRoadmap]) => {
-    const profIndex = professionOptions.findIndex((p) => p.id === professionId);
-    if (profIndex === -1) return;
-    const chainX = professionX(profIndex, professionOptions.length);
-
-    professionRoadmap.stages.forEach((stage, index) => {
-      const nodeId = `stage-${professionId}-${stage.id}`;
+  const roadmap = roadmaps[accepted.id];
+  if (roadmap) {
+    roadmap.stages.forEach((stage, index) => {
+      const nodeId = `stage-${accepted.id}-${stage.id}`;
       const parentId =
-        index === 0
-          ? professionId
-          : `stage-${professionId}-${professionRoadmap.stages[index - 1].id}`;
+        index === 0 ? accepted.id : `stage-${accepted.id}-${roadmap.stages[index - 1].id}`;
       const edgeDelay = index * ROADMAP_STEP_MS;
       nodes.push({
         id: nodeId,
         type: "roadmap",
-        position: { x: chainX, y: ROADMAP_START_Y + index * ROADMAP_GAP },
+        position: { x: anchorX, y: ROADMAP_START_Y + index * ROADMAP_GAP },
         draggable: true,
         style: { "--appear-delay": `${edgeDelay + EDGE_DRAW_MS}ms` },
         data: {
           index: index + 1,
           title: stage.title,
           timeframe: stage.timeframe,
-          last: index === professionRoadmap.stages.length - 1,
+          last: index === roadmap.stages.length - 1,
           onOpen: () => onStageOpen(stage, index),
         },
       });
@@ -141,37 +178,19 @@ export function buildLifePathGraph({
         data: { delay: edgeDelay, active: true, flowDelayMs: edgeDelay + EDGE_DRAW_MS },
       });
     });
-  });
+  }
 
   return { nodes, edges };
 }
 
 // Which dock card the tree shows for a given session shape. Returns one of:
-// "direction-question" | "direction-tie" | "refine" | "direction-pick" |
-// "proposal" | "narrow-prompt" | "narrowing" | null. Mirrors the render
-// order in App.jsx exactly — earliest matching branch wins.
-export function selectDockCard({
-  stage,
-  direction,
-  currentDirectionQuestion,
-  directionTieCandidates = [],
-  proposedDirection,
-  refineMode,
-  rejectedDirections = [],
-  professionOptions = [],
-  narrowIntent,
-  currentNarrowingQuestion,
-}) {
+// "output-review" | "refine" | null. Mirrors the render order in App.jsx —
+// once an output is accepted, the graph nodes carry the story and the dock
+// stays empty.
+export function selectDockCard({ stage, outputs = [], acceptedOutputId, refineMode }) {
   if (stage !== "tree") return null;
-
-  if (!direction && currentDirectionQuestion) return "direction-question";
-  if (!direction && !proposedDirection && directionTieCandidates.length > 0) return "direction-tie";
-  if (!direction && refineMode && rejectedDirections.length < 2) return "refine";
-  if (!direction && refineMode && rejectedDirections.length >= 2) return "direction-pick";
-  if (!direction && proposedDirection) return "proposal";
-  if (direction && professionOptions.length === 0 && !narrowIntent) return "narrow-prompt";
-  if (direction && professionOptions.length === 0 && narrowIntent && currentNarrowingQuestion) {
-    return "narrowing";
-  }
-  return null;
+  if (!outputs.length) return null;
+  if (acceptedOutputId) return null;
+  if (refineMode) return "refine";
+  return "output-review";
 }

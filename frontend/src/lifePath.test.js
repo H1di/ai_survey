@@ -1,144 +1,176 @@
 import { describe, it, expect, vi } from "vitest";
-import { buildLifePathGraph, selectDockCard, firstUnansweredIndex } from "./lifePath";
+import {
+  buildLifePathGraph,
+  selectDockCard,
+  firstUnansweredIndex,
+  moveRankItem,
+  outputX,
+  ADVICE_BLOCKS,
+} from "./lifePath";
 
-const direction = { id: "tech", label: "Programming & Technology" };
-const professions = [
-  { id: "prof_1", title: "Software Developer", summary: "s1" },
-  { id: "prof_2", title: "QA Engineer", summary: "s2" },
-  { id: "prof_3", title: "Data Analyst", summary: "s3" },
+const OUTPUTS = [
+  {
+    id: "output_1",
+    parentId: null,
+    jobTitle: "Agronomist",
+    orientedField: "Agriculture & Environment",
+    valuesFit: { overall: 78 },
+    topValues: ["security", "universalism", "tradition"],
+    accepted: null,
+    detail: null,
+  },
+  {
+    id: "output_2",
+    parentId: "output_1",
+    jobTitle: "Environmental Technician",
+    orientedField: "Agriculture & Environment",
+    valuesFit: { overall: 84 },
+    topValues: ["universalism", "security", "self_direction"],
+    accepted: null,
+    detail: null,
+  },
 ];
 
-function baseArgs(overrides = {}) {
-  return {
-    direction,
-    professionOptions: professions,
-    selectedProfessionId: null,
-    roadmaps: {},
-    roadmapPending: false,
-    onProfessionOpen: vi.fn(),
-    onStageOpen: vi.fn(),
-    ...overrides,
-  };
-}
+const DETAIL = {
+  aiRecommendations: [{ title: "a", detail: "b" }, { title: "c", detail: "d" }],
+  events: [{ name: "a", why: "b" }, { name: "c", why: "d" }],
+  universities: [{ name: "a", program: "b" }, { name: "c", program: "d" }],
+  courses: [
+    { name: "a", provider: "b", why: "c" },
+    { name: "d", provider: "e", why: "f" },
+  ],
+};
 
-describe("buildLifePathGraph", () => {
-  it("returns just the Me node before a direction exists", () => {
-    const { nodes, edges } = buildLifePathGraph(baseArgs({ direction: null }));
+const noop = () => {};
+
+describe("buildLifePathGraph (output chain)", () => {
+  it("renders only Me with no outputs", () => {
+    const { nodes, edges } = buildLifePathGraph({ onOutputOpen: noop, onAdviceOpen: noop, onStageOpen: noop });
     expect(nodes).toHaveLength(1);
-    expect(nodes[0].id).toBe("me");
     expect(edges).toHaveLength(0);
   });
 
-  it("builds Me -> direction -> 3 professions with connecting edges", () => {
-    const { nodes, edges } = buildLifePathGraph(baseArgs());
-    expect(nodes.map((n) => n.id)).toEqual([
-      "me",
-      "direction",
-      "prof_1",
-      "prof_2",
-      "prof_3",
-    ]);
-    expect(edges.find((e) => e.id === "me-direction")).toBeTruthy();
-    for (const p of professions) {
-      expect(edges.find((e) => e.id === `direction-${p.id}`)).toBeTruthy();
+  it("chains outputs horizontally with parent-linked edges (me anchors the first)", () => {
+    const { nodes, edges } = buildLifePathGraph({
+      outputs: OUTPUTS,
+      onOutputOpen: noop,
+      onAdviceOpen: noop,
+      onStageOpen: noop,
+    });
+    const outputNodes = nodes.filter((n) => n.type === "output");
+    expect(outputNodes).toHaveLength(2);
+    expect(outputNodes[0].position.x).toBe(outputX(0));
+    expect(outputNodes[1].position.x).toBe(outputX(1));
+
+    expect(edges.find((e) => e.id === "me-output_1")).toBeTruthy();
+    expect(edges.find((e) => e.id === "output_1-output_2")).toBeTruthy();
+    // only the latest (or accepted) edge is active
+    expect(edges.find((e) => e.id === "me-output_1").data.active).toBe(false);
+    expect(edges.find((e) => e.id === "output_1-output_2").data.active).toBe(true);
+  });
+
+  it("passes fit, top values, and accepted/latest flags into node data", () => {
+    const onOutputOpen = vi.fn();
+    const { nodes } = buildLifePathGraph({
+      outputs: OUTPUTS,
+      acceptedOutputId: "output_2",
+      onOutputOpen,
+      onAdviceOpen: noop,
+      onStageOpen: noop,
+    });
+    const second = nodes.find((n) => n.id === "output_2");
+    expect(second.data.fit).toBe(84);
+    expect(second.data.accepted).toBe(true);
+    expect(second.data.latest).toBe(true);
+    second.data.onOpen();
+    expect(onOutputOpen).toHaveBeenCalledWith(OUTPUTS[1]);
+  });
+
+  it("accepted output with detail grows the four advice nodes", () => {
+    const outputs = [OUTPUTS[0], { ...OUTPUTS[1], accepted: true, detail: DETAIL }];
+    const onAdviceOpen = vi.fn();
+    const { nodes, edges } = buildLifePathGraph({
+      outputs,
+      acceptedOutputId: "output_2",
+      onOutputOpen: noop,
+      onAdviceOpen,
+      onStageOpen: noop,
+    });
+    const advice = nodes.filter((n) => n.type === "advice");
+    expect(advice).toHaveLength(4);
+    expect(advice.map((n) => n.id)).toEqual(ADVICE_BLOCKS.map((b) => `advice-${b.key}`));
+    expect(advice[0].data.count).toBe(2);
+    advice[0].data.onOpen();
+    expect(onAdviceOpen).toHaveBeenCalledWith("aiRecommendations");
+    for (const b of ADVICE_BLOCKS) {
+      expect(edges.find((e) => e.id === `output_2-advice-${b.key}`)).toBeTruthy();
     }
   });
 
-  it("marks the selected profession and activates only its edge", () => {
-    const { nodes, edges } = buildLifePathGraph(
-      baseArgs({ selectedProfessionId: "prof_2" })
-    );
-    const selected = nodes.find((n) => n.id === "prof_2");
-    expect(selected.data.selected).toBe(true);
-    expect(edges.find((e) => e.id === "direction-prof_2").data.active).toBe(true);
-    expect(edges.find((e) => e.id === "direction-prof_1").data.active).toBe(false);
-  });
-
-  it("shows a loading node under the selected profession while a roadmap is pending", () => {
-    const { nodes } = buildLifePathGraph(
-      baseArgs({ selectedProfessionId: "prof_1", roadmapPending: true })
-    );
-    expect(nodes.find((n) => n.id === "roadmap-loading")).toBeTruthy();
-  });
-
-  it("renders multiple roadmap chains, each under its own profession", () => {
+  it("roadmap chain hangs under the accepted output, keyed by outputId", () => {
+    const outputs = [{ ...OUTPUTS[0], accepted: true, detail: DETAIL }];
     const roadmaps = {
-      prof_1: { professionId: "prof_1", stages: [{ id: "s1", title: "A" }, { id: "s2", title: "B" }] },
-      prof_3: { professionId: "prof_3", stages: [{ id: "s1", title: "C" }] },
+      output_1: {
+        professionId: "output_1",
+        stages: [
+          { id: "stage_1", title: "T1", timeframe: "1m" },
+          { id: "stage_2", title: "T2", timeframe: "2m" },
+        ],
+      },
     };
-    const { nodes, edges } = buildLifePathGraph(baseArgs({ roadmaps }));
-
-    expect(nodes.find((n) => n.id === "stage-prof_1-s1")).toBeTruthy();
-    expect(nodes.find((n) => n.id === "stage-prof_1-s2")).toBeTruthy();
-    expect(nodes.find((n) => n.id === "stage-prof_3-s1")).toBeTruthy();
-
-    // First stage hangs off its profession; later stages chain to the prior one.
-    expect(edges.find((e) => e.id === "prof_1-stage-prof_1-s1")).toBeTruthy();
-    expect(edges.find((e) => e.id === "stage-prof_1-s1-stage-prof_1-s2")).toBeTruthy();
-    // The last stage of a chain is flagged.
-    expect(nodes.find((n) => n.id === "stage-prof_1-s2").data.last).toBe(true);
-    expect(nodes.find((n) => n.id === "stage-prof_1-s1").data.last).toBe(false);
+    const { nodes, edges } = buildLifePathGraph({
+      outputs,
+      acceptedOutputId: "output_1",
+      roadmaps,
+      onOutputOpen: noop,
+      onAdviceOpen: noop,
+      onStageOpen: noop,
+    });
+    const stages = nodes.filter((n) => n.type === "roadmap");
+    expect(stages).toHaveLength(2);
+    expect(edges.find((e) => e.id === "output_1-stage-output_1-stage_1")).toBeTruthy();
+    expect(edges.find((e) => e.id === "stage-output_1-stage_1-stage-output_1-stage_2")).toBeTruthy();
+    expect(stages[1].data.last).toBe(true);
   });
 
-  it("ignores roadmaps whose profession is no longer offered", () => {
-    const roadmaps = { ghost: { professionId: "ghost", stages: [{ id: "s1", title: "X" }] } };
-    const { nodes } = buildLifePathGraph(baseArgs({ roadmaps }));
-    expect(nodes.find((n) => n.id.startsWith("stage-ghost"))).toBeFalsy();
+  it("shows loading placeholders while detail or roadmap generate", () => {
+    const outputs = [{ ...OUTPUTS[0], accepted: true }];
+    const pendingDetail = buildLifePathGraph({
+      outputs,
+      acceptedOutputId: "output_1",
+      detailPending: true,
+      onOutputOpen: noop,
+      onAdviceOpen: noop,
+      onStageOpen: noop,
+    });
+    expect(pendingDetail.nodes.find((n) => n.id === "detail-loading")).toBeTruthy();
+
+    const pendingRoadmap = buildLifePathGraph({
+      outputs,
+      acceptedOutputId: "output_1",
+      roadmapPending: true,
+      onOutputOpen: noop,
+      onAdviceOpen: noop,
+      onStageOpen: noop,
+    });
+    expect(pendingRoadmap.nodes.find((n) => n.id === "roadmap-loading")).toBeTruthy();
   });
 });
 
-describe("selectDockCard", () => {
-  const tree = { stage: "tree", direction: null };
-
-  it("shows nothing outside the tree stage", () => {
-    expect(selectDockCard({ stage: "survey" })).toBeNull();
+describe("selectDockCard (output loop)", () => {
+  it("is null off the tree and before the first output", () => {
+    expect(selectDockCard({ stage: "survey", outputs: OUTPUTS })).toBeNull();
+    expect(selectDockCard({ stage: "tree", outputs: [] })).toBeNull();
   });
 
-  it("shows the direction question while one is unanswered", () => {
-    expect(
-      selectDockCard({ ...tree, currentDirectionQuestion: { id: "dir_q1" } })
-    ).toBe("direction-question");
-  });
-
-  it("shows the tie card when candidates exist and no proposal was made", () => {
-    expect(
-      selectDockCard({ ...tree, directionTieCandidates: [{ id: "a" }, { id: "b" }] })
-    ).toBe("direction-tie");
-  });
-
-  it("prefers an open question over a tie", () => {
-    expect(
-      selectDockCard({
-        ...tree,
-        currentDirectionQuestion: { id: "dir_q1" },
-        directionTieCandidates: [{ id: "a" }, { id: "b" }],
-      })
-    ).toBe("direction-question");
-  });
-
-  it("shows refine, then the manual picker after two rejections", () => {
-    expect(selectDockCard({ ...tree, refineMode: true, proposedDirection: { id: "x" }, rejectedDirections: [{ id: "y" }] })).toBe("refine");
-    expect(
-      selectDockCard({ ...tree, refineMode: true, rejectedDirections: [{ id: "a" }, { id: "b" }] })
-    ).toBe("direction-pick");
-  });
-
-  it("shows the proposal when one exists and refine is closed", () => {
-    expect(selectDockCard({ ...tree, proposedDirection: { id: "tech" } })).toBe("proposal");
-  });
-
-  it("prompts to narrow after a direction is confirmed, then the narrowing question", () => {
-    const confirmed = { stage: "tree", direction: { id: "tech" }, professionOptions: [] };
-    expect(selectDockCard({ ...confirmed, narrowIntent: false })).toBe("narrow-prompt");
-    expect(
-      selectDockCard({ ...confirmed, narrowIntent: true, currentNarrowingQuestion: { id: "nar_q1" } })
-    ).toBe("narrowing");
-  });
-
-  it("shows no card once professions are on the board", () => {
-    expect(
-      selectDockCard({ stage: "tree", direction: { id: "tech" }, professionOptions: [{ id: "prof_1" }] })
-    ).toBeNull();
+  it("reviews the latest output until accepted; refine mode swaps the card", () => {
+    expect(selectDockCard({ stage: "tree", outputs: OUTPUTS, acceptedOutputId: null, refineMode: false })).toBe(
+      "output-review"
+    );
+    expect(selectDockCard({ stage: "tree", outputs: OUTPUTS, acceptedOutputId: null, refineMode: true })).toBe(
+      "refine"
+    );
+    expect(selectDockCard({ stage: "tree", outputs: OUTPUTS, acceptedOutputId: "output_2", refineMode: false })).toBeNull();
   });
 });
 
@@ -156,5 +188,19 @@ describe("firstUnansweredIndex", () => {
 
   it("handles empty lists", () => {
     expect(firstUnansweredIndex([], {})).toBe(0);
+  });
+});
+
+describe("moveRankItem", () => {
+  const list = ["a", "b", "c"];
+  it("swaps with the neighbour in the given direction", () => {
+    expect(moveRankItem(list, 1, -1)).toEqual(["b", "a", "c"]);
+    expect(moveRankItem(list, 1, 1)).toEqual(["a", "c", "b"]);
+  });
+  it("returns the same list at the edges and does not mutate", () => {
+    expect(moveRankItem(list, 0, -1)).toBe(list);
+    expect(moveRankItem(list, 2, 1)).toBe(list);
+    moveRankItem(list, 1, 1);
+    expect(list).toEqual(["a", "b", "c"]);
   });
 });

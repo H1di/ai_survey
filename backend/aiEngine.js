@@ -2,17 +2,29 @@ const OpenAI = require("openai");
 const {
   buildProfileDigest,
   buildBigFiveItemsPrompt,
-  buildAnswersDigest,
-  buildDirectionQuestionsPrompt,
-  buildNarrowingQuestionsPrompt,
-  buildProfessionsPrompt,
   buildRoadmapPrompt,
-  buildDirectionRefinePrompt,
+  buildRiasecItemsPrompt,
+  buildRiasecInferencePrompt,
+  buildJobCharQuestionsPrompt,
+  buildCvParsePrompt,
+  buildUserValuesInferencePrompt,
+  buildProfessionValuesProfilePrompt,
+  buildOrientedFieldPrompt,
+  buildRefinementPrompt,
+  buildOutputDetailPrompt,
 } = require("./prompts");
-const { VALUES_DIMENSIONS } = require("./questionPool");
-const { DIRECTIONS, DIRECTION_IDS, getDirection, computeDirection } = require("./directions");
+const {
+  SCHWARTZ_ORDER,
+  SCHWARTZ_VALUE_META,
+  deriveTopValues,
+  buildFallbackProfessionValues,
+  inferUserValuesFallback,
+} = require("./schwartzValues");
+const { selectFallbackJobCharQuestions, JOB_CHAR_PARAMS, JOB_CHAR_PARAM_IDS } = require("./questionPool");
+const { DIRECTIONS, getDirection } = require("./directions");
 const { getFallbackItems } = require("./bigFiveItems");
-const { rankDirections } = require("./riasec");
+const { getFallbackRiasecItems } = require("./riasecItems");
+const { rankDirections, inferRiasecScores } = require("./riasec");
 
 function cleanText(value, fallback = "") {
   if (typeof value !== "string") {
@@ -62,11 +74,18 @@ function buildSessionDigest(session) {
   return buildProfileDigest({
     entryChoice: session.entryChoice,
     dreamAnswer: session.dreamAnswer,
+    cvIntent: session.cvIntent,
     demographics: session.demographics,
     bigFiveScores: session.bigFiveScores,
     derivedTraits: session.derivedTraits,
-    valuesScores: session.valuesScores,
-    valuesDimensions: VALUES_DIMENSIONS,
+    riasecScores: session.riasecScores,
+    riasecCode: session.riasecCode,
+    riasecInferred: session.riasecInferred,
+    jobCharRanking: session.jobCharRanking,
+    jobCharProfile: session.jobCharProfile,
+    cvAnalysis: session.cvAnalysis,
+    cvText: session.cvText,
+    careerJourneyAnswers: session.careerJourneyAnswers,
   });
 }
 
@@ -74,78 +93,131 @@ function buildSessionDigest(session) {
 // Deterministic fallbacks (used when there is no API key or the AI call fails)
 // ---------------------------------------------------------------------------
 
-// 12 option slots cover 12 distinct directions — no domain repeats, so the
-// keyless flow can land anywhere in the catalog, not just knowledge work.
-function fallbackDirectionQuestions() {
-  return [
-    {
-      id: "dir_q1",
-      text: "Which kind of problem would you happily spend a whole day on?",
-      options: [
-        { value: "opt_1", label: "Building or fixing a system until it works", directionId: "tech" },
-        { value: "opt_2", label: "Helping one person through a difficult situation", directionId: "social" },
-        { value: "opt_3", label: "Running an experiment to find out what's true", directionId: "science" },
-        { value: "opt_4", label: "Shaping how something looks, feels, and reads", directionId: "design" },
-      ],
-    },
-    {
-      id: "dir_q2",
-      text: "Which work setting drains you the least?",
-      options: [
-        { value: "opt_1", label: "Quiet focus with numbers, models, and precision", directionId: "finance" },
-        { value: "opt_2", label: "A workshop or site, building with my hands", directionId: "trades" },
-        { value: "opt_3", label: "A room where I explain things and people learn", directionId: "education" },
-        { value: "opt_4", label: "A busy venue where guests leave happier than they came", directionId: "hospitality" },
-      ],
-    },
-    {
-      id: "dir_q3",
-      text: "Which result would make you proudest at the end of a year?",
-      options: [
-        { value: "opt_1", label: "Someone's health or life is concretely better", directionId: "healthcare" },
-        { value: "opt_2", label: "A fairer outcome I argued for became real", directionId: "law" },
-        { value: "opt_3", label: "Work I created moved an audience", directionId: "arts" },
-        { value: "opt_4", label: "A team or athlete I trained hit their best season", directionId: "sports" },
-      ],
-    },
-  ];
+function qualitativeBand(target) {
+  if (target >= 75) return "a defining feature of the role";
+  if (target >= 50) return "solidly present without dominating";
+  if (target >= 25) return "present, but in moderation";
+  return "a minor factor by design";
 }
 
-function fallbackNarrowingQuestions() {
-  return [
-    {
-      id: "nar_q1",
-      text: "Day to day, which working mode fits you best?",
-      options: [
-        { value: "opt_1", label: "Deep solo focus with few interruptions" },
-        { value: "opt_2", label: "Constant collaboration inside a team" },
-        { value: "opt_3", label: "A mix of craft work and client contact" },
-        { value: "opt_4", label: "Coordinating people and decisions" },
-      ],
-    },
-    {
-      id: "nar_q2",
-      text: "What pace of environment do you want?",
-      options: [
-        { value: "opt_1", label: "Calm and structured, few surprises" },
-        { value: "opt_2", label: "Fast and changing, new problems weekly" },
-        { value: "opt_3", label: "Project-based bursts with recovery time" },
-        { value: "opt_4", label: "Steady rhythm with clear routines" },
-      ],
-    },
-  ];
+// Deterministic parameterFit: one honest line per parameter, anchored to the
+// user's 0-100 target (neutral 50 when a parameter was never asked).
+function fallbackParameterFit(jobCharProfile) {
+  const fit = {};
+  for (const param of JOB_CHAR_PARAMS) {
+    const target = jobCharProfile?.[param.id] ?? 50;
+    fit[param.id] = `${param.label}: you target ${target}/100 — in this role it is ${qualitativeBand(target)}.`;
+  }
+  return fit;
 }
 
-function fallbackProfessions(direction) {
-  const catalogDirection = getDirection(direction?.id) || DIRECTIONS[0];
+// Keyless oriented field: top RIASEC-ranked direction (minus excluded field
+// families), first unused profession seed inside it.
+function fallbackFirstOutput(session, excludeDirectionIds = []) {
+  const scores = session.riasecScores ?? inferRiasecScores(session.bigFiveScores);
+  const ranked = rankDirections(scores, { excludeIds: excludeDirectionIds });
+  const direction = getDirection(ranked[0]?.id) || DIRECTIONS[0];
+  const usedTitles = new Set((session.outputs || []).map((o) => o.jobTitle));
+  const seed =
+    direction.professionSeeds.find((s) => !usedTitles.has(s.title)) || direction.professionSeeds[0];
 
-  return catalogDirection.professionSeeds.map((seed, index) => ({
-    id: `prof_${index + 1}`,
-    title: seed.title,
-    summary: seed.summary,
-    whyFit: `Fits your confirmed ${catalogDirection.label} direction and the preferences you expressed in your answers.`,
-    dayToDay: `A typical day centers on the core work of a ${seed.title.toLowerCase()}, at a pace matching your stated preferences.`,
-  }));
+  return {
+    directionId: direction.id,
+    orientedField: direction.label,
+    jobTitle: seed.title,
+    thesis: seed.summary,
+    parameterFit: fallbackParameterFit(session.jobCharProfile),
+    whyFit: `Your interest profile (${session.riasecCode || "balanced"}) points to the ${direction.label} family, and this role lines up with the priorities you ranked highest.`,
+    firstMilestone: `Spend two weeks talking to working ${seed.title.toLowerCase()}s and shadow one full day of the real work.`,
+    constraintsNote:
+      "Demo mode — assembled from fixed rules; treat it as a structured starting point, not advice.",
+  };
+}
+
+// Keyless refinement: stay in the same field family but move to the next
+// unused seed; rewrite only the changed parameters' fit lines.
+function fallbackRefineOutput(session, previousOutput, changes) {
+  const direction = getDirection(previousOutput.directionId) || DIRECTIONS[0];
+  const usedTitles = new Set((session.outputs || []).map((o) => o.jobTitle));
+  let seed = direction.professionSeeds.find((s) => !usedTitles.has(s.title));
+  let field = direction;
+  if (!seed) {
+    // Seeds exhausted — take the next-ranked field family instead.
+    const scores = session.riasecScores ?? inferRiasecScores(session.bigFiveScores);
+    const ranked = rankDirections(scores, { excludeIds: [direction.id] });
+    field = getDirection(ranked[0]?.id) || DIRECTIONS[0];
+    seed = field.professionSeeds.find((s) => !usedTitles.has(s.title)) || field.professionSeeds[0];
+  }
+
+  const parameterFit = fallbackParameterFit(session.jobCharProfile);
+  const labelOf = new Map(JOB_CHAR_PARAMS.map((p) => [p.id, p.label]));
+  for (const change of changes) {
+    parameterFit[change.param] =
+      `${labelOf.get(change.param)}: reworked toward your note — "${change.reason || "no reason given"}".`;
+  }
+  const changedLabels = changes.map((c) => labelOf.get(c.param)).join(", ");
+
+  return {
+    directionId: field.id,
+    orientedField: field.label,
+    jobTitle: seed.title,
+    thesis: seed.summary,
+    parameterFit,
+    whyFit: `Kept close to the ${field.label} family while adjusting what you flagged: ${changedLabels}.`,
+    firstMilestone: `Compare one week in this role against the previous suggestion on exactly the parameters you changed.`,
+    constraintsNote:
+      "Demo mode — assembled from fixed rules; treat it as a structured starting point, not advice.",
+    changeSummary: `Shifted ${changedLabels} while holding the rest steady — expect a trade-off elsewhere in the profile.`,
+  };
+}
+
+function fallbackOutputDetail(session, output) {
+  const place = session.demographics?.city || session.demographics?.country || "your area";
+  const country = session.demographics?.country || "your country";
+  return {
+    aiRecommendations: [
+      {
+        title: "Map the local market",
+        detail: `Search current ${output.jobTitle} openings in ${place} and write down the 3 most repeated requirements.`,
+      },
+      {
+        title: "Close the sharpest gap",
+        detail: "Pick the one requirement you miss most and plan four weeks of focused practice on it.",
+      },
+    ],
+    events: [
+      {
+        name: `${output.orientedField} meetups or professional gatherings near ${place}`,
+        why: "Direct contact with working practitioners beats any course catalog.",
+      },
+      {
+        name: "An open day or trade fair in the field",
+        why: "One afternoon inside the environment tells you more than a week of reading.",
+      },
+    ],
+    universities: [
+      {
+        name: `A public university or college in ${country}`,
+        program: `${output.orientedField} programs — compare entry requirements against your background.`,
+      },
+      {
+        name: "A short certificate program",
+        program: "Look for evening or remote formats if you need to keep earning meanwhile.",
+      },
+    ],
+    courses: [
+      {
+        name: `Foundations of ${output.orientedField}`,
+        provider: "A recognized online platform",
+        why: "Structured basics before you commit money to a longer program.",
+      },
+      {
+        name: `Practical ${output.jobTitle} skills`,
+        provider: "An industry body or local provider",
+        why: "Chosen to produce a small portfolio piece, not just a certificate.",
+      },
+    ],
+  };
 }
 
 function fallbackRoadmap(profession) {
@@ -196,91 +268,62 @@ function fallbackRoadmap(profession) {
   };
 }
 
-function fallbackRefineDirection(session) {
-  const rejectedIds = session.rejectedDirections.map((d) => d.id);
-  const next = computeDirection(session.directionQuestions, session.directionAnswers, rejectedIds);
-  // Refine must always propose something concrete; on a residual tie the
-  // earliest tied candidate is the deterministic "next strongest match".
-  const pick = next.tie ? next.candidates[0] : next;
-  return {
-    ...pick,
-    reason: "Based on your quiz answers, this is your next strongest match.",
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Normalizers — throw on structurally invalid AI payloads so the caller
 // falls back deterministically.
 // ---------------------------------------------------------------------------
 
-function normalizeQuestionOption(option, index, { requireDirectionId }) {
-  const normalized = {
-    value: cleanText(option?.value, `opt_${index + 1}`)
-      .toLowerCase()
-      .replace(/[^a-z0-9_]+/g, "_"),
-    label: cleanText(option?.label),
+function normalizeOutputPayload(payload) {
+  const output = {
+    orientedField: cleanText(payload?.orientedField),
+    jobTitle: cleanText(payload?.jobTitle),
+    thesis: cleanText(payload?.thesis),
+    whyFit: cleanText(payload?.whyFit),
+    firstMilestone: cleanText(payload?.firstMilestone),
+    constraintsNote: cleanText(payload?.constraintsNote),
+  };
+  for (const [key, value] of Object.entries(output)) {
+    if (!value) throw new Error(`Output missing ${key}.`);
+  }
+
+  const rawFit = payload?.parameterFit || {};
+  const parameterFit = {};
+  for (const param of JOB_CHAR_PARAM_IDS) {
+    const line = cleanText(rawFit[param]);
+    if (!line) throw new Error(`parameterFit missing ${param}.`);
+    parameterFit[param] = line;
+  }
+  output.parameterFit = parameterFit;
+
+  const changeSummary = cleanText(payload?.changeSummary, "");
+  if (changeSummary) output.changeSummary = changeSummary;
+  return output;
+}
+
+function normalizeOutputDetailPayload(payload) {
+  const block = (list, requiredKeys, name) => {
+    const raw = Array.isArray(list) ? list : [];
+    const entries = raw
+      .map((item) => {
+        const entry = {};
+        for (const key of requiredKeys) {
+          entry[key] = cleanText(item?.[key]);
+          if (!entry[key]) return null;
+        }
+        return entry;
+      })
+      .filter(Boolean)
+      .slice(0, 4);
+    if (entries.length < 2) throw new Error(`Detail block ${name} needs at least 2 valid entries.`);
+    return entries;
   };
 
-  if (!normalized.label) {
-    throw new Error("Question option missing label.");
-  }
-
-  if (requireDirectionId) {
-    if (!DIRECTION_IDS.includes(option?.directionId)) {
-      throw new Error(`Invalid directionId: ${option?.directionId}`);
-    }
-    normalized.directionId = option.directionId;
-  }
-
-  return normalized;
-}
-
-function normalizeQuestionsPayload(payload, { count, idPrefix, requireDirectionId }) {
-  const questions = Array.isArray(payload?.questions) ? payload.questions : [];
-
-  if (questions.length !== count) {
-    throw new Error(`Expected ${count} questions, got ${questions.length}.`);
-  }
-
-  return questions.map((question, index) => {
-    const text = cleanText(question?.text);
-    if (!text) {
-      throw new Error("Question missing text.");
-    }
-    const rawOptions = Array.isArray(question?.options) ? question.options : [];
-    if (rawOptions.length !== 4) {
-      throw new Error(`Question needs exactly 4 options, got ${rawOptions.length}.`);
-    }
-    return {
-      id: `${idPrefix}${index + 1}`,
-      text,
-      options: rawOptions.map((option, optionIndex) =>
-        normalizeQuestionOption(option, optionIndex, { requireDirectionId })
-      ),
-    };
-  });
-}
-
-function normalizeProfessionsPayload(payload) {
-  const professions = Array.isArray(payload?.professions) ? payload.professions : [];
-
-  if (professions.length !== 3) {
-    throw new Error(`Expected exactly 3 professions, got ${professions.length}.`);
-  }
-
-  return professions.map((profession, index) => {
-    const title = cleanText(profession?.title);
-    if (!title) {
-      throw new Error("Profession missing title.");
-    }
-    return {
-      id: `prof_${index + 1}`,
-      title,
-      summary: cleanText(profession?.summary, "A realistic role within your confirmed direction."),
-      whyFit: cleanText(profession?.whyFit, "Aligned with your profile and answers."),
-      dayToDay: cleanText(profession?.dayToDay, "Day-to-day work typical for this role."),
-    };
-  });
+  return {
+    aiRecommendations: block(payload?.aiRecommendations, ["title", "detail"], "aiRecommendations"),
+    events: block(payload?.events, ["name", "why"], "events"),
+    universities: block(payload?.universities, ["name", "program"], "universities"),
+    courses: block(payload?.courses, ["name", "provider", "why"], "courses"),
+  };
 }
 
 function normalizeRoadmapPayload(payload, profession) {
@@ -360,6 +403,113 @@ function normalizeBigFiveItemsPayload(payload, expected) {
   return items;
 }
 
+const RIASEC_TYPES = ["R", "I", "A", "S", "E", "C"];
+
+function normalizeRiasecItemsPayload(payload, count) {
+  const raw = Array.isArray(payload?.items) ? payload.items : [];
+  const items = raw
+    .filter((i) => i && typeof i.text === "string" && i.text.trim() && RIASEC_TYPES.includes(i.type))
+    .map((i, idx) => ({ id: `ri_${idx + 1}`, type: i.type, text: i.text.trim().slice(0, 120) }));
+
+  if (items.length !== count) throw new Error(`Expected ${count} valid items, got ${items.length}.`);
+
+  const seen = new Set();
+  for (const item of items) {
+    const key = item.text.toLowerCase();
+    if (seen.has(key)) throw new Error(`Duplicate RIASEC item text: "${item.text}"`);
+    seen.add(key);
+  }
+  const perType = count / RIASEC_TYPES.length;
+  for (const type of RIASEC_TYPES) {
+    const n = items.filter((i) => i.type === type).length;
+    if (n !== perType) throw new Error(`Expected ${perType} items of type ${type}, got ${n}.`);
+  }
+  return items;
+}
+
+function normalizeRiasecScoresPayload(payload) {
+  const raw = payload?.scores || {};
+  const scores = {};
+  for (const key of RIASEC_TYPES) {
+    const n = Number(raw[key]);
+    if (!Number.isFinite(n)) throw new Error(`RIASEC score ${key} missing or not a number.`);
+    scores[key] = Math.max(0, Math.min(100, Math.round(n)));
+  }
+  return scores;
+}
+
+function normalizeJobCharQuestionsPayload(payload, { count, ranking }) {
+  const raw = Array.isArray(payload?.items) ? payload.items : [];
+  if (raw.length !== count) throw new Error(`Expected ${count} questions, got ${raw.length}.`);
+
+  const items = raw.map((item) => {
+    if (!ranking.includes(item?.param)) throw new Error(`Invalid param: ${item?.param}`);
+    const text = cleanText(item?.text);
+    if (!text) throw new Error("Question missing text.");
+    const options = Array.isArray(item?.options) ? item.options : [];
+    if (options.length < 3 || options.length > 4) {
+      throw new Error(`Question needs 3–4 options, got ${options.length}.`);
+    }
+    return {
+      param: item.param,
+      text,
+      options: options.map((o) => {
+        const value = Number(o?.value);
+        const label = cleanText(o?.label);
+        if (!Number.isFinite(value) || !label) throw new Error("Option needs a numeric value and a label.");
+        return { value: Math.max(0, Math.min(100, Math.round(value))), label };
+      }),
+    };
+  });
+
+  // Serve questions in the user's importance order regardless of AI ordering.
+  items.sort((a, b) => ranking.indexOf(a.param) - ranking.indexOf(b.param));
+  return items.map((item, index) => ({ id: `jc_${index + 1}`, ...item }));
+}
+
+function normalizeCvAnalysisPayload(payload) {
+  const strings = (list, max) =>
+    (Array.isArray(list) ? list : [])
+      .filter((s) => typeof s === "string" && s.trim())
+      .map((s) => s.trim().slice(0, 60))
+      .slice(0, max);
+  const analysis = {
+    skills: strings(payload?.skills, 12),
+    domains: strings(payload?.domains, 6),
+    seniority: cleanText(payload?.seniority, "").slice(0, 80),
+  };
+  if (!analysis.skills.length) throw new Error("CV analysis produced no skills.");
+  return analysis;
+}
+
+// Shared by user inference and profession scoring — both return the same
+// 10-score schema. A flat profile carries no signal, so it is rejected into
+// the deterministic fallback rather than silently accepted.
+function normalizeSchwartzValuesPayload(payload) {
+  const raw = payload?.schwartzValues || {};
+  const scores = {};
+  for (const key of SCHWARTZ_ORDER) {
+    const n = Number(raw[key]);
+    if (!Number.isFinite(n)) throw new Error(`Schwartz score ${key} missing or not a number.`);
+    scores[key] = Math.max(0, Math.min(100, Math.round(n)));
+  }
+  const nums = SCHWARTZ_ORDER.map((k) => scores[k]);
+  if (Math.max(...nums) - Math.min(...nums) < 8) {
+    throw new Error("Flat Schwartz profile rejected.");
+  }
+
+  const rationale = {};
+  const rawRationale = payload?.valuesRationale || {};
+  for (const [key, line] of Object.entries(rawRationale)) {
+    if (!SCHWARTZ_ORDER.includes(key)) continue;
+    const text = cleanText(line).slice(0, 200);
+    if (!text) continue;
+    rationale[key] = text;
+    if (Object.keys(rationale).length === 3) break;
+  }
+  return { scores, rationale };
+}
+
 function normalizeRefinePayload(payload, rejectedIds) {
   const directionId = payload?.directionId;
   if (!DIRECTION_IDS.includes(directionId) || rejectedIds.includes(directionId)) {
@@ -393,18 +543,22 @@ function createAiEngine({ apiKey, model }) {
   // instead of pinning the request for the SDK's 10-minute default.
   const client = apiKey ? new OpenAI({ apiKey, timeout: 30_000, maxRetries: 1 }) : null;
 
-  async function generateDirectionQuestions({ session }) {
+  // The oriented field / 1st Output. excludeDirectionIds carries the field
+  // families the user rejected as "not suitable overall".
+  async function generateFirstOutput({ session, excludeDirectionIds = [] }) {
     if (!client) {
-      return fallbackDirectionQuestions();
+      return fallbackFirstOutput(session, excludeDirectionIds);
     }
-
     try {
-      const prompts = buildDirectionQuestionsPrompt({
+      const scores = session.riasecScores ?? inferRiasecScores(session.bigFiveScores);
+      const ranked = rankDirections(scores, { excludeIds: excludeDirectionIds }).slice(0, 5);
+      const excludeFields = excludeDirectionIds
+        .map((id) => getDirection(id)?.label)
+        .filter(Boolean);
+      const prompts = buildOrientedFieldPrompt({
         profileDigest: buildSessionDigest(session),
-        riasecRanking: rankDirections({
-          bigFiveScores: session.bigFiveScores,
-          valuesScores: session.valuesScores,
-        }),
+        directionHint: ranked.map((r) => ({ id: r.id, label: getDirection(r.id)?.label || r.id })),
+        excludeFields,
       });
       const parsed = await runJsonCompletion(client, {
         model,
@@ -412,26 +566,24 @@ function createAiEngine({ apiKey, model }) {
         user: prompts.user,
         temperature: 0.8,
       });
-      return normalizeQuestionsPayload(parsed, {
-        count: 3,
-        idPrefix: "dir_q",
-        requireDirectionId: true,
-      });
+      // Ground the Schwartz fallback + notSuitable exclusions in the closest
+      // catalog family even for AI outputs.
+      return { directionId: ranked[0]?.id || null, ...normalizeOutputPayload(parsed) };
     } catch (error) {
-      console.error("[AI direction questions fallback]", error.message);
-      return fallbackDirectionQuestions();
+      console.error("[AI first output fallback]", error.message);
+      return fallbackFirstOutput(session, excludeDirectionIds);
     }
   }
 
-  async function generateNarrowingQuestions({ session }) {
+  async function refineOutput({ session, previousOutput, changes }) {
     if (!client) {
-      return fallbackNarrowingQuestions();
+      return fallbackRefineOutput(session, previousOutput, changes);
     }
-
     try {
-      const prompts = buildNarrowingQuestionsPrompt({
+      const prompts = buildRefinementPrompt({
         profileDigest: buildSessionDigest(session),
-        direction: session.direction,
+        previousOutput,
+        changes,
       });
       const parsed = await runJsonCompletion(client, {
         model,
@@ -439,44 +591,43 @@ function createAiEngine({ apiKey, model }) {
         user: prompts.user,
         temperature: 0.8,
       });
-      return normalizeQuestionsPayload(parsed, {
-        count: 2,
-        idPrefix: "nar_q",
-        requireDirectionId: false,
-      });
+      const output = normalizeOutputPayload(parsed);
+      if (!output.changeSummary) {
+        output.changeSummary = "Adjusted the parameters you flagged while keeping the rest stable.";
+      }
+      return { directionId: previousOutput.directionId || null, ...output };
     } catch (error) {
-      console.error("[AI narrowing questions fallback]", error.message);
-      return fallbackNarrowingQuestions();
+      console.error("[AI refine output fallback]", error.message);
+      return fallbackRefineOutput(session, previousOutput, changes);
     }
   }
 
-  async function generateProfessions({ session }) {
+  async function generateOutputDetail({ session, output }) {
     if (!client) {
-      return fallbackProfessions(session.direction);
+      return fallbackOutputDetail(session, output);
     }
-
     try {
-      const prompts = buildProfessionsPrompt({
+      const prompts = buildOutputDetailPrompt({
         profileDigest: buildSessionDigest(session),
-        direction: session.direction,
-        directionDigest: buildAnswersDigest(session.directionQuestions, session.directionAnswers),
-        narrowingDigest: buildAnswersDigest(session.narrowingQuestions, session.narrowingAnswers),
+        output,
       });
       const parsed = await runJsonCompletion(client, {
         model,
         system: prompts.system,
         user: prompts.user,
-        temperature: 0.8,
+        temperature: 0.7,
       });
-      return normalizeProfessionsPayload(parsed);
+      return normalizeOutputDetailPayload(parsed);
     } catch (error) {
-      console.error("[AI professions fallback]", error.message);
-      return fallbackProfessions(session.direction);
+      console.error("[AI output detail fallback]", error.message);
+      return fallbackOutputDetail(session, output);
     }
   }
 
-  async function generateRoadmap({ session }) {
-    const profession = session.selectedProfession;
+  // Roadmap for the ACCEPTED output: profession/direction shims keep the
+  // existing prompt and normalizer unchanged.
+  async function generateRoadmap({ session, output }) {
+    const profession = { id: output.id, title: output.jobTitle, summary: output.thesis };
 
     if (!client) {
       return fallbackRoadmap(profession);
@@ -485,9 +636,8 @@ function createAiEngine({ apiKey, model }) {
     try {
       const prompts = buildRoadmapPrompt({
         profileDigest: buildSessionDigest(session),
-        direction: session.direction,
+        direction: { label: output.orientedField },
         profession,
-        narrowingDigest: buildAnswersDigest(session.narrowingQuestions, session.narrowingAnswers),
       });
       const parsed = await runJsonCompletion(client, {
         model,
@@ -502,37 +652,110 @@ function createAiEngine({ apiKey, model }) {
     }
   }
 
-  async function refineDirection({ session, reasonChoice, feedbackText }) {
-    if (!client) {
-      return fallbackRefineDirection(session);
-    }
-
+  async function generateRiasecItems({ depth }) {
+    if (!client) return getFallbackRiasecItems(depth);
     try {
-      const prompts = buildDirectionRefinePrompt({
-        profileDigest: buildSessionDigest(session),
-        directionDigest: buildAnswersDigest(session.directionQuestions, session.directionAnswers),
-        rejectedDirections: session.rejectedDirections,
-        reasonChoice,
-        feedbackText,
-      });
-      const parsed = await runJsonCompletion(client, {
-        model,
-        system: prompts.system,
-        user: prompts.user,
-        temperature: 0.7,
-      });
-      return normalizeRefinePayload(parsed, session.rejectedDirections.map((d) => d.id));
+      const count = depth === "deep" ? 18 : 12;
+      const { system, user } = buildRiasecItemsPrompt(count);
+      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.85 });
+      return normalizeRiasecItemsPayload(parsed, count);
     } catch (error) {
-      console.error("[AI refine direction fallback]", error.message);
-      return fallbackRefineDirection(session);
+      console.error("[AI riasec items fallback]", error.message);
+      return getFallbackRiasecItems(depth);
+    }
+  }
+
+  async function inferRiasecProfile({ session }) {
+    if (!client) return inferRiasecScores(session.bigFiveScores);
+    try {
+      const { system, user } = buildRiasecInferencePrompt({
+        bigFiveScores: session.bigFiveScores,
+        dreamAnswer: session.dreamAnswer,
+      });
+      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.4 });
+      return normalizeRiasecScoresPayload(parsed);
+    } catch (error) {
+      console.error("[AI riasec inference fallback]", error.message);
+      return inferRiasecScores(session.bigFiveScores);
+    }
+  }
+
+  async function generateJobCharQuestions({ session, ranking, count }) {
+    if (!client) return selectFallbackJobCharQuestions(ranking, count);
+    try {
+      const { system, user } = buildJobCharQuestionsPrompt({ ranking, count });
+      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.8 });
+      return normalizeJobCharQuestionsPayload(parsed, { count, ranking });
+    } catch (error) {
+      console.error("[AI jobChar questions fallback]", error.message);
+      return selectFallbackJobCharQuestions(ranking, count);
+    }
+  }
+
+  // Keyless fallback returns an EMPTY signal on purpose: the profile digest
+  // then quotes a raw excerpt instead of pretending a parse happened.
+  async function analyzeCV({ cvText }) {
+    const empty = { skills: [], domains: [], seniority: "" };
+    if (!client) return empty;
+    try {
+      const { system, user } = buildCvParsePrompt(cvText);
+      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.2 });
+      return normalizeCvAnalysisPayload(parsed);
+    } catch (error) {
+      console.error("[AI cv parse fallback]", error.message);
+      return empty;
+    }
+  }
+
+  async function inferUserValues({ session }) {
+    const fallback = () =>
+      inferUserValuesFallback({
+        bigFiveScores: session.bigFiveScores,
+        riasecScores: session.riasecScores,
+        jobCharProfile: session.jobCharProfile,
+      });
+    if (!client) return fallback();
+    try {
+      const { system, user } = buildUserValuesInferencePrompt({
+        profileDigest: buildSessionDigest(session),
+      });
+      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.4 });
+      return normalizeSchwartzValuesPayload(parsed).scores;
+    } catch (error) {
+      console.error("[AI user values fallback]", error.message);
+      return fallback();
+    }
+  }
+
+  async function scoreProfessionValues({ jobTitle, orientedField, thesis, directionId, jobCharProfile }) {
+    const fallback = () => {
+      const schwartzValues = buildFallbackProfessionValues(directionId, jobCharProfile);
+      const topKey = deriveTopValues(schwartzValues)[0];
+      const label = SCHWARTZ_VALUE_META.find((m) => m.id === topKey)?.label || topKey;
+      return {
+        schwartzValues,
+        valuesRationale: {
+          [topKey]: `${label} is what day-to-day work as a ${jobTitle || "professional in this field"} rewards most.`,
+        },
+      };
+    };
+    if (!client) return fallback();
+    try {
+      const { system, user } = buildProfessionValuesProfilePrompt({ jobTitle, orientedField, thesis });
+      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.4 });
+      const { scores, rationale } = normalizeSchwartzValuesPayload(parsed);
+      return { schwartzValues: scores, valuesRationale: rationale };
+    } catch (error) {
+      console.error("[AI profession values fallback]", error.message);
+      return fallback();
     }
   }
 
   async function generateBigFiveItems({ depth }) {
-    // Validated public-domain IPIP sets are the default instrument: every
-    // session gets identical, psychometrically anchored items. AI-generated
-    // items are experimental and must be opted into explicitly.
-    if (!client || process.env.AI_BIG_FIVE_ITEMS !== "true") {
+    // AI-generated items are the default instrument (v2); the validated
+    // static IPIP sets remain the fallback and can be forced with
+    // AI_BIG_FIVE_ITEMS=false.
+    if (!client || process.env.AI_BIG_FIVE_ITEMS === "false") {
       return getFallbackItems(depth);
     }
     try {
@@ -551,16 +774,28 @@ function createAiEngine({ apiKey, model }) {
   }
 
   return {
-    generateDirectionQuestions,
-    generateNarrowingQuestions,
-    generateProfessions,
     generateRoadmap,
-    refineDirection,
     generateBigFiveItems,
+    generateRiasecItems,
+    inferRiasecProfile,
+    generateJobCharQuestions,
+    analyzeCV,
+    inferUserValues,
+    scoreProfessionValues,
+    generateFirstOutput,
+    refineOutput,
+    generateOutputDetail,
   };
 }
 
 module.exports = {
   createAiEngine,
   normalizeBigFiveItemsPayload,
+  normalizeRiasecItemsPayload,
+  normalizeRiasecScoresPayload,
+  normalizeJobCharQuestionsPayload,
+  normalizeCvAnalysisPayload,
+  normalizeSchwartzValuesPayload,
+  normalizeOutputPayload,
+  normalizeOutputDetailPayload,
 };

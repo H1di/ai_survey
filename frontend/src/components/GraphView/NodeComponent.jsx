@@ -15,32 +15,57 @@ export function MeNode() {
   );
 }
 
-export function DirectionNode({ data }) {
-  const { label } = data;
+// Short human labels for the Schwartz value keys shown on output nodes.
+const VALUE_LABELS = {
+  self_direction: 'Self-Direction',
+  stimulation: 'Stimulation',
+  hedonism: 'Hedonism',
+  achievement: 'Achievement',
+  power: 'Power',
+  security: 'Security',
+  conformity: 'Conformity',
+  tradition: 'Tradition',
+  benevolence: 'Benevolence',
+  universalism: 'Universalism',
+};
 
-  return (
-    <div className="node node--direction">
-      <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
-      <p className="node-archetype">Your direction</p>
-      <h3 className="node-title">{label}</h3>
-      <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
-    </div>
-  );
-}
-
-export function ProfessionNode({ data }) {
-  const { title, summary, selected, onOpen } = data;
+export function OutputNode({ data }) {
+  const { jobTitle, orientedField, fit, topValues, accepted, latest, onOpen } = data;
 
   return (
     <button
       type="button"
-      className={`node node--profession ${selected ? 'node--profession-selected' : ''}`}
+      className={`node node--output ${accepted ? 'node--output-accepted' : ''} ${
+        latest && !accepted ? 'node--output-latest' : ''
+      }`}
       onClick={onOpen}
     >
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
-      <p className="node-archetype">Profession</p>
-      <h3 className="node-title">{title}</h3>
-      <p className="node-profession-summary">{summary}</p>
+      <p className="node-archetype">{orientedField}</p>
+      <h3 className="node-title">{jobTitle}</h3>
+      {fit !== null && fit !== undefined && (
+        <span className="node-fit-badge">{fit}% values fit</span>
+      )}
+      {topValues && topValues.length > 0 && (
+        <p className="node-top-values">
+          {topValues.map((key) => VALUE_LABELS[key] || key).join(' · ')}
+        </p>
+      )}
+      {accepted && <span className="node-accepted-tag">Accepted</span>}
+      <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
+    </button>
+  );
+}
+
+export function AdviceNode({ data }) {
+  const { label, count, onOpen } = data;
+
+  return (
+    <button type="button" className="node node--advice" onClick={onOpen}>
+      <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
+      <p className="node-archetype">Next steps</p>
+      <h3 className="node-title">{label}</h3>
+      <span className="node-advice-count">{count} suggestions</span>
       <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
     </button>
   );

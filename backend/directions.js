@@ -1,11 +1,10 @@
-// Canonical broad professional directions for Stage A (direction finding).
-// AI-generated direction questions must tag every option with one of these ids;
-// the confirmed direction is a deterministic tally of those tags (no extra AI call).
-//
-// The catalog spans the full range of human work, not just knowledge work.
-// It is ordered alphabetically by label ON PURPOSE: catalog order is the
-// deterministic tie-break and no-votes fallback in computeDirection, so no
-// domain — especially tech — may be structurally favored by sitting first.
+// Canonical broad professional field families. Since question-engine v2 the
+// catalog is internal grounding for the Oriented Field output loop: it feeds
+// the RIASEC ranking hint in the oriented-field prompt, the deterministic
+// keyless fallbacks (professionSeeds), and the per-direction Schwartz
+// prototypes. It spans the full range of human work and stays alphabetical
+// ON PURPOSE so no domain — especially tech — is structurally favored by
+// sitting first in any deterministic walk.
 const DIRECTIONS = [
   {
     id: "agriculture",
@@ -165,61 +164,8 @@ function getDirection(id) {
   return DIRECTIONS.find((d) => d.id === id) || null;
 }
 
-// Deterministic Stage A resolution: each answered option votes for its
-// directionId; a unique majority wins. A shared top count is NOT resolved
-// silently — with 3 questions and >=8 distinct directionIds a 1-1-1 vote is
-// the common case, and breaking it by catalog order just replaces tech bias
-// with alphabet bias. Ties return { tie, candidates } so the caller can ask
-// the user. No answers -> first direction (excludeIds removes rejected
-// directions from voting and the fallback alike).
-function computeDirection(questions, answers, excludeIds = []) {
-  const excluded = new Set(excludeIds);
-  const counts = new Map();
-
-  for (const question of questions) {
-    const chosen = answers[question.id];
-    if (chosen === undefined) continue;
-    const option = question.options.find((o) => o.value === chosen);
-    if (!option || !option.directionId) continue;
-    if (excluded.has(option.directionId)) continue;
-    counts.set(option.directionId, (counts.get(option.directionId) || 0) + 1);
-  }
-
-  let top = 0;
-  for (const count of counts.values()) {
-    if (count > top) top = count;
-  }
-
-  if (top === 0) {
-    const firstAvailable = DIRECTIONS.find((dir) => !excluded.has(dir.id)) || DIRECTIONS[0];
-    return { id: firstAvailable.id, label: firstAvailable.label };
-  }
-
-  const leaders = DIRECTIONS.filter(
-    (dir) => !excluded.has(dir.id) && (counts.get(dir.id) || 0) === top
-  ).map(({ id, label }) => ({ id, label }));
-
-  if (leaders.length === 1) {
-    return leaders[0];
-  }
-  return { tie: true, candidates: leaders };
-}
-
-// Single source for the refine reasons: values are validated server-side and
-// the labels are served to the frontend in the static session snapshot.
-const REFINE_REASONS = [
-  { value: "environment", label: "Wrong day-to-day environment" },
-  { value: "interests", label: "Doesn't match my real interests" },
-  { value: "too_technical", label: "Too technical / not my style" },
-  { value: "prospects", label: "Worried about pay & prospects" },
-];
-const REFINE_REASON_VALUES = REFINE_REASONS.map((r) => r.value);
-
 module.exports = {
   DIRECTIONS,
   DIRECTION_IDS,
   getDirection,
-  computeDirection,
-  REFINE_REASONS,
-  REFINE_REASON_VALUES,
 };

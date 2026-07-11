@@ -1,9 +1,9 @@
 const {
   DEMOGRAPHIC_QUESTIONS,
   DEMOGRAPHIC_BY_ID,
-  VALUES_DIMENSIONS,
-  VALUES_QUESTIONS,
-  VALUES_BY_ID,
+  JOB_CHAR_PARAM_IDS,
+  CAREER_JOURNEY_QUESTIONS,
+  CAREER_JOURNEY_BY_ID,
 } = require("./questionPool");
 
 const TRAIT_KEYS = ["O", "C", "E", "A", "N"];
@@ -17,18 +17,6 @@ function serializeDemographic(q) {
     placeholder: q.placeholder || "",
     min: q.min,
     max: q.max,
-  };
-}
-
-function serializeValueQuestion(q) {
-  return {
-    id: q.id,
-    dimension: q.dimension,
-    dimensionLabel: q.dimensionLabel,
-    dimensionEmoji: q.dimensionEmoji,
-    indexInGroup: q.indexInGroup,
-    optionA: q.optionA,
-    optionB: q.optionB,
   };
 }
 
@@ -68,13 +56,50 @@ function validateBigFiveAnswer(session, itemId, value) {
   return n;
 }
 
-function validateValuesAnswer(questionId, choice) {
-  const q = VALUES_BY_ID.get(questionId);
-  if (!q) throw httpErr(404, "Unknown values question.");
-  if (choice !== "A" && choice !== "B") {
-    throw httpErr(400, "Choice must be 'A' or 'B'.");
+function validateJobCharRanking(ranking) {
+  const ok =
+    Array.isArray(ranking) &&
+    ranking.length === JOB_CHAR_PARAM_IDS.length &&
+    new Set(ranking).size === ranking.length &&
+    ranking.every((id) => JOB_CHAR_PARAM_IDS.includes(id));
+  if (!ok) throw httpErr(400, "ranking must order all 7 job-characteristic parameters.");
+  return ranking;
+}
+
+function validateJobCharAnswer(session, itemId, value) {
+  const item = (session.jobCharItems || []).find((i) => i.id === itemId);
+  if (!item) throw httpErr(404, "Unknown job-characteristics question.");
+  const n = Number(value);
+  if (!item.options.some((o) => o.value === n)) {
+    throw httpErr(400, "Answer must be one of the question's option values.");
   }
-  return choice;
+  return n;
+}
+
+function computeJobCharProfile(session) {
+  const items = session.jobCharItems || [];
+  const answered = items.filter((i) => session.jobCharAnswers[i.id] !== undefined).length;
+  if (!items.length || answered < items.length) return { profile: null, answered };
+
+  const profile = {};
+  for (const param of JOB_CHAR_PARAM_IDS) {
+    const group = items.filter((i) => i.param === param);
+    profile[param] = group.length
+      ? Math.round(group.reduce((s, i) => s + session.jobCharAnswers[i.id], 0) / group.length)
+      : 50; // unasked (low-ranked) parameters sit at the neutral midpoint
+  }
+  return { profile, answered };
+}
+
+function validateCareerJourneyAnswer(questionId, value) {
+  if (!CAREER_JOURNEY_BY_ID.has(questionId)) throw httpErr(404, "Unknown career-journey question.");
+  const s = typeof value === "string" ? value.trim() : "";
+  if (!s) throw httpErr(400, "Answer cannot be empty.");
+  return s.slice(0, 400);
+}
+
+function serializeJobCharItem(item) {
+  return { id: item.id, param: item.param, text: item.text, options: item.options };
 }
 
 function httpErr(status, message) {
@@ -148,19 +173,43 @@ function describeTraits({ behaviourTendencies, decisionPriorities, scores }) {
   return parts.join(" ");
 }
 
-function computeValuesScores(session) {
-  const totals = Object.fromEntries(VALUES_DIMENSIONS.map((d) => [d.id, 0]));
-  let answered = 0;
-  for (const q of VALUES_QUESTIONS) {
-    const choice = session.valuesAnswers[q.id];
-    if (choice === undefined) continue;
-    answered += 1;
-    // The dimension-aligned pole is displayed as B on flipped questions.
-    const alignedChoice = q.flip ? "B" : "A";
-    if (choice === alignedChoice) totals[q.dimension] += 1;
+const RIASEC_TYPE_KEYS = ["R", "I", "A", "S", "E", "C"];
+
+function serializeRiasecItem(item) {
+  return { id: item.id, text: item.text };
+}
+
+function validateRiasecAnswer(session, itemId, value) {
+  const item = (session.riasecItems || []).find((i) => i.id === itemId);
+  if (!item) throw httpErr(404, "Unknown RIASEC item.");
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1 || n > 5) {
+    throw httpErr(400, "RIASEC answer must be an integer 1–5.");
   }
-  if (answered < VALUES_QUESTIONS.length) return { scores: null, answered };
-  return { scores: totals, answered };
+  return n;
+}
+
+function computeRiasecScores(session) {
+  const items = session.riasecItems || [];
+  const answered = items.filter((i) => session.riasecAnswers[i.id] !== undefined).length;
+  if (!items.length || answered < items.length) return { scores: null, answered };
+
+  const scores = {};
+  for (const type of RIASEC_TYPE_KEYS) {
+    const group = items.filter((i) => i.type === type);
+    const mean = group.reduce((sum, i) => sum + session.riasecAnswers[i.id], 0) / group.length;
+    scores[type] = Math.round(((mean - 1) / 4) * 100);
+  }
+  return { scores, answered };
+}
+
+function deriveRiasecCode(scores) {
+  return RIASEC_TYPE_KEYS
+    .map((key, index) => ({ key, index, score: scores[key] ?? 0 }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .slice(0, 3)
+    .map((e) => e.key)
+    .join("");
 }
 
 function buildProgress(session) {
@@ -172,15 +221,28 @@ function buildProgress(session) {
   const bigFiveTotal = session.bigFiveItems ? session.bigFiveItems.length : 0;
   const bigFiveAnswered = Object.keys(session.bigFiveAnswers || {}).length;
 
-  const valuesTotal = VALUES_QUESTIONS.length;
-  const valuesAnswered = Object.keys(session.valuesAnswers || {}).length;
-
+  // journey.active: the journey question flow only applies when no CV text
+  // was submitted; the frontend uses it to size the overall progress bar.
   return {
     step: session.step,
     demographics: { answered: demographicAnswered, total: demographicTotal },
     bigFive: { answered: bigFiveAnswered, total: bigFiveTotal, depth: session.bigFiveDepth },
-    values: { answered: valuesAnswered, total: valuesTotal },
-    done: session.step === "complete",
+    riasec: {
+      answered: Object.keys(session.riasecAnswers || {}).length,
+      total: (session.riasecItems || []).length,
+      inferred: session.riasecInferred,
+    },
+    jobChar: {
+      ranked: Boolean(session.jobCharRanking),
+      answered: Object.keys(session.jobCharAnswers || {}).length,
+      total: (session.jobCharItems || []).length,
+    },
+    journey: {
+      answered: Object.keys(session.careerJourneyAnswers || {}).length,
+      total: CAREER_JOURNEY_QUESTIONS.length,
+      active: !session.cvText,
+    },
+    done: session.step === "tree",
   };
 }
 
@@ -192,21 +254,33 @@ function summarizeAnswersForClient(session) {
       scores: session.bigFiveScores,
       derivedTraits: session.derivedTraits,
     },
-    values: {
-      scores: session.valuesScores,
+    riasec: {
+      scores: session.riasecScores,
+      code: session.riasecCode,
+      inferred: session.riasecInferred,
+    },
+    jobChar: {
+      ranking: session.jobCharRanking,
+      profile: session.jobCharProfile,
     },
   };
 }
 
 module.exports = {
   serializeDemographic,
-  serializeValueQuestion,
+  serializeRiasecItem,
+  serializeJobCharItem,
+  validateRiasecAnswer,
+  computeRiasecScores,
+  deriveRiasecCode,
   validateDemographicAnswer,
   validateBigFiveAnswer,
-  validateValuesAnswer,
+  validateJobCharRanking,
+  validateJobCharAnswer,
+  computeJobCharProfile,
+  validateCareerJourneyAnswer,
   computeBigFiveScores,
   deriveBigFiveTraits,
-  computeValuesScores,
   buildProgress,
   summarizeAnswersForClient,
 };

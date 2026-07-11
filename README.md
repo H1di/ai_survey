@@ -75,36 +75,41 @@ npm run dev
 
 ## API Routes
 
-### Session + Survey
+### Session + Assessment
 - `POST /api/session/start`
-  - body: `{ "entryChoice": "change|find", "dreamAnswer": "..." }`
+  - body: `{ "entryChoice": "change|find", "dreamAnswer": "...", "cvIntent": "new|use_skills" }`
 - `GET /api/session/:sessionId` — full session snapshot (used to resume after reload)
 - `POST /api/session/demographics`
-  - body: `{ "sessionId": "...", "questionId": "sex|age|country", "value": ... }`
+  - body: `{ "sessionId": "...", "questionId": "sex|age|country|city", "value": ... }`
 - `POST /api/session/big-five-depth`
   - body: `{ "sessionId": "...", "depth": "short|deep" }` — 20 or 50 items
 - `POST /api/big-five/answer`
   - body: `{ "sessionId": "...", "itemId": "...", "value": 1-5 }`
-- `POST /api/values/answer`
-  - body: `{ "sessionId": "...", "questionId": "...", "choice": "A|B" }`
+- `POST /api/riasec/start`
+  - body: `{ "sessionId": "..." }` — generates the RIASEC activity items (12 short / 18 deep)
+- `POST /api/riasec/answer`
+  - body: `{ "sessionId": "...", "itemId": "...", "value": 1-5 }`
+- `POST /api/riasec/skip`
+  - body: `{ "sessionId": "..." }` — infers a low-confidence interest profile instead of the quiz
+- `POST /api/job-characteristics/rank`
+  - body: `{ "sessionId": "...", "ranking": [7 param ids most→least important], "depth": 5|10 }`
+- `POST /api/job-characteristics/answer`
+  - body: `{ "sessionId": "...", "itemId": "...", "value": <one of the option values> }`
+- `POST /api/cv`
+  - JSON body: `{ "sessionId": "...", "cvText": "..." }` — or multipart `sessionId` + `file` (.pdf/.docx/.txt, max 2 MB)
+- `POST /api/cv/journey`
+  - body: `{ "sessionId": "...", "questionId": "cj_...", "value": "..." }` — 7 career-journey questions when there is no CV
 
-### Life Path Engine
-- `POST /api/direction/question`
-  - body: `{ "sessionId": "..." }` — generates/returns the direction-finding questions
-- `POST /api/direction/answer`
-  - body: `{ "sessionId": "...", "questionId": "...", "value": "..." }`
-- `POST /api/direction/confirm`
-  - body: `{ "sessionId": "..." }` — locks the proposed direction, returns narrowing questions
-- `POST /api/direction/refine`
-  - body: `{ "sessionId": "...", "reasonChoice": "environment|interests|too_technical|prospects", "feedbackText": "..." }` — rejects the proposed direction and suggests a different one
-- `POST /api/direction/choose`
-  - body: `{ "sessionId": "...", "directionId": "..." }` — manually pick a direction (offered after two rejections)
-- `POST /api/professions/narrow`
-  - body: `{ "sessionId": "...", "questionId": "...", "value": "..." }` — after the last answer, returns exactly 3 profession options
-- `POST /api/professions/select`
-  - body: `{ "sessionId": "...", "professionId": "..." }`
+### Life Path Engine (output loop)
+- `POST /api/output/first`
+  - body: `{ "sessionId": "..." }` — generates the Oriented Field + 1st Output (idempotent), Schwartz-scored with a values-fit against the user's inferred value vector
+- `POST /api/output/refine`
+  - body: `{ "sessionId": "...", "outputId": "...", "changes": [{ "param": "<one of the 7>", "reason": "..." }] }` — shifts the named parameters while holding the rest
+  - or: `{ "sessionId": "...", "outputId": "...", "notSuitable": true }` — regenerates from a genuinely different field family
+- `POST /api/output/accept`
+  - body: `{ "sessionId": "...", "outputId": "..." }` — accepts the output and generates the four advice blocks (AI recommendations, events, universities, courses)
 - `POST /api/roadmap/generate`
-  - body: `{ "sessionId": "..." }` — personalized ordered roadmap for the selected profession
+  - body: `{ "sessionId": "...", "outputId": "..." }` — ordered roadmap for the accepted output
 
 ## Notes
 
