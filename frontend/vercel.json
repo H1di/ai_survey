@@ -5,7 +5,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://ai-survey-backend.onrender.com/api/:path*"
+      "destination": "https://ai-survey-backend-3g62.onrender.com/api/:path*"
     }
   ]
 }
