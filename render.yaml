@@ -1,0 +1,38 @@
+# Render Blueprint — деплоит только backend/ как Node Web Service (free plan).
+# Документация: https://render.com/docs/blueprint-spec
+#
+# ВАЖНО: имя сервиса определяет публичный URL: https://<name>.onrender.com
+# Если "ai-survey-backend" уже занято на Render, смени name здесь И
+# destination в frontend/vercel.json на новое значение.
+
+services:
+  - type: web
+    name: ai-survey-backend
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Домен фронтенда на Vercel — должен совпадать с project name,
+      # который используется при деплое фронта (см. DEPLOY.md).
+      - key: CORS_ORIGIN
+        value: https://ai-survey-frontend.vercel.app
+      # Секрет — задаётся вручную в Render Dashboard (или через `render env set`),
+      # никогда не коммитится. Без ключа приложение всё равно работает
+      # (детерминированные fallback-ответы вместо реального OpenAI).
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4.1-mini
+      - key: RATE_LIMIT_WINDOW_MS
+        value: "900000"
+      - key: RATE_LIMIT_GLOBAL_MAX
+        value: "300"
+      - key: RATE_LIMIT_AI_MAX
+        value: "30"
