@@ -22,7 +22,7 @@ services:
       # Домен фронтенда на Vercel — должен совпадать с project name,
       # который используется при деплое фронта (см. DEPLOY.md).
       - key: CORS_ORIGIN
-        value: https://ai-survey-frontend.vercel.app
+        value: https://ai-survey-frontend-bay.vercel.app
       # Секрет — задаётся вручную в Render Dashboard (или через `render env set`),
       # никогда не коммитится. Без ключа приложение всё равно работает
       # (детерминированные fallback-ответы вместо реального OpenAI).
