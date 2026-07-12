@@ -1,0 +1,10 @@
+#!/usr/bin/env node
+// Stand-in for the MarkItDown CLI in tests: answers --version and prints
+// canned markdown (with images/links/blank runs) for any file argument.
+if (process.argv[2] === "--version") {
+  console.log("markitdown 0.0.0-fake");
+  process.exit(0);
+}
+process.stdout.write(
+  "# Jane Doe\n\n\n\n![photo](data:image/png;base64,AAA)\n\nSenior [nurse](https://example.com) at City Hospital\n\n- Skill: triage\n- Skill: mentoring\n"
+);

@@ -1,0 +1,9 @@
+#!/usr/bin/env node
+// Probe succeeds (--version), any conversion fails — exercises the
+// "markitdown present but broken" degradation path.
+if (process.argv[2] === "--version") {
+  console.log("markitdown 0.0.0-fake");
+  process.exit(0);
+}
+console.error("boom");
+process.exit(1);
