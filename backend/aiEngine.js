@@ -585,10 +585,13 @@ function normalizeSchwartzValuesPayload(payload) {
   return { scores, rationale };
 }
 
-async function runJsonCompletion(client, { model, system, user, temperature = 0.7 }) {
+async function runJsonCompletion(client, { model, system, user, temperature = 0.7, maxTokens }) {
   const completion = await client.chat.completions.create({
     model,
     temperature,
+    // Explicit output ceiling on every call — an unbounded response is the
+    // one OpenAI cost knob nothing else in this file controls.
+    ...(Number.isFinite(maxTokens) ? { max_tokens: maxTokens } : {}),
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: system },
@@ -627,6 +630,7 @@ function createAiEngine({ apiKey, model }) {
         system: prompts.system,
         user: prompts.user,
         temperature: 0.8,
+        maxTokens: 1500,
       });
       // Ground the Schwartz fallback + notSuitable exclusions in the closest
       // catalog family even for AI outputs.
@@ -652,6 +656,7 @@ function createAiEngine({ apiKey, model }) {
         system: prompts.system,
         user: prompts.user,
         temperature: 0.8,
+        maxTokens: 1500,
       });
       const output = normalizeOutputPayload(parsed);
       if (!output.changeSummary) {
@@ -680,6 +685,8 @@ function createAiEngine({ apiKey, model }) {
         system: prompts.system,
         user: prompts.user,
         temperature: 0.6,
+        // ~9 bullets ≤220 chars + 4 skill names ≈ 450 tokens; ceiling ≥ 2×.
+        maxTokens: 1000,
       });
       return normalizeWhyThisFitsPayload(parsed);
     } catch (error) {
@@ -702,6 +709,7 @@ function createAiEngine({ apiKey, model }) {
         system: prompts.system,
         user: prompts.user,
         temperature: 0.7,
+        maxTokens: 1500,
       });
       return normalizeOutputDetailPayload(parsed);
     } catch (error) {
@@ -730,6 +738,7 @@ function createAiEngine({ apiKey, model }) {
         system: prompts.system,
         user: prompts.user,
         temperature: 0.7,
+        maxTokens: 1500,
       });
       return normalizeRoadmapPayload(parsed, profession);
     } catch (error) {
@@ -745,7 +754,7 @@ function createAiEngine({ apiKey, model }) {
         bigFiveScores: session.bigFiveScores,
         dreamAnswer: session.dreamAnswer,
       });
-      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.4 });
+      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.4, maxTokens: 400 });
       return normalizeRiasecScoresPayload(parsed);
     } catch (error) {
       console.error("[AI riasec inference fallback]", error.message);
@@ -757,7 +766,7 @@ function createAiEngine({ apiKey, model }) {
     if (!client) return selectFallbackJobCharQuestions(ranking, count);
     try {
       const { system, user } = buildJobCharQuestionsPrompt({ ranking, count });
-      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.8 });
+      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.8, maxTokens: 1200 });
       return normalizeJobCharQuestionsPayload(parsed, { count, ranking });
     } catch (error) {
       console.error("[AI jobChar questions fallback]", error.message);
@@ -772,7 +781,7 @@ function createAiEngine({ apiKey, model }) {
     if (!client) return empty;
     try {
       const { system, user } = buildCvParsePrompt(cvText);
-      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.2 });
+      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.2, maxTokens: 300 });
       return normalizeCvAnalysisPayload(parsed);
     } catch (error) {
       console.error("[AI cv parse fallback]", error.message);
@@ -786,7 +795,8 @@ function createAiEngine({ apiKey, model }) {
       const { system, user } = buildPersonaSummaryPrompt({
         profileDigest: buildSessionDigest(session),
       });
-      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.6 });
+      // 3-5 sentences ≤700 chars ≈ 200 tokens; ceiling ≥ 2×.
+      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.6, maxTokens: 400 });
       return normalizePersonaSummaryPayload(parsed);
     } catch (error) {
       console.error("[AI persona summary fallback]", error.message);
@@ -806,7 +816,7 @@ function createAiEngine({ apiKey, model }) {
       const { system, user } = buildUserValuesInferencePrompt({
         profileDigest: buildSessionDigest(session),
       });
-      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.4 });
+      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.4, maxTokens: 400 });
       return normalizeSchwartzValuesPayload(parsed).scores;
     } catch (error) {
       console.error("[AI user values fallback]", error.message);
@@ -829,7 +839,7 @@ function createAiEngine({ apiKey, model }) {
     if (!client) return fallback();
     try {
       const { system, user } = buildProfessionValuesProfilePrompt({ jobTitle, orientedField, thesis });
-      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.4 });
+      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.4, maxTokens: 400 });
       const { scores, rationale } = normalizeSchwartzValuesPayload(parsed);
       return { schwartzValues: scores, valuesRationale: rationale };
     } catch (error) {
@@ -855,6 +865,7 @@ function createAiEngine({ apiKey, model }) {
 
 module.exports = {
   createAiEngine,
+  runJsonCompletion,
   normalizeRiasecScoresPayload,
   normalizeJobCharQuestionsPayload,
   normalizeCvAnalysisPayload,

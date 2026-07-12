@@ -326,3 +326,31 @@ test("keyless scoreProfessionValues: prototype-based profile + top-value rationa
   }
   assert.equal(Object.keys(valuesRationale).length, 1, "fallback carries one top-value line");
 });
+
+// --- runJsonCompletion (token ceilings) ---
+
+const { runJsonCompletion } = require("../aiEngine");
+
+test("runJsonCompletion forwards an explicit max_tokens ceiling", async () => {
+  let captured;
+  const fakeClient = {
+    chat: {
+      completions: {
+        create: async (args) => {
+          captured = args;
+          return { choices: [{ message: { content: '{"ok":true}' } }] };
+        },
+      },
+    },
+  };
+  const parsed = await runJsonCompletion(fakeClient, {
+    model: "m",
+    system: "s",
+    user: "u",
+    temperature: 0,
+    maxTokens: 300,
+  });
+  assert.equal(captured.max_tokens, 300);
+  assert.equal(captured.temperature, 0);
+  assert.equal(parsed.ok, true);
+});
