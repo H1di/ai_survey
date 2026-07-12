@@ -233,7 +233,7 @@ test("cv with pasted text stores analysis and reaches tree", async () => {
   assert.equal(data.step, "tree");
   assert.equal(data.cvProvided, true);
   // keyless: analysis is the honest empty signal
-  assert.deepEqual(data.cvAnalysis, { skills: [], domains: [], seniority: "" });
+  assert.deepEqual(data.cvAnalysis, { roles: [], skills: [], domains: [], seniority: "", keywords: [] });
   // Schwartz user vector exists on BOTH cv paths before the graph renders
   assert.equal(data.userValues.source, "inferred");
   assert.equal(Object.keys(data.userValues.scores).length, 10);

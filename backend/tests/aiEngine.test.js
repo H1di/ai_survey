@@ -247,17 +247,24 @@ test("normalizeJobCharQuestionsPayload validates params, options, and sorts by r
 
 test("normalizeCvAnalysisPayload trims, caps, and requires at least one skill", () => {
   const parsed = normalizeCvAnalysisPayload({
+    roles: Array.from({ length: 10 }, (_, i) => ` role ${i} `),
     skills: ["  welding ", "", 42, "safety"],
     domains: ["construction"],
     seniority: "senior",
+    keywords: Array.from({ length: 10 }, (_, i) => `kw${i}`),
   });
-  assert.deepEqual(parsed, { skills: ["welding", "safety"], domains: ["construction"], seniority: "senior" });
+  assert.deepEqual(parsed.skills, ["welding", "safety"]);
+  assert.deepEqual(parsed.domains, ["construction"]);
+  assert.equal(parsed.roles.length, 6);
+  assert.equal(parsed.roles[0], "role 0");
+  assert.equal(parsed.keywords.length, 6);
+  assert.equal(parsed.seniority, "senior");
   assert.throws(() => normalizeCvAnalysisPayload({ skills: [], domains: [], seniority: "" }), /skill/);
 });
 
 test("keyless engine: analyzeCV returns the honest empty signal", async () => {
   const analysis = await engine.analyzeCV({ cvText: "whatever" });
-  assert.deepEqual(analysis, { skills: [], domains: [], seniority: "" });
+  assert.deepEqual(analysis, { roles: [], skills: [], domains: [], seniority: "", keywords: [] });
 });
 
 test("keyless engine: inferRiasecProfile derives from Big Five; jobChar questions from the bank", async () => {

@@ -137,10 +137,27 @@ test("jobChar questions prompt embeds ranking order and count", () => {
   assert.match(user, /meaning_impact, work_mode, compensation/);
 });
 
-test("cv parse prompt embeds the text and the target schema", () => {
+test("cv parse prompt embeds the text and the extended schema", () => {
   const { system, user } = prompts.buildCvParsePrompt("10 years as a nurse");
+  assert.match(system, /"roles":\[/);
   assert.match(system, /"skills":\[/);
+  assert.match(system, /"keywords":\[/);
   assert.match(user, /10 years as a nurse/);
+});
+
+test("profile digest includes roles and keywords when present", () => {
+  const digest = prompts.buildProfileDigest({
+    cvAnalysis: {
+      roles: ["ICU nurse"],
+      skills: ["triage"],
+      domains: ["healthcare"],
+      seniority: "senior",
+      keywords: ["night shifts"],
+    },
+  });
+  assert.match(digest, /roles \[ICU nurse\]/);
+  assert.match(digest, /skills \[triage\]/);
+  assert.match(digest, /keywords \[night shifts\]/);
 });
 
 test("riasec inference prompt includes Big Five and dream", () => {

@@ -549,9 +549,11 @@ function normalizeCvAnalysisPayload(payload) {
       .map((s) => s.trim().slice(0, 60))
       .slice(0, max);
   const analysis = {
+    roles: strings(payload?.roles, 6),
     skills: strings(payload?.skills, 12),
     domains: strings(payload?.domains, 6),
     seniority: cleanText(payload?.seniority, "").slice(0, 80),
+    keywords: strings(payload?.keywords, 6),
   };
   if (!analysis.skills.length) throw new Error("CV analysis produced no skills.");
   return analysis;
@@ -777,11 +779,13 @@ function createAiEngine({ apiKey, model }) {
   // Keyless fallback returns an EMPTY signal on purpose: the profile digest
   // then quotes a raw excerpt instead of pretending a parse happened.
   async function analyzeCV({ cvText }) {
-    const empty = { skills: [], domains: [], seniority: "" };
+    const empty = { roles: [], skills: [], domains: [], seniority: "", keywords: [] };
     if (!client) return empty;
     try {
       const { system, user } = buildCvParsePrompt(cvText);
-      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.2, maxTokens: 300 });
+      // temperature 0: deterministic extraction — creative variance here only
+      // costs retries, never adds signal.
+      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0, maxTokens: 300 });
       return normalizeCvAnalysisPayload(parsed);
     } catch (error) {
       console.error("[AI cv parse fallback]", error.message);

@@ -78,12 +78,19 @@ function buildProfileDigest({
   }
 
   const hasParsedCv =
-    cvAnalysis && (cvAnalysis.skills?.length || cvAnalysis.domains?.length || cvAnalysis.seniority);
+    cvAnalysis &&
+    (cvAnalysis.roles?.length ||
+      cvAnalysis.skills?.length ||
+      cvAnalysis.domains?.length ||
+      cvAnalysis.seniority);
   if (hasParsedCv) {
-    lines.push(
-      `CV signal: skills [${(cvAnalysis.skills || []).join(", ")}]; ` +
-        `domains [${(cvAnalysis.domains || []).join(", ")}]; seniority "${cvAnalysis.seniority || "unknown"}"`
-    );
+    const segments = [];
+    if (cvAnalysis.roles?.length) segments.push(`roles [${cvAnalysis.roles.join(", ")}]`);
+    segments.push(`skills [${(cvAnalysis.skills || []).join(", ")}]`);
+    segments.push(`domains [${(cvAnalysis.domains || []).join(", ")}]`);
+    segments.push(`seniority "${cvAnalysis.seniority || "unknown"}"`);
+    if (cvAnalysis.keywords?.length) segments.push(`keywords [${cvAnalysis.keywords.join(", ")}]`);
+    lines.push(`CV signal: ${segments.join("; ")}`);
   } else if (cvText) {
     lines.push(`CV provided (unparsed excerpt): "${cvText.slice(0, 300)}"`);
   } else if (careerJourneyAnswers && Object.keys(careerJourneyAnswers).length) {
@@ -191,10 +198,11 @@ function buildCvParsePrompt(cvText) {
   const system = [
     "You extract a structured career signal from a raw CV text.",
     "Return valid JSON only.",
-    'JSON schema: {"skills":["..."],"domains":["..."],"seniority":"..."}',
-    "skills: up to 12 concrete skills. domains: up to 6 industries/fields worked in.",
+    'JSON schema: {"roles":["..."],"skills":["..."],"domains":["..."],"seniority":"...","keywords":["..."]}',
+    "roles: up to 6 job titles held, most recent first. skills: up to 12 concrete skills.",
+    "domains: up to 6 industries/fields worked in. keywords: up to 6 short distinguishing terms.",
     'seniority: one of "student", "junior", "mid", "senior", "lead", "executive", or a short honest label.',
-    "Extract only what the text supports; do not invent.",
+    "Each array item at most 8 words. Extract only what the text supports; do not invent.",
   ].join(" ");
   return { system, user: `CV text:\n${cvText}\n\nExtract the signal now.` };
 }
