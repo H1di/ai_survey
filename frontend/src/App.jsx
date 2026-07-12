@@ -269,7 +269,7 @@ function RiasecQuestionCard({ q, savedValue, busy, onSubmit, onBack, canGoBack, 
   );
 }
 
-function CvCard({ mode, setMode, cvDraft, setCvDraft, busy, intent, intentBusy, onSelectIntent, onSubmitText, onUploadFile }) {
+function CvCard({ mode, setMode, cvDraft, setCvDraft, busy, intent, intentBusy, onSelectIntent, onSubmitText, onUploadFile, uploadFormats }) {
   if (mode === "paste") {
     return (
       <div className="question-card">
@@ -320,10 +320,10 @@ function CvCard({ mode, setMode, cvDraft, setCvDraft, busy, intent, intentBusy, 
           Paste my CV as text
         </button>
         <label className={`option-button cv-upload ${!intent ? "cv-upload-disabled" : ""}`}>
-          Upload a file (.pdf, .docx, .txt — max 2 MB)
+          Upload a file ({uploadFormats.join(", ")} — max 5 MB)
           <input
             type="file"
-            accept=".pdf,.docx,.txt"
+            accept={uploadFormats.join(",")}
             hidden
             disabled={busy || !intent}
             onChange={(e) => e.target.files?.[0] && onUploadFile(e.target.files[0])}
@@ -484,6 +484,7 @@ function App() {
   const [jcIndex, setJcIndex] = useState(0);
   const [rankDraft, setRankDraft] = useState([]);
   const [careerJourneyQuestions, setCareerJourneyQuestions] = useState([]);
+  const [cvUploadFormats, setCvUploadFormats] = useState([".pdf", ".docx", ".txt"]);
   const [careerJourneyAnswers, setCareerJourneyAnswers] = useState({});
   const [journeyIndex, setJourneyIndex] = useState(0);
   const [journeyDraft, setJourneyDraft] = useState("");
@@ -540,6 +541,7 @@ function App() {
     if (data.riasecItems) setRiasecItems(data.riasecItems);
     if (data.jobCharParams) setJobCharParams(data.jobCharParams);
     if (data.careerJourneyQuestions) setCareerJourneyQuestions(data.careerJourneyQuestions);
+    if (data.cvUploadFormats) setCvUploadFormats(data.cvUploadFormats);
     setCvIntent(data.cvIntent || "");
     setDemoAnswers(data.demographics || {});
     setBigFiveAnswers(data.bigFiveAnswers || {});
@@ -1426,6 +1428,7 @@ function App() {
               onSelectIntent={handleSelectCvIntent}
               onSubmitText={handleSubmitCvText}
               onUploadFile={handleUploadCv}
+              uploadFormats={cvUploadFormats}
             />
           )}
 
