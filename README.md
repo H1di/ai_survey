@@ -31,8 +31,8 @@ status and backlog see [`PROJECT_STATUS.md`](./PROJECT_STATUS.md).
    - **Job characteristics** — rank the 7 parameters (compensation, work mode,
      job security, career growth, complexity, meaning/impact, social), then
      answer 5 or 10 trade-off questions that set 0–100 targets per parameter.
-   - **Experience** — paste/upload a CV (`.pdf/.docx/.txt`, max 2 MB) or answer
-     7 career-journey questions.
+   - **Experience** — paste/upload a CV (`.pdf/.docx/.html/.txt`, plus `.pptx`
+     with MarkItDown; max 5 MB) or answer 7 career-journey questions.
 3. **Life Path Engine** — an Oriented Field + concrete job, scored on Schwartz
    values with a fit against your inferred value vector, plus a structured
    "Why this fits" block that traces every bullet to your scores, ranks, and
@@ -66,7 +66,8 @@ Key backend modules:
 - `questionEngine.js` — answer validation + all scoring
 - `questionPool.js` — demographics, the 7 job-char params, journey questions
 - `bigFiveItems.js` / `riasecItems.js` — public-domain fallback item pools
-- `cvExtract.js` — CV file → text (pdf / docx / txt)
+- `cvExtract.js` — CV file → text: MarkItDown-first hybrid (pdf / docx / pptx / html / txt)
+- `services/markitdown.js` — optional MarkItDown CLI wrapper; without the binary the built-in parsers take over
 - `aiEngine.js` — one generator per AI artifact, each with a fallback
 - `prompts.js` — prompt builders + the shared profile digest
 - `directions.js` — field-family catalog (prompt grounding + fallback seeds)
@@ -85,6 +86,14 @@ Configure the backend env (optional — omit the key for demo mode):
 ```bash
 cp backend/.env.example backend/.env   # then set OPENAI_API_KEY
 ```
+
+Optional — MarkItDown for `.pptx` uploads and better document extraction:
+```bash
+python3 -m venv ~/.venvs/markitdown
+~/.venvs/markitdown/bin/pip install "markitdown[all]"
+# then in backend/.env: MARKITDOWN_BIN=~/.venvs/markitdown/bin/markitdown
+```
+Without it the backend silently uses its built-in pdf/docx/html/txt parsers.
 
 - Frontend: `http://localhost:5173`
 - Backend health: `http://localhost:3001/api/health`
@@ -121,7 +130,7 @@ cd frontend && npm test -- --run    # vitest over src/lifePath.js (13 tests)
 - `POST /api/cv/intent`
   - body: `{ "sessionId": "...", "cvIntent": "new|use_skills" }` — the "where should we start from" choice, made on the CV slide
 - `POST /api/cv`
-  - JSON body: `{ "sessionId": "...", "cvText": "..." }` — or multipart `sessionId` + `file` (.pdf/.docx/.txt, max 2 MB)
+  - JSON body: `{ "sessionId": "...", "cvText": "..." }` — or multipart `sessionId` + `file` (.pdf/.docx/.pptx/.html/.txt, max 5 MB; the live list is `cvUploadFormats` in every snapshot)
 - `POST /api/cv/journey`
   - body: `{ "sessionId": "...", "questionId": "cj_...", "value": "..." }` — 7 career-journey questions when there is no CV
 

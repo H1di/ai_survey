@@ -17,7 +17,7 @@
 - **Big Five** — единственный фиксированный инструмент: статичный public-domain Mini-IPIP-20 (`bigFiveItems.js`), сидируется в сессию при создании; без AI-генерации и выбора глубины. Скоринг reverse + нормировка 0–100 + Big Two (Stability/Plasticity).
 - **RIASEC** — фиксированные 12 статичных activity-пунктов (`getStaticRiasecItems`), скоринг 0–100 по 6 типам + топ-3 код; skip-путь с инференсом из Big Five + dream (`riasecInferred`, low-confidence).
 - **Job characteristics** — ранжирование 7 канонических параметров + 5/10 tradeoff-вопросов (AI / статичный банк); профиль 0–100, неспрошенные параметры = 50.
-- **CV** — вставка текста или загрузка `.pdf/.docx/.txt` (2 МБ, `cvExtract.js`, ошибки чтения → 400) с AI-парсингом в `{skills, domains, seniority}`; альтернатива — 7 career-journey вопросов.
+- **CV** — вставка текста или загрузка `.pdf/.docx/.html/.txt` + `.pptx` при наличии MarkItDown (5 МБ, `cvExtract.js` — MarkItDown-first гибрид с Node-фоллбеками, ошибки чтения → 400) с AI-парсингом в `{roles, skills, domains, seniority, keywords}`; поддерживаемые форматы едут в снапшоте как `cvUploadFormats`; альтернатива — 7 career-journey вопросов.
 
 ### Бэкенд — Life Path Engine (Page 3)
 - **Schwartz-слой** (`schwartzValues.js`) — чистый модуль: 10 ценностей, higher-order полюса, оси плоскости, `valuesFit` (0.6·axis + 0.4·centered cosine), прототипы по 15 направлениям, детерминированные фоллбеки. AI отдаёт только 10 сырых баллов — все агрегаты считает бэкенд.
@@ -30,7 +30,8 @@
 - **Keyless-режим**: каждый из 11 AI-генераторов имеет детерминированный фоллбек; нормализаторы бросают на структурно неверных payload'ах → вызов уходит в фоллбек. UI честно показывает «Demo mode».
 - Таймауты: OpenAI-клиент 30 с / 1 retry; фронтенд-fetch 45 с + AbortController + кнопка «Try again».
 - Rate limiting: 300 запросов/15 мин глобально, 30/15 мин на AI-роуты (см. баг про `trust proxy` ниже).
-- CORS-allowlist из env, `express.json` 1 МБ, multer 2 МБ с отдельным error handler'ом.
+- CORS-allowlist из env, `express.json` 1 МБ, multer 5 МБ с отдельным error handler'ом.
+- Каждый OpenAI-вызов имеет явный `max_tokens`-потолок (≥2× типичного payload'а — обрезанный JSON молча деградирует в фоллбек).
 - Скоринговые ключи (`trait`/`reverse`, RIASEC `type`) никогда не сериализуются клиенту.
 
 ### Фронтенд

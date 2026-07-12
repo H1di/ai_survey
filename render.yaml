@@ -44,6 +44,10 @@ services:
         sync: false
       - key: UPSTASH_REDIS_REST_TOKEN
         sync: false
+      # MarkItDown is OPTIONAL: this node runtime has no Python, so the backend
+      # serves pdf/docx/txt/html via its built-in parsers and hides .pptx from
+      # the UI. To enable full MarkItDown support, switch the service to a
+      # Docker runtime and set MARKITDOWN_BIN to the installed binary.
       - key: RATE_LIMIT_WINDOW_MS
         value: "900000"
       - key: RATE_LIMIT_GLOBAL_MAX

@@ -46,14 +46,15 @@
 
 | Модуль | Что делает | Вход → Выход |
 |---|---|---|
-| `server.js` | Все 17 роутов, `trust proxy` (1 хоп в prod, `TRUST_PROXY` override), step-guard'ы, rate limiting (300/15 мин глобально, 30/15 мин AI-роуты), CORS-allowlist, multer (2 МБ), single-flight lock output/roadmap-роутов (409 на параллель), `buildScoredOutput` — единственное место агрегации Schwartz-оценок output'а | HTTP → снапшот сессии |
+| `server.js` | Все 17 роутов, `trust proxy` (1 хоп в prod, `TRUST_PROXY` override), step-guard'ы, rate limiting (300/15 мин глобально, 30/15 мин AI-роуты), CORS-allowlist, multer (5 МБ), single-flight lock output/roadmap-роутов (409 на параллель), `buildScoredOutput` — единственное место агрегации Schwartz-оценок output'а | HTTP → снапшот сессии |
 | `sessionStore.js` | In-memory `Map` сессий; TTL 24 ч, sweep раз в час (unref'd); все мутаторы (`advanceStep`, `appendOutput`, `acceptOutput`…); `serializeSessionState`. Опциональный write-through + `hydrate()` в Redis, если передан клиент | session-объект ↔ снапшот |
 | `redisClient.js` | Фабрика Upstash-клиента: возвращает `null` без `UPSTASH_REDIS_REST_URL`/`_TOKEN` (→ чистый in-memory), иначе REST-клиент для durable сессий | env → Redis-клиент \| null |
 | `questionEngine.js` | Валидация каждого типа ответа (whitelist, диапазоны) и весь скоринг: Big Five (reverse `6−raw`, нормировка `((mean−1)/4)·100`), Big Two (Stability/Plasticity), RIASEC 0–100 + топ-3 код, jobChar-профиль (неспрошенные = 50), прогресс | (session, answer) → normalized value / scores; бросает `{statusCode}`-ошибки |
 | `questionPool.js` | Статика: 4 демо-вопроса, `JOB_CHAR_PARAMS` (7 канонических параметров — кросс-слойный контракт), банк tradeoff-вопросов (2 на параметр), 7 career-journey вопросов, `selectFallbackJobCharQuestions(ranking, 5\|10)` | константы |
 | `bigFiveItems.js` | Public-domain Mini-IPIP-20 — единственный фиксированный инструмент Big Five, сидируется в сессию при создании | `MINI_IPIP_20` |
 | `riasecItems.js` | Статичный фиксированный инструмент RIASEC (12 айтемов, interleaved) | `getStaticRiasecItems()` |
-| `cvExtract.js` | Файл → текст: pdf-parse / mammoth / utf8; любая ошибка чтения → 400 | multer file → string |
+| `cvExtract.js` | Файл → текст: MarkItDown-first гибрид (pdf/docx/pptx/html/txt); фоллбеки pdf-parse / mammoth / tag-strip / utf8, `.pptx` без MarkItDown → 400; `getCvUploadExtensions()` для снапшота; любая ошибка чтения → 400 | multer file → string |
+| `services/markitdown.js` | Обёртка опционального MarkItDown CLI: probe `--version` (кэш по пути бинаря), spawn с таймаутом 20 с, `cleanMarkdown` (картинки/ссылки/пустые строки); `MARKITDOWN_BIN` override | buffer → markdown-текст |
 | `aiEngine.js` | 11 генераторов (`createAiEngine`), каждый: prompt → `runJsonCompletion` → нормализатор → при любой ошибке детерминированный фоллбек. Нормализаторы экспортированы и покрыты тестами | session-данные → валидированный артефакт |
 | `prompts.js` | Билдеры промптов; `BASE_SYSTEM` (анти-tech-bias, «dream — не фильтр домена»); `buildProfileDigest` — единый текстовый дайджест профиля, попадает в каждый content-промпт | параметры → `{system, user}` |
 | `directions.js` | Каталог 15 field-families (алфавитный намеренно — никакой домен не первый в детерминированных обходах): label, examples, 3 `professionSeeds`, id для Schwartz-прототипов | `getDirection(id)`, `DIRECTION_IDS` |

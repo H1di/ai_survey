@@ -55,7 +55,7 @@ The frontend presents this as a display-only "Career Discovery Journey" rail (`J
 - **Big Five**: one fixed instrument — the static public-domain `MINI_IPIP_20` (`backend/bigFiveItems.js`), seeded into the session at creation; no AI item generation, no depth choice. Likert 1–5; scoring (reverse keys, 0–100 normalization, Stability/Plasticity derivation) in `backend/questionEngine.js`.
 - **RIASEC**: one fixed instrument — 12 static enjoyment-Likert activity items (`getStaticRiasecItems` in `backend/riasecItems.js`) served by `POST /api/riasec/start`; `/api/riasec/answer` records; scored per Holland type to 0–100 + top-3 `riasecCode` in `questionEngine.js`. `/api/riasec/skip` infers a low-confidence profile from Big Five + dream instead (`riasecInferred`).
 - **Job characteristics**: user ranks the 7 canonical parameters (`compensation, work_mode, job_security, career_growth, complexity, meaning_impact, social` — `JOB_CHAR_PARAMS`) and picks depth 5|10 → `/api/job-characteristics/rank` generates single-parameter tradeoff questions (AI, static bank fallback); each option encodes a 0–100 target; answers → `jobCharProfile` (unasked params default 50).
-- **CV**: the slide first asks "Where should we start from?" (`/api/cv/intent`, required in the UI before the paths unlock); then `/api/cv` accepts pasted `cvText` (JSON) or a multipart file (`.pdf`/`.docx`/`.txt`, 2 MB cap, `backend/cvExtract.js`) and AI-parses it to `{skills, domains, seniority}`; without a CV, 7 static career-journey questions via `/api/cv/journey`. Completing either advances to `tree`.
+- **CV**: the slide first asks "Where should we start from?" (`/api/cv/intent`, required in the UI before the paths unlock); then `/api/cv` accepts pasted `cvText` (JSON) or a multipart file (`.pdf`/`.docx`/`.pptx`/`.html`/`.txt`, 5 MB cap, `backend/cvExtract.js`) and AI-parses it to `{roles, skills, domains, seniority, keywords}`; without a CV, 7 static career-journey questions via `/api/cv/journey`. Completing either advances to `tree`. `.pptx` needs the optional MarkItDown CLI (`MARKITDOWN_BIN`); snapshots advertise the currently supported list as `cvUploadFormats`.
 
 ### Life Path Engine (Page 3 — output loop)
 
@@ -74,7 +74,8 @@ After `tree`, a `pathStage` progression: `output → detail`. At the `cv → tre
 - `backend/questionPool.js` — demographic bank, `JOB_CHAR_PARAMS` + static jobChar tradeoff bank, `CAREER_JOURNEY_QUESTIONS`
 - `backend/bigFiveItems.js` — the static Mini-IPIP-20 instrument (public domain)
 - `backend/riasecItems.js` — the static 12-item RIASEC instrument (interleaved by type)
-- `backend/cvExtract.js` — CV file → text (pdf-parse / mammoth / utf8), hard failures become 400s
+- `backend/cvExtract.js` — CV file → text: MarkItDown-first hybrid (pdf-parse / mammoth / tag-strip / utf8 fallbacks), hard failures become 400s
+- `backend/services/markitdown.js` — optional MarkItDown CLI wrapper (probe + spawn + cleanup); absent binary = silent fallback to Node parsers
 - `backend/aiEngine.js` — one generator per AI artifact, each with normalizer + deterministic fallback
 - `backend/prompts.js` — prompt builders; `buildProfileDigest` is the profile every prompt receives
 - `backend/directions.js` — field-family catalog (alphabetical on purpose): prompt hints, fallback `professionSeeds`, Schwartz prototype keys
