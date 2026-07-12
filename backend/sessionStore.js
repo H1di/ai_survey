@@ -19,13 +19,61 @@ const SERIALIZED_JOURNEY_QUESTIONS = CAREER_JOURNEY_QUESTIONS.map(
 
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+const SESSION_KEY_PREFIX = "session:";
 
 class SessionStore {
-  constructor({ ttlMs = DEFAULT_TTL_MS, sweepIntervalMs = DEFAULT_SWEEP_INTERVAL_MS } = {}) {
+  // `redis` (optional) enables durable persistence: the in-process Map stays
+  // the authoritative working set for the sync require()/get() interface, and
+  // every mutation is written through to Redis. On startup hydrate() reloads
+  // the Map so sessions survive a process restart (e.g. Render idle-sleep).
+  constructor({ ttlMs = DEFAULT_TTL_MS, sweepIntervalMs = DEFAULT_SWEEP_INTERVAL_MS, redis = null } = {}) {
     this.sessions = new Map();
     this.ttlMs = ttlMs;
     this.sweepIntervalMs = sweepIntervalMs;
     this.sweepTimer = null;
+    this.redis = redis;
+  }
+
+  // Write-through to the durable store (fire-and-forget). Each write is the
+  // whole session, so a dropped write self-heals on the next mutation; the only
+  // unrecoverable loss is a crash between a mutation and its write with no
+  // further mutation. No-op without a configured backend.
+  _persist(session) {
+    if (!this.redis) return;
+    const ttlSeconds = Math.max(1, Math.ceil(this.ttlMs / 1000));
+    Promise.resolve(
+      this.redis.set(SESSION_KEY_PREFIX + session.id, JSON.stringify(session), { ex: ttlSeconds })
+    ).catch((error) => console.error("[sessionStore persist]", error.message));
+  }
+
+  _deletePersisted(id) {
+    if (!this.redis) return;
+    Promise.resolve(this.redis.del(SESSION_KEY_PREFIX + id)).catch(() => {});
+  }
+
+  // Reload durable sessions into the Map at startup. Redis EX already dropped
+  // anything past its TTL, so SCAN only returns live sessions. Best-effort:
+  // a failing store degrades to in-memory rather than blocking boot.
+  async hydrate() {
+    if (!this.redis) return 0;
+    let cursor = "0";
+    let loaded = 0;
+    do {
+      const [next, keys] = await this.redis.scan(cursor, {
+        match: `${SESSION_KEY_PREFIX}*`,
+        count: 100,
+      });
+      cursor = String(next);
+      for (const key of keys) {
+        const raw = await this.redis.get(key);
+        const session = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (session && session.id) {
+          this.sessions.set(session.id, session);
+          loaded += 1;
+        }
+      }
+    } while (cursor !== "0");
+    return loaded;
   }
 
   evictExpired(now = Date.now()) {
@@ -33,6 +81,7 @@ class SessionStore {
     for (const [id, session] of this.sessions) {
       if (now - Date.parse(session.updatedAt) > this.ttlMs) {
         this.sessions.delete(id);
+        this._deletePersisted(id);
         evicted += 1;
       }
     }
@@ -93,6 +142,7 @@ class SessionStore {
     };
 
     this.sessions.set(id, session);
+    this._persist(session);
     return session;
   }
 
@@ -114,6 +164,7 @@ class SessionStore {
 
   touch(session) {
     session.updatedAt = new Date().toISOString();
+    this._persist(session);
   }
 
   setDemographicAnswer(session, questionId, value) {

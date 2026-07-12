@@ -33,6 +33,7 @@ const {
   summarizeAnswersForClient,
 } = require("./questionEngine");
 const { SessionStore } = require("./sessionStore");
+const { createRedisClient } = require("./redisClient");
 
 // Tests set their own env (and force fallback by blanking the key) — skip
 // .env entirely so it can't refill a real key underneath them.
@@ -44,8 +45,24 @@ if (process.env.NODE_ENV !== "test") {
   dotenv.config();
 }
 
+// Trust proxy: hosting platforms (Render) put us behind a reverse proxy, so
+// req.ip is the proxy's address unless we trust its forwarding header. Without
+// this, express-rate-limit keys every visitor under one IP — a single shared
+// bucket for everyone — and logs a ValidationError per request. Default: one
+// hop in production, untrusted in dev/test. Override with TRUST_PROXY (hops).
+function resolveTrustProxy() {
+  const raw = process.env.TRUST_PROXY;
+  if (raw !== undefined) {
+    const hops = Number(raw);
+    return Number.isFinite(hops) ? hops : false;
+  }
+  return process.env.NODE_ENV === "production" ? 1 : false;
+}
+
 const app = express();
-const store = new SessionStore();
+app.set("trust proxy", resolveTrustProxy());
+
+const store = new SessionStore({ redis: createRedisClient() });
 store.startSweep();
 
 const PORT = Number(process.env.PORT) || 3001;
@@ -104,6 +121,20 @@ function isValidEntryChoice(value) {
 
 const AI_ENABLED = Boolean(process.env.OPENAI_API_KEY);
 
+// Single-flight guard for the AI-heavy output routes. A double-submit or a
+// retry-after-timeout on the same session+operation would otherwise race past
+// the pre-await state checks and create a duplicate output or double the
+// OpenAI spend; a second concurrent call for the same key gets 409 instead.
+const inFlightKeys = new Set();
+function acquireLock(key) {
+  if (inFlightKeys.has(key)) return false;
+  inFlightKeys.add(key);
+  return true;
+}
+function releaseLock(key) {
+  inFlightKeys.delete(key);
+}
+
 function sendSessionSnapshot(res, session, { includeStatic = false } = {}) {
   const progress = buildProgress(session);
   const summary = summarizeAnswersForClient(session);
@@ -121,6 +152,7 @@ app.get("/api/health", (_req, res) => {
     ok: true,
     model: MODEL,
     hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY),
+    sessionStore: store.redis ? "redis" : "memory",
   });
 });
 
@@ -463,8 +495,12 @@ function validateRefineChanges(changes) {
 }
 
 app.post("/api/output/first", async (req, res) => {
+  const { sessionId } = req.body || {};
+  const lockKey = `${sessionId}:output`;
+  if (!acquireLock(lockKey)) {
+    return res.status(409).json({ error: "Another change to this path is still processing." });
+  }
   try {
-    const { sessionId } = req.body || {};
     const session = store.require(sessionId);
     requireCompletedAssessment(session);
 
@@ -480,12 +516,18 @@ app.post("/api/output/first", async (req, res) => {
     return res
       .status(error.statusCode || 500)
       .json({ error: error.statusCode ? error.message : "Failed to generate your first output." });
+  } finally {
+    releaseLock(lockKey);
   }
 });
 
 app.post("/api/output/refine", async (req, res) => {
+  const { sessionId, outputId, notSuitable, changes } = req.body || {};
+  const lockKey = `${sessionId}:output`;
+  if (!acquireLock(lockKey)) {
+    return res.status(409).json({ error: "Another change to this path is still processing." });
+  }
   try {
-    const { sessionId, outputId, notSuitable, changes } = req.body || {};
     const session = store.require(sessionId);
     requireCompletedAssessment(session);
 
@@ -532,12 +574,18 @@ app.post("/api/output/refine", async (req, res) => {
     return res
       .status(error.statusCode || 500)
       .json({ error: error.statusCode ? error.message : "Failed to regenerate the output." });
+  } finally {
+    releaseLock(lockKey);
   }
 });
 
 app.post("/api/output/accept", async (req, res) => {
+  const { sessionId, outputId } = req.body || {};
+  const lockKey = `${sessionId}:output`;
+  if (!acquireLock(lockKey)) {
+    return res.status(409).json({ error: "Another change to this path is still processing." });
+  }
   try {
-    const { sessionId, outputId } = req.body || {};
     const session = store.require(sessionId);
     requireCompletedAssessment(session);
 
@@ -558,12 +606,18 @@ app.post("/api/output/accept", async (req, res) => {
     return res
       .status(error.statusCode || 500)
       .json({ error: error.statusCode ? error.message : "Failed to build the advice blocks." });
+  } finally {
+    releaseLock(lockKey);
   }
 });
 
 app.post("/api/roadmap/generate", async (req, res) => {
+  const { sessionId, outputId } = req.body || {};
+  const lockKey = `${sessionId}:roadmap`;
+  if (!acquireLock(lockKey)) {
+    return res.status(409).json({ error: "The roadmap for this output is still building." });
+  }
   try {
-    const { sessionId, outputId } = req.body || {};
     const session = store.require(sessionId);
 
     if (!session.acceptedOutputId || session.acceptedOutputId !== outputId) {
@@ -582,6 +636,8 @@ app.post("/api/roadmap/generate", async (req, res) => {
     return res
       .status(error.statusCode || 500)
       .json({ error: error.statusCode ? error.message : "Failed to generate roadmap." });
+  } finally {
+    releaseLock(lockKey);
   }
 });
 
@@ -594,9 +650,19 @@ app.use((error, _req, res, next) => {
 });
 
 if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`Working Name API listening on http://localhost:${PORT}`);
-  });
+  // Restore durable sessions before accepting traffic; a failing store degrades
+  // to in-memory rather than blocking startup.
+  store
+    .hydrate()
+    .then((n) => {
+      if (n) console.log(`Restored ${n} session(s) from the durable store.`);
+    })
+    .catch((error) => console.error("[hydrate]", error.message))
+    .finally(() => {
+      app.listen(PORT, () => {
+        console.log(`Working Name API listening on http://localhost:${PORT}`);
+      });
+    });
 }
 
 module.exports = { app };

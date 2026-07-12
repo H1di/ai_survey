@@ -252,3 +252,70 @@ test("startSweep/stopSweep are idempotent and unref'd", () => {
   assert.equal(store.sweepTimer, null);
   store.stopSweep();
 });
+
+// Minimal Upstash-shaped fake: string values, EX ignored, one-shot SCAN.
+class FakeRedis {
+  constructor() {
+    this.store = new Map();
+  }
+  async set(key, value) {
+    this.store.set(key, value);
+    return "OK";
+  }
+  async get(key) {
+    return this.store.has(key) ? this.store.get(key) : null;
+  }
+  async del(key) {
+    return this.store.delete(key) ? 1 : 0;
+  }
+  async scan(_cursor, _opts) {
+    return ["0", [...this.store.keys()]];
+  }
+}
+
+test("with redis: createSession and touch write the session through", () => {
+  const redis = new FakeRedis();
+  const store = new SessionStore({ redis });
+  const s = makeSession(store);
+
+  // _persist is synchronous into the fake (no await point before store.set).
+  const raw = redis.store.get(`session:${s.id}`);
+  assert.equal(typeof raw, "string");
+  assert.equal(JSON.parse(raw).id, s.id);
+
+  store.advanceStep(s, "depth_choice"); // mutator → touch → persist
+  assert.equal(JSON.parse(redis.store.get(`session:${s.id}`)).step, "depth_choice");
+});
+
+test("with redis: hydrate reloads durable sessions into a fresh store's Map", async () => {
+  const redis = new FakeRedis();
+  const writer = new SessionStore({ redis });
+  const a = makeSession(writer);
+  const b = makeSession(writer);
+  writer.advanceStep(b, "depth_choice");
+
+  const reader = new SessionStore({ redis });
+  assert.equal(reader.get(a.id), null, "fresh store starts empty");
+  const loaded = await reader.hydrate();
+
+  assert.equal(loaded, 2);
+  assert.equal(reader.get(a.id).id, a.id);
+  assert.equal(reader.require(b.id).step, "depth_choice");
+});
+
+test("with redis: eviction removes the durable copy too", () => {
+  const redis = new FakeRedis();
+  const store = new SessionStore({ redis, ttlMs: 1000 });
+  const s = makeSession(store);
+  s.updatedAt = new Date(Date.now() - 5000).toISOString();
+
+  assert.equal(store.evictExpired(), 1);
+  assert.equal(redis.store.has(`session:${s.id}`), false);
+});
+
+test("without redis: persistence hooks are inert no-ops", async () => {
+  const store = new SessionStore();
+  const s = makeSession(store);
+  store.touch(s);
+  assert.equal(await store.hydrate(), 0);
+});

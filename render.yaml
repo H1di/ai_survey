@@ -6,8 +6,11 @@
 # destination в frontend/vercel.json на новое значение.
 
 services:
+  # Name must match the live service — its public URL is https://<name>.onrender.com
+  # (currently https://ai-survey-backend-3g62.onrender.com). Changing the name
+  # here would make a Blueprint sync create a SECOND service, not update this one.
   - type: web
-    name: ai-survey-backend
+    name: ai-survey-backend-3g62
     runtime: node
     plan: free
     region: oregon
@@ -19,6 +22,10 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Render fronts the app with one reverse-proxy hop; trust it so
+      # express-rate-limit keys on the real client IP, not the proxy's.
+      - key: TRUST_PROXY
+        value: "1"
       # Домен фронтенда на Vercel — должен совпадать с project name,
       # который используется при деплое фронта (см. DEPLOY.md).
       - key: CORS_ORIGIN
@@ -30,6 +37,13 @@ services:
         sync: false
       - key: OPENAI_MODEL
         value: gpt-4.1-mini
+      # Durable sessions via Upstash Redis (optional). Set both in the Render
+      # Dashboard; without them the app keeps sessions in memory and loses them
+      # on restart / idle-sleep. Secrets, so never committed.
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
       - key: RATE_LIMIT_WINDOW_MS
         value: "900000"
       - key: RATE_LIMIT_GLOBAL_MAX

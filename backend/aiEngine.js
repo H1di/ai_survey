@@ -510,19 +510,6 @@ function normalizeSchwartzValuesPayload(payload) {
   return { scores, rationale };
 }
 
-function normalizeRefinePayload(payload, rejectedIds) {
-  const directionId = payload?.directionId;
-  if (!DIRECTION_IDS.includes(directionId) || rejectedIds.includes(directionId)) {
-    throw new Error(`Invalid refined directionId: ${directionId}`);
-  }
-  const dir = getDirection(directionId);
-  return {
-    id: dir.id,
-    label: dir.label,
-    reason: cleanText(payload?.reason, "This direction better matches what you described."),
-  };
-}
-
 async function runJsonCompletion(client, { model, system, user, temperature = 0.7 }) {
   const completion = await client.chat.completions.create({
     model,
