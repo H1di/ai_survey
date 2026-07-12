@@ -286,9 +286,20 @@ test("cv upload rejects oversized files with a 400", async () => {
   const { sessionId } = await walkToCv();
   const form = new FormData();
   form.append("sessionId", sessionId);
-  form.append("file", new Blob([Buffer.alloc(3 * 1024 * 1024, "a")], { type: "text/plain" }), "cv.txt");
+  form.append("file", new Blob([Buffer.alloc(6 * 1024 * 1024, "a")], { type: "text/plain" }), "cv.txt");
   const res = await fetch(`${base}/api/cv`, { method: "POST", body: form });
   assert.equal(res.status, 400);
+});
+
+test("snapshots advertise cv upload formats (no pptx without markitdown)", async () => {
+  const { data } = await post("/api/session/start", {
+    entryChoice: "find",
+    dreamAnswer: "x",
+    cvIntent: "new",
+  });
+  assert.ok(Array.isArray(data.cvUploadFormats));
+  assert.ok(data.cvUploadFormats.includes(".pdf"));
+  assert.ok(!data.cvUploadFormats.includes(".pptx"));
 });
 
 test("full output loop: first -> refine param -> notSuitable -> accept -> detail -> roadmap", async () => {

@@ -3,7 +3,7 @@ const dotenv = require("dotenv");
 const express = require("express");
 const multer = require("multer");
 const rateLimit = require("express-rate-limit");
-const { extractCvText } = require("./cvExtract");
+const { extractCvText, getCvUploadExtensions } = require("./cvExtract");
 const { createAiEngine } = require("./aiEngine");
 const { getStaticRiasecItems } = require("./riasecItems");
 const {
@@ -116,6 +116,13 @@ for (const path of [
 
 const AI_ENABLED = Boolean(process.env.OPENAI_API_KEY);
 
+// Advertised CV upload formats. Resolved once at boot: the markitdown probe
+// is async but settles in milliseconds, long before the first session starts.
+let cvUploadFormats = [".pdf", ".docx", ".txt", ".html", ".htm"];
+getCvUploadExtensions().then((list) => {
+  cvUploadFormats = list;
+});
+
 // Single-flight guard for the AI-heavy output routes. A double-submit or a
 // retry-after-timeout on the same session+operation would otherwise race past
 // the pre-await state checks and create a duplicate output or double the
@@ -139,6 +146,8 @@ function sendSessionSnapshot(res, session, { includeStatic = false } = {}) {
     // Lets the UI say honestly when suggestions come from fixed fallback
     // rules rather than AI (no key configured).
     aiEnabled: AI_ENABLED,
+    // What the file input should accept — depends on markitdown availability.
+    cvUploadFormats,
   });
 }
 
@@ -342,7 +351,7 @@ app.post("/api/job-characteristics/answer", (req, res) => {
 
 const cvUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 2 * 1024 * 1024, files: 1 },
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
 });
 
 // The "where should we start from" choice, made on the CV slide. Re-selection
@@ -377,7 +386,7 @@ app.post("/api/cv", cvUpload.single("file"), async (req, res) => {
     }
     const cvText = rawText.trim().slice(0, 6000);
     if (!cvText) {
-      return res.status(400).json({ error: "Provide cvText or upload a .pdf/.docx/.txt file." });
+      return res.status(400).json({ error: "Provide cvText or upload a supported file (.pdf/.docx/.pptx/.html/.txt)." });
     }
     const analysis = await aiEngine.analyzeCV({ cvText });
     store.setCvAnalysis(session, cvText, analysis);
