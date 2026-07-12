@@ -1,77 +1,100 @@
-# [working name] - AI Life Path Engine (MVP)
+# Life Path Explorer
 
-Premium minimal web app for exploring realistic career and life directions through an adaptive AI branching system.
+Two-part web app. **Part one** is a psychological assessment
+(demographics → Big Five/OCEAN → RIASEC interests → ranked 7-parameter
+job-characteristic targets → CV or career-journey signal). **Part two** is the
+**Life Path Engine**: the assessment profile feeds AI prompts that produce an
+Oriented Field + a concrete job (the "1st Output"), explained through the 7
+parameters and scored on Schwartz Basic Human Values. The user iterates it
+through a Yes/No loop; accepting an output reveals four advice blocks plus a
+step-by-step roadmap — all rendered as an interactive React Flow graph.
 
-## Product Flow
+Every AI call has a deterministic fallback, so the app works with **no API key**
+(demo mode). Nothing in the flow depends on OpenAI being reachable.
 
-1. **Page 1 - Entry**
-- Centered question: `Why are you here?`
-- Two intents: `Change my career` or `Find my career`
-- Dream prompt: `If you knew that you would definitely succeed, what would you do?`
+For the full technical spec (module map, JSON contracts, data-flow diagram,
+engineering assessment) see [`ARCHITECTURE.md`](./ARCHITECTURE.md); for current
+status and backlog see [`PROJECT_STATUS.md`](./PROJECT_STATUS.md).
 
-2. **Page 2 - Deep Analysis**
-- Adaptive question engine (pool of 38 questions)
-- Core categories: demographic, career reality, values, psychology, lifestyle
-- Optional premium depth modules: motivation profile, personality style, values conflict, cognitive style, etc.
-- Questions adapt to previous answers and constraints
+## Product flow
 
-3. **Page 3 - Life Path Engine** (free for every session)
-- React Flow graph with centered root node: `Me`
-- **Direction finding**: 2-3 sharp AI-generated questions converge on one broad professional direction (e.g. Programming, Healthcare, Design), rendered as a confirmed Direction node
-- **Narrowing**: 1-2 follow-up questions about work style and environment, then exactly 3 realistic professions fork off the Direction node
-- **Confirm**: clicking a profession asks "Would you like to see how to reach this profession?"
-- **Roadmap**: on confirmation, a personalized ordered step-by-step roadmap (foundations → first projects → entry role → credential → established role) renders as a vertical chain under the chosen profession; click any step for details
+1. **Entry** — why you're here (`Change my career` / `Find my career`), an
+   open-ended dream prompt, and whether to build on existing skills or start
+   fresh.
+2. **Assessment** — a server-driven `step` machine
+   (`demographics → depth_choice → big_five → riasec → job_characteristics → cv → tree`):
+   - **Demographics** — sex, age, country, city.
+   - **Depth** — short (20 personality items) or deep (50).
+   - **Big Five** — Likert 1–5 items, AI-generated per session (validated) or a
+     public-domain IPIP fallback; scored to OCEAN 0–100 + Stability/Plasticity.
+   - **RIASEC interests** — 12/18 enjoyment-rated activities scored to a Holland
+     code, or skip to infer interests from personality.
+   - **Job characteristics** — rank the 7 parameters (compensation, work mode,
+     job security, career growth, complexity, meaning/impact, social), then
+     answer 5 or 10 trade-off questions that set 0–100 targets per parameter.
+   - **Experience** — paste/upload a CV (`.pdf/.docx/.txt`, max 2 MB) or answer
+     7 career-journey questions.
+3. **Life Path Engine** — an Oriented Field + concrete job, scored on Schwartz
+   values with a fit against your inferred value vector. Say **Yes** to accept
+   (unlocks four advice blocks + a roadmap) or **No** to tune specific
+   parameters or regenerate from a genuinely different field family. Everything
+   renders as a graph you can explore node by node.
 
-## Tech Stack
+## Tech stack
 
-- Frontend: React + Vite + React Flow
-- Backend: Node.js + Express
-- AI: OpenAI API (`chat.completions` JSON mode)
-- State: in-memory backend sessions (MVP)
+- **Frontend** — React 19 + Vite + `@xyflow/react` (React Flow), `recharts`,
+  `framer-motion`. Single page, no router; the server snapshot is the single
+  source of truth.
+- **Backend** — Node.js + Express 5 (CommonJS). In-memory sessions with a TTL
+  sweep (see Limitations).
+- **AI** — OpenAI `gpt-4.1-mini`, `chat.completions` JSON mode, with a
+  deterministic fallback per generator.
 
-## Project Structure
+## Project structure
 
-- `frontend/` React app and UI
-- `backend/` Express API, adaptive question engine, AI prompt engine
+- `frontend/` — React app: `src/App.jsx` (stage machine + all state),
+  `src/api.js` (fetch wrappers), `src/lifePath.js` (graph builder),
+  `src/components/GraphView/` (React Flow wrapper),
+  `src/components/ProfileCharts.jsx` + `SchwartzMap.jsx` (profile panel).
+- `backend/` — Express API, assessment engine, AI prompt engine.
 
 Key backend modules:
-- `backend/server.js` API routes
-- `backend/questionPool.js` question bank + themes
-- `backend/questionEngine.js` adaptive selection + validation
-- `backend/aiEngine.js` direction questions, profession narrowing, roadmap generation
-- `backend/prompts.js` AI prompt templates
-- `backend/directions.js` broad-direction catalog + deterministic direction tally
-- `backend/sessionStore.js` in-memory session, direction, profession, and roadmap state
+- `server.js` — routes, rate limiting, CORS allowlist, step guards
+- `sessionStore.js` — in-memory sessions + snapshot serializer
+- `questionEngine.js` — answer validation + all scoring
+- `questionPool.js` — demographics, the 7 job-char params, journey questions
+- `bigFiveItems.js` / `riasecItems.js` — public-domain fallback item pools
+- `cvExtract.js` — CV file → text (pdf / docx / txt)
+- `aiEngine.js` — one generator per AI artifact, each with a fallback
+- `prompts.js` — prompt builders + the shared profile digest
+- `directions.js` — field-family catalog (prompt grounding + fallback seeds)
+- `riasec.js` — Holland weights + direction ranking
+- `schwartzValues.js` — Schwartz derivations, values fit, direction prototypes
 
-## Run Locally
+## Run locally
 
-1. Install dependencies:
+From the repo root:
 ```bash
-cd backend && npm install
-cd ../frontend && npm install
+npm run install:all   # installs backend/ and frontend/
+npm run dev           # backend on :3001, frontend on :5173 (concurrently)
 ```
 
-2. Configure env:
+Configure the backend env (optional — omit the key for demo mode):
 ```bash
-cp backend/.env.example backend/.env
-```
-Then set `OPENAI_API_KEY`.
-
-3. Start backend:
-```bash
-cd backend
-npm run dev
+cp backend/.env.example backend/.env   # then set OPENAI_API_KEY
 ```
 
-4. Start frontend (new terminal):
-```bash
-cd frontend
-npm run dev
-```
-
-5. Open:
 - Frontend: `http://localhost:5173`
 - Backend health: `http://localhost:3001/api/health`
+
+The Vite dev server proxies `/api/*` to `http://localhost:3001`.
+
+## Tests
+
+```bash
+cd backend && npm test              # node:test + supertest (112 tests)
+cd frontend && npm test -- --run    # vitest over src/lifePath.js (13 tests)
+```
 
 ## API Routes
 
@@ -111,9 +134,12 @@ npm run dev
 - `POST /api/roadmap/generate`
   - body: `{ "sessionId": "...", "outputId": "..." }` — ordered roadmap for the accepted output
 
-## Notes
+## Limitations
 
+- **Sessions are in-memory.** A backend restart, deploy, or Render free-tier
+  idle-sleep drops all active sessions; the client keeps its `sessionId` in
+  `localStorage` and resumes only while the server process is alive. Persistence
+  is on the backlog — see `PROJECT_STATUS.md`.
 - Every feature is free — there is no payment flow.
-- If OpenAI fails or no API key is set, deterministic fallback generators cover direction questions, narrowing questions, professions, and roadmaps, so the flow never breaks.
-
-:)
+- This is an exploratory self-reflection tool, not professional career
+  counseling or a psychological assessment.
