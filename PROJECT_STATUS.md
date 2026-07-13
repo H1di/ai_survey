@@ -43,7 +43,7 @@
 - Дисклеймеры («не проф. консультация», «preliminary profile», «low confidence») на entry и в профиле.
 
 ### Тесты и CI
-- Backend: **112 тестов** (`node:test` + supertest) — все проходят (проверено 2026-07-13).
+- Backend: **128 тестов** (`node:test` + supertest, включая markitdown-сьюты) — все проходят (проверено 2026-07-13).
 - Frontend: **19 тестов** (Vitest, `lifePath.js`) — все проходят.
 - GitHub Actions CI: backend-тесты + frontend-тесты + build на push/PR в `main`.
 
@@ -116,8 +116,7 @@
 
 ## В работе
 
-- **Ветка `feat/career-discovery-journey`** — батч 2026-07-13 закоммичен поштучно (9 задач), PR ещё не открыт.
-- **PR #6 (`feat/markitdown-upload`)** — открыт отдельно; при мерже обеих веток возможны конфликты в `prompts.js`/`aiEngine.js`.
+- **PR #6 (`feat/markitdown-upload`)** — ребейзнут поверх main (career-discovery PR #7 + entry rework PR #8 уже влиты); max_tokens-капы распространены на новые вызовы (`generatePersonaSummary` 400, `generateWhyThisFits` 1000), markitdown-тесты адаптированы к контракту `{whyHereAnswer, dreamAnswer}` + `/api/cv/intent`. Ждёт ревью/мержа.
 
 ---
 
