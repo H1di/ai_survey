@@ -38,17 +38,16 @@ async function post(path, body) {
 // for the annotated version).
 async function walkToCv() {
   let { data } = await post("/api/session/start", {
-    entryChoice: "find",
+    whyHereAnswer: "figure out what fits me",
     dreamAnswer: "build useful things",
-    cvIntent: "new",
   });
   const sessionId = data.sessionId;
+  const bigFiveItems = data.bigFiveItems;
   const demoValues = { sex: "female", age: 30, country: "Testland", city: "Testville" };
   for (const q of data.demographicQuestions) {
     ({ data } = await post("/api/session/demographics", { sessionId, questionId: q.id, value: demoValues[q.id] }));
   }
-  ({ data } = await post("/api/session/big-five-depth", { sessionId, depth: "short" }));
-  for (const item of data.bigFiveItems) {
+  for (const item of bigFiveItems) {
     ({ data } = await post("/api/big-five/answer", { sessionId, itemId: item.id, value: 3 }));
   }
   ({ data } = await post("/api/riasec/start", { sessionId }));
@@ -64,14 +63,14 @@ async function walkToCv() {
     ({ data } = await post("/api/job-characteristics/answer", { sessionId, itemId: item.id, value: item.options[0].value }));
   }
   assert.equal(data.step, "cv");
+  await post("/api/cv/intent", { sessionId, cvIntent: "use_skills" });
   return { sessionId };
 }
 
 test("snapshots advertise .pptx when markitdown is available", async () => {
   const { data } = await post("/api/session/start", {
-    entryChoice: "find",
+    whyHereAnswer: "x",
     dreamAnswer: "x",
-    cvIntent: "new",
   });
   assert.ok(data.cvUploadFormats.includes(".pptx"), `got ${JSON.stringify(data.cvUploadFormats)}`);
 });

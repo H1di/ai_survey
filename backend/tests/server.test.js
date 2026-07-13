@@ -293,9 +293,8 @@ test("cv upload rejects oversized files with a 400", async () => {
 
 test("snapshots advertise cv upload formats (no pptx without markitdown)", async () => {
   const { data } = await post("/api/session/start", {
-    entryChoice: "find",
+    whyHereAnswer: "x",
     dreamAnswer: "x",
-    cvIntent: "new",
   });
   assert.ok(Array.isArray(data.cvUploadFormats));
   assert.ok(data.cvUploadFormats.includes(".pdf"));
