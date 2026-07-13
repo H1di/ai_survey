@@ -283,8 +283,8 @@ test("with redis: createSession and touch write the session through", () => {
   assert.equal(typeof raw, "string");
   assert.equal(JSON.parse(raw).id, s.id);
 
-  store.advanceStep(s, "depth_choice"); // mutator → touch → persist
-  assert.equal(JSON.parse(redis.store.get(`session:${s.id}`)).step, "depth_choice");
+  store.advanceStep(s, "big_five"); // mutator → touch → persist
+  assert.equal(JSON.parse(redis.store.get(`session:${s.id}`)).step, "big_five");
 });
 
 test("with redis: hydrate reloads durable sessions into a fresh store's Map", async () => {
@@ -292,7 +292,7 @@ test("with redis: hydrate reloads durable sessions into a fresh store's Map", as
   const writer = new SessionStore({ redis });
   const a = makeSession(writer);
   const b = makeSession(writer);
-  writer.advanceStep(b, "depth_choice");
+  writer.advanceStep(b, "big_five");
 
   const reader = new SessionStore({ redis });
   assert.equal(reader.get(a.id), null, "fresh store starts empty");
@@ -300,7 +300,7 @@ test("with redis: hydrate reloads durable sessions into a fresh store's Map", as
 
   assert.equal(loaded, 2);
   assert.equal(reader.get(a.id).id, a.id);
-  assert.equal(reader.require(b.id).step, "depth_choice");
+  assert.equal(reader.require(b.id).step, "big_five");
 });
 
 test("with redis: eviction removes the durable copy too", () => {

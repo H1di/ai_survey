@@ -4,18 +4,18 @@
 > обновляется (вместе с `ARCHITECTURE.md`, если меняется структура). Новые
 > файлы для логов не создаются — вся история статуса ведётся здесь.
 
-**Дата последнего обновления:** 2026-07-11 (вечер — партия приоритетных фиксов)
+**Дата последнего обновления:** 2026-07-13 (career-discovery journey)
 
 ---
 
 ## Готово
 
 ### Бэкенд — опросник (Pages 1–2)
-- **Session state machine** — `entry → demographics → depth_choice → big_five → riasec → job_characteristics → cv → tree` (`backend/server.js`, guard на каждом роуте).
+- **Session state machine** — `entry → demographics → big_five → riasec → job_characteristics → cv → tree` (`backend/server.js`, guard на каждом роуте). Во фронтенде поверх шагов лежит display-only рейл «Career Discovery Journey» (интро-карта + полоса в шапке).
 - **Entry** — `entryChoice` (change|find) + `cvIntent` (new|use_skills) + `dreamAnswer` (обрезка до 500 симв.) → `POST /api/session/start`.
 - **Демография** — 4 статичных вопроса (sex, age 13–99, country, city) с whitelist-валидацией.
-- **Big Five** — выбор глубины 20/50; пункты генерируются AI per-session (жёсткий психометрический валидатор: точное число пунктов на черту, доля reverse 0.3–0.7, дедупликация) с фоллбеком на выверенные public-domain IPIP-наборы (`bigFiveItems.js`); скоринг reverse + нормировка 0–100 + Big Two (Stability/Plasticity).
-- **RIASEC** — 12/18 activity-пунктов (AI / статичный пул), скоринг 0–100 по 6 типам + топ-3 код; skip-путь с инференсом из Big Five + dream (`riasecInferred`, low-confidence).
+- **Big Five** — единственный фиксированный инструмент: статичный public-domain Mini-IPIP-20 (`bigFiveItems.js`), сидируется в сессию при создании; без AI-генерации и выбора глубины. Скоринг reverse + нормировка 0–100 + Big Two (Stability/Plasticity).
+- **RIASEC** — фиксированные 12 статичных activity-пунктов (`getStaticRiasecItems`), скоринг 0–100 по 6 типам + топ-3 код; skip-путь с инференсом из Big Five + dream (`riasecInferred`, low-confidence).
 - **Job characteristics** — ранжирование 7 канонических параметров + 5/10 tradeoff-вопросов (AI / статичный банк); профиль 0–100, неспрошенные параметры = 50.
 - **CV** — вставка текста или загрузка `.pdf/.docx/.txt` (2 МБ, `cvExtract.js`, ошибки чтения → 400) с AI-парсингом в `{skills, domains, seniority}`; альтернатива — 7 career-journey вопросов.
 
@@ -23,7 +23,8 @@
 - **Schwartz-слой** (`schwartzValues.js`) — чистый модуль: 10 ценностей, higher-order полюса, оси плоскости, `valuesFit` (0.6·axis + 0.4·centered cosine), прототипы по 15 направлениям, детерминированные фоллбеки. AI отдаёт только 10 сырых баллов — все агрегаты считает бэкенд.
 - **Инференс ценностей пользователя** на переходе `cv → tree` (AI или документированная эвристика), всегда `confidence: "low"`.
 - **Output loop** — `output/first` (идемпотентный; grounding через `rankDirections` по RIASEC), `output/refine` (`changes` XOR `notSuitable`, история в `refinementHistory`, цепочка parent-linked outputs), `output/accept` (accept-once + 4 блока советов), `roadmap/generate` (только для принятого, кэш в `session.roadmaps`).
-- **Каждый output** Schwartz-скорится и получает `higherOrder/axes/dominantPole/topValues/valuesFit` server-side.
+- **Каждый output** Schwartz-скорится и получает `higherOrder/axes/dominantPole/topValues/valuesFit` server-side, плюс структурированный `whyThisFits` отдельным вторым AI-вызовом (2 personality / 1 interests / 1 values / 2–3 current skills / 3–4 skills to develop, каждый буллет трассируется к конкретному баллу/рангу/ответу).
+- **Persona summary** — на переходе `cv → tree` генерируется `session.personaSummary` (3–5 предложений во втором лице из Big Five; keyless-фоллбек детерминированный).
 
 ### Надёжность и безопасность
 - **Keyless-режим**: каждый из 11 AI-генераторов имеет детерминированный фоллбек; нормализаторы бросают на структурно неверных payload'ах → вызов уходит в фоллбек. UI честно показывает «Demo mode».
@@ -41,14 +42,43 @@
 - Дисклеймеры («не проф. консультация», «preliminary profile», «low confidence») на entry и в профиле.
 
 ### Тесты и CI
-- Backend: **112 тестов** (`node:test` + supertest) — все проходят (проверено 2026-07-11).
-- Frontend: **13 тестов** (Vitest, `lifePath.js`) — все проходят.
+- Backend: **111 тестов** (`node:test` + supertest) — все проходят (проверено 2026-07-13).
+- Frontend: **19 тестов** (Vitest, `lifePath.js`) — все проходят.
 - GitHub Actions CI: backend-тесты + frontend-тесты + build на push/PR в `main`.
 
 ### Деплой (production)
 - Backend → Render free tier: `https://ai-survey-backend-3g62.onrender.com` (blueprint `render.yaml`).
 - Frontend → Vercel: `https://ai-survey-frontend-bay.vercel.app`; `frontend/vercel.json` проксирует `/api/*` на Render — фронтенд-код ходит на относительные пути.
 - Автодеплой обоих сервисов на push в `main`. Инструкция — `DEPLOY.md`.
+
+---
+
+## Сделано 2026-07-13 (career-discovery journey, ветка `feat/career-discovery-journey`)
+
+Адаптация внешней спеки `career-discovery-prompt (v2)` к v2-движку
+(спека: `docs/superpowers/specs/2026-07-13-career-discovery-journey-design.md`,
+план: `docs/superpowers/plans/2026-07-13-career-discovery-journey.md`):
+
+- **Фиксированная психометрика** — удалён шаг `depth_choice` и роут
+  `/api/session/big-five-depth`; Big Five всегда статичный Mini-IPIP-20
+  (сидируется при создании сессии), RIASEC всегда статичные 12 айтемов;
+  удалены `generateBigFiveItems`/`generateRiasecItems`/их нормализаторы и
+  флаг `AI_BIG_FIVE_ITEMS`. jobChar (5|10 + AI-tradeoffs) не тронут.
+- **Рейл «Career Discovery Journey»** — display-only: интро-карта после entry
+  + сжатая полоса в шапке каждого шага (`JOURNEY_RAIL`/`railIndexForStep` в
+  `lifePath.js`); порядок исполнения не менялся.
+- **Persona summary** — `generatePersonaSummary` (+фоллбек) на переходе
+  `cv → tree`, `session.personaSummary` в снапшоте, блок «Who you are» в
+  панели профиля.
+- **Панель профиля** — детерминированные однострочные выводы по осям Big Five
+  (`bigFiveTakeaways`); Neuroticism отображается как «Emotional Steadiness»
+  (100−N только в отображении, хранимый балл не тронут — и в радаре тоже).
+- **Структурированный whyThisFits** — отдельный второй AI-вызов
+  (`generateWhyThisFits` + нормализатор с жёсткими счётчиками + фоллбек) в
+  `output/first|refine`; схема основного output-вызова не менялась, UI рендерит
+  блок вместо legacy `whyFit`; мёртвый `path.whyItFits` удалён из
+  `NodeComponent.jsx`.
+- Регрессия: **backend 111/111**, frontend 19/19, `npm run build` проходит.
 
 ---
 
@@ -67,8 +97,8 @@
 
 ## В работе
 
-- **Незакоммиченные изменения** — эта партия фиксов + `frontend/.gitignore` (+`.vercel`, +`.env*`) лежат в рабочем дереве несмонтированными. Коммит по запросу пользователя.
-- **Локальный `main` устарел** — стоит на `190e839` (до мержа PR #3–#5). Актуальна `deploy-config` (== origin/main); при желании синхронизировать: `git checkout main && git pull`.
+- **Ветка `feat/career-discovery-journey`** — батч 2026-07-13 закоммичен поштучно (9 задач), PR ещё не открыт.
+- **PR #6 (`feat/markitdown-upload`)** — открыт отдельно; при мерже обеих веток возможны конфликты в `prompts.js`/`aiEngine.js`.
 
 ---
 
@@ -84,7 +114,7 @@
 | E2E-тест полного пути (Playwright) | Самая хрупкая часть — интеграция App.jsx ↔ снапшот ↔ граф — покрыта только 13 unit-тестами `lifePath.js`; регрессии в 1636-строчном App.jsx ловятся вручную. |
 | Логирование/мониторинг + метрика fallback-доли | Сейчас только `console.error` в AI-фоллбеках. Нет request-логов, нет алёртов, нет метрики «сколько артефактов ушло в fallback» (её отсутствие = качество прода неизмеримо). На Render логи эфемерны. |
 | Контроль расходов OpenAI | Нет учёта токенов/стоимости per-session; полный проход = ~10 AI-вызовов. При росте трафика нужен хотя бы счётчик и дневной лимит. |
-| Структурный retry на AI-вызовы | `maxRetries: 1` покрывает сетевые ошибки, но структурно кривой JSON сразу роняет вызов в фоллбек. Один повтор с сообщением об ошибке валидации поднял бы долю настоящих AI-ответов (актуально для Big Five items). |
+| Структурный retry на AI-вызовы | `maxRetries: 1` покрывает сетевые ошибки, но структурно кривой JSON сразу роняет вызов в фоллбек. Один повтор с сообщением об ошибке валидации поднял бы долю настоящих AI-ответов (актуально для whyThisFits с его жёсткими счётчиками буллетов). |
 | Локализация UI | Интерфейс только на английском; если целевая аудитория русскоязычная — нужен i18n-слой. |
 
 ### Низкий приоритет
@@ -100,7 +130,7 @@
 ## Известные баги / технический долг
 
 1. **Один процесс.** Даже с Redis-персистентностью Map / single-flight lock / rate-limit счётчики привязаны к процессу — горизонтальное масштабирование требует sticky sessions или общего стора для локов и лимитов. Для одного инстанса не проблема.
-2. **AI-генерируемые Big Five пункты психометрически не валидированы** — структурный валидатор строгий, но конструктная валидность и межсессионная сравнимость отсутствуют по определению. Осознанный компромисс; `AI_BIG_FIVE_ITEMS=false` принудительно включает IPIP.
+2. ~~AI-генерируемые Big Five пункты психометрически не валидированы~~ — снято 2026-07-13: инструмент теперь всегда статичный Mini-IPIP-20 (и RIASEC всегда статичные 12), AI-генерация айтемов удалена.
 3. **`directionId` на output'е приблизителен** — `refineOutput` наследует id предыдущего output'а, `output/first` присваивает `ranked[0]` независимо от того, куда реально ушла модель. Влияет на Schwartz-фоллбек и на исключение семейств в notSuitable.
 4. **`jobCharItems` сериализуются в каждом снапшоте** (не входят в static-часть) — лишние ~килобайты на каждый ответ. Мелочь.
 5. **Prompt-injection канал** — `dreamAnswer`, `reason`, journey-ответы попадают в промпты как есть. Риск ограничен (JSON mode + строгий нормализатор, у сессии нет привилегий), но стоит упомянуть инъекцию в system-промпте.

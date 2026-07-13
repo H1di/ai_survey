@@ -22,23 +22,26 @@ status and backlog see [`PROJECT_STATUS.md`](./PROJECT_STATUS.md).
    open-ended dream prompt, and whether to build on existing skills or start
    fresh.
 2. **Assessment** — a server-driven `step` machine
-   (`demographics → depth_choice → big_five → riasec → job_characteristics → cv → tree`):
+   (`demographics → big_five → riasec → job_characteristics → cv → tree`),
+   presented as one "Career Discovery Journey" rail:
    - **Demographics** — sex, age, country, city.
-   - **Depth** — short (20 personality items) or deep (50).
-   - **Big Five** — Likert 1–5 items, AI-generated per session (validated) or a
-     public-domain IPIP fallback; scored to OCEAN 0–100 + Stability/Plasticity.
-   - **RIASEC interests** — 12/18 enjoyment-rated activities scored to a Holland
-     code, or skip to infer interests from personality.
+   - **Big Five** — the fixed public-domain Mini-IPIP-20, Likert 1–5; scored to
+     OCEAN 0–100 + Stability/Plasticity.
+   - **RIASEC interests** — 12 fixed enjoyment-rated activities scored to a
+     Holland code, or skip to infer interests from personality.
    - **Job characteristics** — rank the 7 parameters (compensation, work mode,
      job security, career growth, complexity, meaning/impact, social), then
      answer 5 or 10 trade-off questions that set 0–100 targets per parameter.
    - **Experience** — paste/upload a CV (`.pdf/.docx/.txt`, max 2 MB) or answer
      7 career-journey questions.
 3. **Life Path Engine** — an Oriented Field + concrete job, scored on Schwartz
-   values with a fit against your inferred value vector. Say **Yes** to accept
-   (unlocks four advice blocks + a roadmap) or **No** to tune specific
-   parameters or regenerate from a genuinely different field family. Everything
-   renders as a graph you can explore node by node.
+   values with a fit against your inferred value vector, plus a structured
+   "Why this fits" block that traces every bullet to your scores, ranks, and
+   answers. Say **Yes** to accept (unlocks four advice blocks + a roadmap) or
+   **No** to tune specific parameters or regenerate from a genuinely different
+   field family. Everything renders as a graph you can explore node by node,
+   with a profile panel that includes per-axis takeaways and a "Who you are"
+   summary.
 
 ## Tech stack
 
@@ -104,12 +107,10 @@ cd frontend && npm test -- --run    # vitest over src/lifePath.js (13 tests)
 - `GET /api/session/:sessionId` — full session snapshot (used to resume after reload)
 - `POST /api/session/demographics`
   - body: `{ "sessionId": "...", "questionId": "sex|age|country|city", "value": ... }`
-- `POST /api/session/big-five-depth`
-  - body: `{ "sessionId": "...", "depth": "short|deep" }` — 20 or 50 items
 - `POST /api/big-five/answer`
-  - body: `{ "sessionId": "...", "itemId": "...", "value": 1-5 }`
+  - body: `{ "sessionId": "...", "itemId": "...", "value": 1-5 }` — the 20 static items arrive in the start snapshot
 - `POST /api/riasec/start`
-  - body: `{ "sessionId": "..." }` — generates the RIASEC activity items (12 short / 18 deep)
+  - body: `{ "sessionId": "..." }` — serves the 12 static RIASEC activity items
 - `POST /api/riasec/answer`
   - body: `{ "sessionId": "...", "itemId": "...", "value": 1-5 }`
 - `POST /api/riasec/skip`
