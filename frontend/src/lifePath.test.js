@@ -8,7 +8,26 @@ import {
   ADVICE_BLOCKS,
   JOURNEY_RAIL,
   railIndexForStep,
+  bigFiveTakeaways,
 } from "./lifePath";
+
+describe("bigFiveTakeaways", () => {
+  it("returns five axes with Neuroticism shown as inverted Emotional Steadiness", () => {
+    const rows = bigFiveTakeaways({ O: 80, C: 30, E: 50, A: 65, N: 20 });
+    expect(rows).toHaveLength(5);
+    const n = rows.find((r) => r.key === "N");
+    expect(n.label).toBe("Emotional Steadiness");
+    expect(n.value).toBe(80);
+    expect(n.line).toMatch(/level/);
+    expect(rows.find((r) => r.key === "O").line).toMatch(/New ideas/);
+    expect(rows.find((r) => r.key === "C").line).toMatch(/bursts/);
+    expect(rows.find((r) => r.key === "E").line).toMatch(/switch/);
+  });
+
+  it("returns an empty list without scores", () => {
+    expect(bigFiveTakeaways(null)).toEqual([]);
+  });
+});
 
 describe("journey rail", () => {
   it("covers the five survey steps in execution order", () => {

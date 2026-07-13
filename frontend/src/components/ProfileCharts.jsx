@@ -12,21 +12,23 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import SchwartzMap from "./SchwartzMap";
+import { bigFiveTakeaways } from "../lifePath";
 import "./ProfileCharts.css";
 
 const ACCENT = "#863bff";
 const ACCENT_SOFT = "rgba(134, 59, 255, 0.25)";
 const MUTED = "#666666";
 
-// Axis keys mirror the O/C/E/A/N naming the backend sends to the AI, and the
-// trait names AI texts (whyFit, refine reasons) use — so a mentioned trait can
-// be matched to its axis and highlighted via `highlightKeys` later.
+// Axis keys mirror the O/C/E/A/N naming the backend sends to the AI, so a
+// mentioned trait can be matched to its axis and highlighted via
+// `highlightKeys` later. N renders inverted as Emotional Steadiness (100 - N);
+// the stored score keeps raw N everywhere.
 const BIG_FIVE_AXES = [
   { key: "O", label: "Openness" },
   { key: "C", label: "Conscientiousness" },
   { key: "E", label: "Extraversion" },
   { key: "A", label: "Agreeableness" },
-  { key: "N", label: "Neuroticism" },
+  { key: "N", label: "Emotional Steadiness" },
 ];
 
 function RadarTick({ payload, x, y, textAnchor, highlighted }) {
@@ -50,7 +52,7 @@ export function PersonalityRadarChart({ scores, highlightKeys = [] }) {
   const data = BIG_FIVE_AXES.map((axis) => ({
     key: axis.key,
     trait: axis.label,
-    value: scores[axis.key] ?? 0,
+    value: axis.key === "N" ? 100 - (scores.N ?? 0) : scores[axis.key] ?? 0,
   }));
   const highlighted = new Set(
     BIG_FIVE_AXES.filter((a) => highlightKeys.includes(a.key)).map((a) => a.label)
@@ -77,6 +79,17 @@ export function PersonalityRadarChart({ scores, highlightKeys = [] }) {
           />
         </RadarChart>
       </ResponsiveContainer>
+      <ul className="profile-takeaways">
+        {bigFiveTakeaways(scores).map((row) => (
+          <li key={row.key}>
+            <span className="profile-takeaway-score">
+              {row.label} {row.value}
+            </span>
+            {" — "}
+            {row.line}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -133,7 +146,7 @@ export function RiasecBarChart({ scores, code, inferred }) {
 }
 
 export default function ProfilePanel({ profile, valuesMap, onClose }) {
-  const { bigFiveScores, derivedTraits, riasecScores, riasecCode, riasecInferred } =
+  const { bigFiveScores, derivedTraits, personaSummary, riasecScores, riasecCode, riasecInferred } =
     profile || {};
 
   if (!bigFiveScores && !riasecScores) return null;
@@ -150,6 +163,12 @@ export default function ProfilePanel({ profile, valuesMap, onClose }) {
       <p className="profile-panel-note">
         Based on a 20-item short screen — a rough sketch, not a measured verdict.
       </p>
+      {personaSummary && (
+        <div className="profile-persona">
+          <p className="profile-chart-title">Who you are</p>
+          <p className="profile-persona-text">{personaSummary}</p>
+        </div>
+      )}
       <RiasecBarChart scores={riasecScores} code={riasecCode} inferred={riasecInferred} />
       {valuesMap && <SchwartzMap userPoint={valuesMap.userPoint} jobs={valuesMap.jobs} />}
       {derivedTraits?.summary && <p className="profile-panel-summary">{derivedTraits.summary}</p>}

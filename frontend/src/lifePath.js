@@ -208,3 +208,70 @@ export const JOURNEY_RAIL = [
 export function railIndexForStep(step) {
   return JOURNEY_RAIL.findIndex((r) => r.step === step);
 }
+
+// Deterministic one-liners per Big Five axis. Bands match the backend's
+// describeTraits (high >= 65, low <= 35). Neuroticism is DISPLAYED as
+// Emotional Steadiness (100 - N); the stored score keeps raw N everywhere.
+export function bigFiveTakeaways(scores) {
+  if (!scores) return [];
+  const pick = (value, highLine, midLine, lowLine) =>
+    value >= 65 ? highLine : value <= 35 ? lowLine : midLine;
+  const steadiness = 100 - (scores.N ?? 50);
+  return [
+    {
+      key: "O",
+      label: "Openness",
+      value: scores.O ?? 0,
+      line: pick(
+        scores.O ?? 0,
+        "New ideas pull you more than familiar routines.",
+        "You weigh new ideas against what already works.",
+        "You trust proven ways over experiments."
+      ),
+    },
+    {
+      key: "C",
+      label: "Conscientiousness",
+      value: scores.C ?? 0,
+      line: pick(
+        scores.C ?? 0,
+        "Plans, order, and follow-through come naturally to you.",
+        "You keep enough structure to deliver without living by lists.",
+        "You work in bursts of energy, not schedules."
+      ),
+    },
+    {
+      key: "E",
+      label: "Extraversion",
+      value: scores.E ?? 0,
+      line: pick(
+        scores.E ?? 0,
+        "People and rooms give you energy.",
+        "You switch between company and quiet without strain.",
+        "Quiet focus beats a busy room for you."
+      ),
+    },
+    {
+      key: "A",
+      label: "Agreeableness",
+      value: scores.A ?? 0,
+      line: pick(
+        scores.A ?? 0,
+        "You read people well and pull toward cooperation.",
+        "You cooperate when it helps and push back when it counts.",
+        "You put the task above keeping everyone comfortable."
+      ),
+    },
+    {
+      key: "N",
+      label: "Emotional Steadiness",
+      value: steadiness,
+      line: pick(
+        steadiness,
+        "You stay level when things go wrong.",
+        "You hold steady under everyday pressure.",
+        "Stress lands hard on you, so the environment matters."
+      ),
+    },
+  ];
+}

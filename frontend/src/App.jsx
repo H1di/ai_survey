@@ -546,6 +546,7 @@ function App() {
     setProfile({
       bigFiveScores: data.bigFiveScores || null,
       derivedTraits: data.derivedTraits || null,
+      personaSummary: data.personaSummary || null,
       riasecScores: data.riasecScores || null,
       riasecCode: data.riasecCode || null,
       riasecInferred: Boolean(data.riasecInferred),
