@@ -259,6 +259,33 @@ function buildRefinementPrompt({ profileDigest, previousOutput, changes }) {
   return { system, user };
 }
 
+const WHY_THIS_FITS_SCHEMA =
+  '{"personality":[{"point":""},{"point":""}],"interests":[{"point":""}],"values":[{"point":""}],"currentSkills":[{"point":""},{"point":""}],"skillsToDevelop":["",""]}';
+
+// Second call after an output is generated: a structured, traceable
+// explanation with fixed bullet counts so the UI renders a stable block.
+function buildWhyThisFitsPrompt({ profileDigest, output, topParamLabel }) {
+  const system = [
+    "You explain why one specific job fits one specific person.",
+    "Return valid JSON only and no extra keys.",
+    `JSON schema: ${WHY_THIS_FITS_SCHEMA}`,
+    "personality: exactly 2 points. Each names a Big Five trait, its direction, and the one-line consequence for this job.",
+    "interests: exactly 1 point tying the person's strongest Holland interest letters to the daily work.",
+    `values: exactly 1 point about the person's top-ranked job priority${topParamLabel ? ` (${topParamLabel})` : ""}. If the job conflicts with that priority, say so plainly instead of hiding it.`,
+    "currentSkills: 2-3 points naming skills or experience the person already reported and how each transfers.",
+    "skillsToDevelop: 3-4 short skill names (not sentences) the person should build for this job.",
+    "Every point must trace to a specific score, rank, or answer from the profile - never a generic claim.",
+    "Plain, human words. No jargon. No passive voice. Short sentences. Start with the point.",
+  ].join(" ");
+  const user = [
+    `Job: ${output.jobTitle} (${output.orientedField}). ${output.thesis}`,
+    "Profile:",
+    profileDigest,
+    "Explain why this fits now.",
+  ].join("\n\n");
+  return { system, user };
+}
+
 function buildOutputDetailPrompt({ profileDigest, output }) {
   const system = [
     BASE_SYSTEM,
@@ -311,6 +338,7 @@ module.exports = {
   buildProfessionValuesProfilePrompt,
   buildOrientedFieldPrompt,
   buildRefinementPrompt,
+  buildWhyThisFitsPrompt,
   buildOutputDetailPrompt,
   buildRoadmapPrompt,
 };

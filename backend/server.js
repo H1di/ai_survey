@@ -476,6 +476,7 @@ app.post("/api/output/first", async (req, res) => {
     if (!session.outputs.length) {
       const raw = await aiEngine.generateFirstOutput({ session, excludeDirectionIds: [] });
       const scored = await buildScoredOutput(session, raw);
+      scored.whyThisFits = await aiEngine.generateWhyThisFits({ session, output: scored });
       store.appendOutput(session, scored);
     }
 
@@ -529,6 +530,7 @@ app.post("/api/output/refine", async (req, res) => {
       raw = await aiEngine.refineOutput({ session, previousOutput: previous, changes: normalizedChanges });
     }
     const scored = await buildScoredOutput(session, raw);
+    scored.whyThisFits = await aiEngine.generateWhyThisFits({ session, output: scored });
     const appended = store.appendOutput(session, scored);
     store.recordRefinement(session, {
       fromOutputId: outputId,

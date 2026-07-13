@@ -10,6 +10,7 @@ const {
   buildProfessionValuesProfilePrompt,
   buildOrientedFieldPrompt,
   buildRefinementPrompt,
+  buildWhyThisFitsPrompt,
   buildOutputDetailPrompt,
 } = require("./prompts");
 const {
@@ -213,6 +214,86 @@ function fallbackOutputDetail(session, output) {
         provider: "An industry body or local provider",
         why: "Chosen to produce a small portfolio piece, not just a certificate.",
       },
+    ],
+  };
+}
+
+const RIASEC_INTEREST_LABELS = {
+  R: "hands-on building",
+  I: "investigation and analysis",
+  A: "creating and shaping",
+  S: "helping and teaching",
+  E: "leading and persuading",
+  C: "organizing and structure",
+};
+const BIG_FIVE_TRAIT_LABELS = {
+  O: "Openness",
+  C: "Conscientiousness",
+  E: "Extraversion",
+  A: "Agreeableness",
+  N: "Neuroticism",
+};
+
+// Deterministic whyThisFits: every line quotes the score, rank, or answer it
+// rests on — the same traceability rule the AI prompt enforces.
+function fallbackWhyThisFits(session, output) {
+  const scores = session.bigFiveScores || {};
+  const ranked = Object.keys(BIG_FIVE_TRAIT_LABELS)
+    .filter((k) => scores[k] !== undefined)
+    .sort((a, b) => Math.abs(scores[b] - 50) - Math.abs(scores[a] - 50));
+  const personality = ranked.slice(0, 2).map((k) => ({
+    point: `${BIG_FIVE_TRAIT_LABELS[k]} ${scores[k]}/100 (${scores[k] >= 50 ? "high" : "low"}) — shapes how the day-to-day work of a ${output.jobTitle} will feel to you.`,
+  }));
+  while (personality.length < 2) {
+    personality.push({ point: `Your balanced profile leaves room to grow into a ${output.jobTitle}.` });
+  }
+
+  const topLetter = (session.riasecCode || "").charAt(0);
+  const interests = [
+    {
+      point: topLetter
+        ? `Your strongest interest is ${RIASEC_INTEREST_LABELS[topLetter] || topLetter} (code ${session.riasecCode}) — the core of this work.`
+        : "Your interest profile was estimated, so treat the interest match as a sketch.",
+    },
+  ];
+
+  const labelOf = new Map(JOB_CHAR_PARAMS.map((p) => [p.id, p.label]));
+  const topParam = session.jobCharRanking?.[0];
+  const values = [
+    {
+      point: topParam
+        ? `You ranked ${labelOf.get(topParam)} first (target ${session.jobCharProfile?.[topParam] ?? 50}/100) — weigh this job against that bar before anything else.`
+        : "No ranked priorities recorded — compare the role against what matters most to you.",
+    },
+  ];
+
+  const cvSkills = (session.cvAnalysis?.skills || []).slice(0, 3);
+  const currentSkills =
+    cvSkills.length >= 2
+      ? cvSkills.map((skill) => ({ point: `${skill} — already on your CV and reusable here.` }))
+      : [
+          {
+            point: session.cvText
+              ? "Your CV was recorded but not parsed in demo mode — reread it against this role's needs."
+              : "You answered the career-journey questions instead of a CV — your reported experience is the starting point.",
+          },
+          {
+            point:
+              session.cvIntent === "use_skills"
+                ? "You said you want to build on existing skills — list the three you would defend in an interview."
+                : "You said you are open to something completely new — expect to start from fundamentals.",
+          },
+        ];
+
+  return {
+    personality,
+    interests,
+    values,
+    currentSkills,
+    skillsToDevelop: [
+      `${output.orientedField} fundamentals`,
+      `Day-to-day tools of a ${output.jobTitle}`,
+      "A small public portfolio piece",
     ],
   };
 }
@@ -427,6 +508,30 @@ function normalizeJobCharQuestionsPayload(payload, { count, ranking }) {
   return items.map((item, index) => ({ id: `jc_${index + 1}`, ...item }));
 }
 
+function normalizeWhyThisFitsPayload(payload) {
+  const points = (list, min, max, name) => {
+    const entries = (Array.isArray(list) ? list : [])
+      .map((item) => cleanText(item?.point).slice(0, 220))
+      .filter(Boolean)
+      .slice(0, max)
+      .map((point) => ({ point }));
+    if (entries.length < min) throw new Error(`whyThisFits ${name} needs at least ${min} points.`);
+    return entries;
+  };
+  const skills = (Array.isArray(payload?.skillsToDevelop) ? payload.skillsToDevelop : [])
+    .map((s) => cleanText(s).slice(0, 80))
+    .filter(Boolean)
+    .slice(0, 4);
+  if (skills.length < 3) throw new Error("whyThisFits skillsToDevelop needs 3-4 skills.");
+  return {
+    personality: points(payload?.personality, 2, 2, "personality"),
+    interests: points(payload?.interests, 1, 1, "interests"),
+    values: points(payload?.values, 1, 1, "values"),
+    currentSkills: points(payload?.currentSkills, 2, 3, "currentSkills"),
+    skillsToDevelop: skills,
+  };
+}
+
 function normalizePersonaSummaryPayload(payload) {
   const summary = cleanText(payload?.summary).slice(0, 700);
   if (!summary) throw new Error("Persona summary missing.");
@@ -556,6 +661,30 @@ function createAiEngine({ apiKey, model }) {
     } catch (error) {
       console.error("[AI refine output fallback]", error.message);
       return fallbackRefineOutput(session, previousOutput, changes);
+    }
+  }
+
+  // Option B (user decision): a separate second call after the output is
+  // built — the core output prompt and schema stay untouched.
+  async function generateWhyThisFits({ session, output }) {
+    if (!client) return fallbackWhyThisFits(session, output);
+    try {
+      const labelOf = new Map(JOB_CHAR_PARAMS.map((p) => [p.id, p.label]));
+      const prompts = buildWhyThisFitsPrompt({
+        profileDigest: buildSessionDigest(session),
+        output,
+        topParamLabel: session.jobCharRanking ? labelOf.get(session.jobCharRanking[0]) : "",
+      });
+      const parsed = await runJsonCompletion(client, {
+        model,
+        system: prompts.system,
+        user: prompts.user,
+        temperature: 0.6,
+      });
+      return normalizeWhyThisFitsPayload(parsed);
+    } catch (error) {
+      console.error("[AI whyThisFits fallback]", error.message);
+      return fallbackWhyThisFits(session, output);
     }
   }
 
@@ -719,6 +848,7 @@ function createAiEngine({ apiKey, model }) {
     scoreProfessionValues,
     generateFirstOutput,
     refineOutput,
+    generateWhyThisFits,
     generateOutputDetail,
   };
 }
@@ -729,6 +859,7 @@ module.exports = {
   normalizeJobCharQuestionsPayload,
   normalizeCvAnalysisPayload,
   normalizePersonaSummaryPayload,
+  normalizeWhyThisFitsPayload,
   normalizeSchwartzValuesPayload,
   normalizeOutputPayload,
   normalizeOutputDetailPayload,

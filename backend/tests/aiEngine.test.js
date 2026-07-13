@@ -144,7 +144,57 @@ const {
   normalizeJobCharQuestionsPayload,
   normalizeCvAnalysisPayload,
   normalizePersonaSummaryPayload,
+  normalizeWhyThisFitsPayload,
 } = require("../aiEngine");
+
+test("keyless whyThisFits: fixed counts, every bullet traces to profile signal", async () => {
+  const session = fakeSession();
+  const output = await engine.generateFirstOutput({ session });
+  const why = await engine.generateWhyThisFits({ session, output });
+  assert.equal(why.personality.length, 2);
+  assert.equal(why.interests.length, 1);
+  assert.equal(why.values.length, 1);
+  assert.ok(why.currentSkills.length >= 2 && why.currentSkills.length <= 3);
+  assert.ok(why.skillsToDevelop.length >= 3 && why.skillsToDevelop.length <= 4);
+  // Traceability: the bullets quote the signal they rest on.
+  assert.match(why.interests[0].point, /IAC/);
+  assert.match(why.values[0].point, /Compensation/);
+  assert.match(why.personality[0].point, /\/100/);
+});
+
+test("keyless whyThisFits quotes parsed CV skills when they exist", async () => {
+  const session = fakeSession({
+    cvAnalysis: { skills: ["welding", "blueprint reading"], domains: [], seniority: "mid" },
+  });
+  const output = await engine.generateFirstOutput({ session });
+  const why = await engine.generateWhyThisFits({ session, output });
+  assert.match(why.currentSkills[0].point, /welding/);
+});
+
+test("normalizeWhyThisFitsPayload enforces per-block counts and trims overshoot", () => {
+  const good = {
+    personality: [{ point: "a" }, { point: "b" }],
+    interests: [{ point: "c" }],
+    values: [{ point: "d" }],
+    currentSkills: [{ point: "e" }, { point: "f" }],
+    skillsToDevelop: ["s1", "s2", "s3"],
+  };
+  const parsed = normalizeWhyThisFitsPayload(good);
+  assert.equal(parsed.personality.length, 2);
+  assert.deepEqual(parsed.skillsToDevelop, ["s1", "s2", "s3"]);
+
+  const over = normalizeWhyThisFitsPayload({
+    ...good,
+    currentSkills: [{ point: "e" }, { point: "f" }, { point: "g" }, { point: "h" }],
+    skillsToDevelop: ["s1", "s2", "s3", "s4", "s5"],
+  });
+  assert.equal(over.currentSkills.length, 3, "over-count trimmed");
+  assert.equal(over.skillsToDevelop.length, 4, "over-count trimmed");
+
+  assert.throws(() => normalizeWhyThisFitsPayload({ ...good, personality: [{ point: "a" }] }), /personality/);
+  assert.throws(() => normalizeWhyThisFitsPayload({ ...good, interests: [] }), /interests/);
+  assert.throws(() => normalizeWhyThisFitsPayload({ ...good, skillsToDevelop: ["s1"] }), /skillsToDevelop/);
+});
 
 test("keyless persona summary: 3-5 second-person sentences naming the scores", async () => {
   const summary = await engine.generatePersonaSummary({ session: fakeSession() });

@@ -286,6 +286,11 @@ test("full output loop: first -> refine param -> notSuitable -> accept -> detail
   assert.ok(first.higherOrder && first.axes && first.dominantPole);
   assert.equal(first.topValues.length, 3);
   assert.ok(first.valuesFit.overall >= 0 && first.valuesFit.overall <= 100);
+  // Structured explanation from the separate second call
+  for (const key of ["personality", "interests", "values", "currentSkills"]) {
+    assert.ok(first.whyThisFits[key].length >= 1, `whyThisFits.${key} missing`);
+  }
+  assert.ok(first.whyThisFits.skillsToDevelop.length >= 3);
 
   ({ data } = await post("/api/output/first", { sessionId }));
   assert.equal(data.outputs.length, 1, "idempotent");
@@ -300,6 +305,7 @@ test("full output loop: first -> refine param -> notSuitable -> accept -> detail
   assert.equal(data.outputs.length, 2);
   assert.equal(data.outputs[1].parentId, "output_1");
   assert.ok(data.outputs[1].changeSummary, "refinement carries a changeSummary");
+  assert.ok(data.outputs[1].whyThisFits, "refined output carries whyThisFits");
   assert.equal(Object.keys(data.outputs[1].schwartzValues).length, 10, "re-scored on Schwartz");
   assert.equal(data.refinementHistory.length, 1);
   assert.equal(data.refinementHistory[0].changedParams[0].param, "compensation");
@@ -315,6 +321,7 @@ test("full output loop: first -> refine param -> notSuitable -> accept -> detail
   const families = data.outputs.map((o) => o.directionId);
   assert.notEqual(families[2], families[0], "notSuitable must leave the rejected family");
   assert.equal(data.refinementHistory[1].notSuitable, true);
+  assert.ok(data.outputs[2].whyThisFits, "notSuitable regeneration carries whyThisFits");
 
   // Yes -> accept output_3, get the 4 advice blocks
   ({ status, data } = await post("/api/output/accept", { sessionId, outputId: "output_3" }));
