@@ -9,7 +9,40 @@ import {
   JOURNEY_RAIL,
   railIndexForStep,
   bigFiveTakeaways,
+  whyThisFitsSections,
 } from "./lifePath";
+
+describe("whyThisFitsSections", () => {
+  const structured = {
+    whyThisFits: {
+      personality: [{ point: "p1" }, { point: "p2" }],
+      interests: [{ point: "i1" }],
+      values: [{ point: "v1" }],
+      currentSkills: [{ point: "s1" }, { point: "s2" }],
+      skillsToDevelop: ["d1", "d2", "d3"],
+    },
+  };
+
+  it("maps the structured block to five labeled sections", () => {
+    const sections = whyThisFitsSections(structured);
+    expect(sections.map((s) => s.heading)).toEqual([
+      "Why this fits — personality",
+      "Interests",
+      "Values",
+      "Current skills",
+      "Skills to develop",
+    ]);
+    expect(sections[0].items).toEqual(["p1", "p2"]);
+    expect(sections[4].items).toEqual(["d1", "d2", "d3"]);
+  });
+
+  it("falls back to legacy whyFit text for old outputs", () => {
+    expect(whyThisFitsSections({ whyFit: "legacy line" })).toEqual([
+      { heading: "Why this fits you", text: "legacy line" },
+    ]);
+    expect(whyThisFitsSections({})).toEqual([]);
+  });
+});
 
 describe("bigFiveTakeaways", () => {
   it("returns five axes with Neuroticism shown as inverted Emotional Steadiness", () => {

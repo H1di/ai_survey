@@ -28,6 +28,7 @@ import {
   selectDockCard,
   JOURNEY_RAIL,
   railIndexForStep,
+  whyThisFitsSections,
 } from "./lifePath";
 import "./App.css";
 import "./components/GraphView/GraphPage.css";
@@ -882,7 +883,7 @@ function App() {
       title: output.jobTitle,
       description: output.thesis,
       sections: [
-        { heading: "Why this fits you", text: output.whyFit },
+        ...whyThisFitsSections(output),
         {
           heading: "Through your 7 priorities",
           items: jobCharParams.map((p) => output.parameterFit?.[p.id]).filter(Boolean),

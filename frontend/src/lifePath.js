@@ -209,6 +209,23 @@ export function railIndexForStep(step) {
   return JOURNEY_RAIL.findIndex((r) => r.step === step);
 }
 
+// Maps the structured whyThisFits block to InfoPanel sections. Outputs
+// generated before the block existed fall back to the legacy whyFit text.
+export function whyThisFitsSections(output) {
+  const why = output?.whyThisFits;
+  if (!why) {
+    return output?.whyFit ? [{ heading: "Why this fits you", text: output.whyFit }] : [];
+  }
+  const pts = (list) => (list || []).map((p) => p.point);
+  return [
+    { heading: "Why this fits — personality", items: pts(why.personality) },
+    { heading: "Interests", items: pts(why.interests) },
+    { heading: "Values", items: pts(why.values) },
+    { heading: "Current skills", items: pts(why.currentSkills) },
+    { heading: "Skills to develop", items: why.skillsToDevelop || [] },
+  ].filter((section) => section.items.length);
+}
+
 // Deterministic one-liners per Big Five axis. Bands match the backend's
 // describeTraits (high >= 65, low <= 35). Neuroticism is DISPLAYED as
 // Emotional Steadiness (100 - N); the stored score keeps raw N everywhere.

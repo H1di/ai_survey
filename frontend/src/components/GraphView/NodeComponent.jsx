@@ -131,12 +131,6 @@ export function DetailPanel({ data }) {
           <p>{path.financialOutlook}</p>
         </div>
       )}
-      {path.whyItFits && (
-        <div className="detail-section">
-          <h4>Why this fits you</h4>
-          <p>{path.whyItFits}</p>
-        </div>
-      )}
       {path.risks && (
         <div className="detail-section">
           <h4>Risks</h4>
