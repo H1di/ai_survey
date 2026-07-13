@@ -528,3 +528,39 @@
   font: inherit;
   font-size: 13px;
 }
+
+.journey-rail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 18px 0 24px;
+  padding: 0;
+  list-style: none;
+}
+.journey-rail-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  border: 1px solid #e4e4ec;
+  border-radius: 10px;
+}
+.journey-rail-label { font-weight: 600; }
+.journey-rail-time { color: #666; white-space: nowrap; }
+
+.journey-rail-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  justify-content: center;
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+}
+.journey-rail-step { font-size: 12px; color: #9a9aa8; }
+.journey-rail-step.done { color: #666; }
+.journey-rail-step.active { color: #863bff; font-weight: 600; }
+
+@media (max-width: 600px) {
+  .journey-rail-step { font-size: 11px; }
+}

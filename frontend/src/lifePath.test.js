@@ -6,7 +6,32 @@ import {
   moveRankItem,
   outputX,
   ADVICE_BLOCKS,
+  JOURNEY_RAIL,
+  railIndexForStep,
 } from "./lifePath";
+
+describe("journey rail", () => {
+  it("covers the five survey steps in execution order", () => {
+    expect(JOURNEY_RAIL.map((r) => r.step)).toEqual([
+      "demographics",
+      "big_five",
+      "riasec",
+      "job_characteristics",
+      "cv",
+    ]);
+    for (const entry of JOURNEY_RAIL) {
+      expect(entry.label.length).toBeGreaterThan(0);
+      expect(entry.time.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("maps steps to rail positions; off-rail steps return -1", () => {
+    expect(railIndexForStep("demographics")).toBe(0);
+    expect(railIndexForStep("cv")).toBe(4);
+    expect(railIndexForStep("tree")).toBe(-1);
+    expect(railIndexForStep("depth_choice")).toBe(-1);
+  });
+});
 
 const OUTPUTS = [
   {

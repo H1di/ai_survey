@@ -21,7 +21,14 @@ import {
   submitRiasecAnswer,
   uploadCvFile,
 } from "./api";
-import { buildLifePathGraph, firstUnansweredIndex, moveRankItem, selectDockCard } from "./lifePath";
+import {
+  buildLifePathGraph,
+  firstUnansweredIndex,
+  moveRankItem,
+  selectDockCard,
+  JOURNEY_RAIL,
+  railIndexForStep,
+} from "./lifePath";
 import "./App.css";
 import "./components/GraphView/GraphPage.css";
 
@@ -52,15 +59,46 @@ const ENJOY_LIKERT = [
 ];
 
 function stepHeading(step) {
-  switch (step) {
-    case "demographics": return "About you";
-    case "big_five":     return "Personality";
-    case "riasec":              return "Interests";
-    case "job_characteristics": return "What matters in a job";
-    case "cv":                  return "Your experience";
-    case "tree":                return "Ready";
-    default:             return "Deep Analysis";
-  }
+  const railEntry = JOURNEY_RAIL.find((r) => r.step === step);
+  if (railEntry) return railEntry.label;
+  return step === "tree" ? "Ready" : "Career Discovery Journey";
+}
+
+function JourneyRailCard({ onBegin }) {
+  return (
+    <div className="question-card journey-rail-card">
+      <h3>Career Discovery Journey</h3>
+      <p className="entry-prompt">Five short steps. Each one feeds the final picture.</p>
+      <ol className="journey-rail-list">
+        {JOURNEY_RAIL.map((r) => (
+          <li key={r.step}>
+            <span className="journey-rail-label">{r.label}</span>
+            <span className="journey-rail-time">{r.time}</span>
+          </li>
+        ))}
+      </ol>
+      <button type="button" className="primary-action" onClick={onBegin}>
+        Start
+      </button>
+    </div>
+  );
+}
+
+function JourneyRailStrip({ step }) {
+  const active = railIndexForStep(step);
+  if (active === -1) return null;
+  return (
+    <ol className="journey-rail-strip" aria-label="Career Discovery Journey progress">
+      {JOURNEY_RAIL.map((r, index) => (
+        <li
+          key={r.step}
+          className={`journey-rail-step ${index === active ? "active" : ""} ${index < active ? "done" : ""}`}
+        >
+          {r.label}
+        </li>
+      ))}
+    </ol>
+  );
 }
 
 function stepProgressText(step, progress) {
@@ -453,6 +491,8 @@ function App() {
   const [profile, setProfile] = useState(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(true);
+  // Journey intro rail: shown once right after the entry screen, never on resume.
+  const [showRail, setShowRail] = useState(false);
 
   const [busy, setBusy] = useState({
     start: false,
@@ -568,6 +608,7 @@ function App() {
       applySessionSnapshot(data);
       localStorage.setItem(SESSION_STORAGE_KEY, data.sessionId);
       setStage("survey");
+      setShowRail(true);
       setDemoIndex(0);
       setDemoDraft("");
     } catch (e) {
@@ -1267,6 +1308,7 @@ function App() {
           <header className="screen-header">
             <h2>{stepHeading(step)}</h2>
             <p>{stepProgressText(step, progress)}</p>
+            <JourneyRailStrip step={step} />
           </header>
 
           {step !== "tree" && (() => {
@@ -1291,7 +1333,11 @@ function App() {
             </p>
           )}
 
-          {step === "demographics" && currentDemographicQuestion && (
+          {showRail && step === "demographics" && (
+            <JourneyRailCard onBegin={() => setShowRail(false)} />
+          )}
+
+          {!showRail && step === "demographics" && currentDemographicQuestion && (
             <DemographicQuestionCard
               q={currentDemographicQuestion}
               savedValue={demoAnswers[currentDemographicQuestion.id] ?? null}

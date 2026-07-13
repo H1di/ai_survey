@@ -194,3 +194,17 @@ export function selectDockCard({ stage, outputs = [], acceptedOutputId, refineMo
   if (refineMode) return "refine";
   return "output-review";
 }
+
+// Display-only Career Discovery Journey rail. Labels are copy, not state:
+// the backend step machine stays the source of truth for execution order.
+export const JOURNEY_RAIL = [
+  { step: "demographics", label: "About you", time: "~1 min" },
+  { step: "big_five", label: "Step 1 — How you think", time: "2–3 min" },
+  { step: "riasec", label: "Step 2 — What truly interests you", time: "2 min" },
+  { step: "job_characteristics", label: "Step 3 — What motivates you", time: "2–3 min" },
+  { step: "cv", label: "Step 4 — Your skills & experience", time: "1–2 min" },
+];
+
+export function railIndexForStep(step) {
+  return JOURNEY_RAIL.findIndex((r) => r.step === step);
+}
