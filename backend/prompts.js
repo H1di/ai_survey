@@ -173,6 +173,19 @@ function buildProfessionValuesProfilePrompt({ jobTitle, orientedField, thesis })
   return { system, user };
 }
 
+function buildPersonaSummaryPrompt({ profileDigest }) {
+  const system = [
+    "You turn assessment scores into a short self-portrait the person reads about themselves.",
+    "Return valid JSON only.",
+    'JSON schema: {"summary":""}',
+    'summary: 3-5 sentences. Second person, present tense. State the dominant pattern directly - no hedging, no "you might be".',
+    "Every claim must trace to a specific score in the profile; name it in plain words.",
+    "Plain, human words. No jargon. No passive voice. Short sentences, one idea each. Start with the point.",
+  ].join(" ");
+  const user = ["Profile:", profileDigest, "Write the 3-5 sentence portrait now."].join("\n");
+  return { system, user };
+}
+
 function buildCvParsePrompt(cvText) {
   const system = [
     "You extract a structured career signal from a raw CV text.",
@@ -293,6 +306,7 @@ module.exports = {
   buildRiasecInferencePrompt,
   buildJobCharQuestionsPrompt,
   buildCvParsePrompt,
+  buildPersonaSummaryPrompt,
   buildUserValuesInferencePrompt,
   buildProfessionValuesProfilePrompt,
   buildOrientedFieldPrompt,

@@ -5,6 +5,7 @@ const {
   buildRiasecInferencePrompt,
   buildJobCharQuestionsPrompt,
   buildCvParsePrompt,
+  buildPersonaSummaryPrompt,
   buildUserValuesInferencePrompt,
   buildProfessionValuesProfilePrompt,
   buildOrientedFieldPrompt,
@@ -216,6 +217,39 @@ function fallbackOutputDetail(session, output) {
   };
 }
 
+// Deterministic "who you are" prose: the same bands describeTraits uses,
+// phrased second person with the score each sentence rests on named.
+function fallbackPersonaSummary(session) {
+  const s = session.bigFiveScores;
+  if (!s) return "Your personality scores are not available yet.";
+  const high = (v) => v >= 65;
+  const low = (v) => v <= 35;
+  const steadiness = 100 - s.N;
+  const sentences = [
+    high(s.O)
+      ? `New ideas pull you more than routines do (Openness ${s.O}).`
+      : low(s.O)
+        ? `You trust the proven route over the novel one (Openness ${s.O}).`
+        : `You weigh new ideas against proven routines (Openness ${s.O}).`,
+    high(s.C)
+      ? `You finish what you start and keep things in order (Conscientiousness ${s.C}).`
+      : low(s.C)
+        ? `You work in bursts of energy, not schedules (Conscientiousness ${s.C}).`
+        : `You run on a plan without being ruled by it (Conscientiousness ${s.C}).`,
+    high(s.E)
+      ? `People and rooms give you energy (Extraversion ${s.E}).`
+      : low(s.E)
+        ? `You do your best work away from the crowd (Extraversion ${s.E}).`
+        : `You move between company and solo work without strain (Extraversion ${s.E}).`,
+    high(steadiness)
+      ? `You stay level when things go wrong (Emotional Steadiness ${steadiness}).`
+      : low(steadiness)
+        ? `Pressure lands hard on you, so the environment matters (Emotional Steadiness ${steadiness}).`
+        : `You hold steady under everyday pressure (Emotional Steadiness ${steadiness}).`,
+  ];
+  return sentences.join(" ");
+}
+
 function fallbackRoadmap(profession) {
   const title = profession.title;
 
@@ -391,6 +425,16 @@ function normalizeJobCharQuestionsPayload(payload, { count, ranking }) {
   // Serve questions in the user's importance order regardless of AI ordering.
   items.sort((a, b) => ranking.indexOf(a.param) - ranking.indexOf(b.param));
   return items.map((item, index) => ({ id: `jc_${index + 1}`, ...item }));
+}
+
+function normalizePersonaSummaryPayload(payload) {
+  const summary = cleanText(payload?.summary).slice(0, 700);
+  if (!summary) throw new Error("Persona summary missing.");
+  const sentences = summary.split(/[.!?]+/).map((t) => t.trim()).filter(Boolean);
+  if (sentences.length < 3 || sentences.length > 5) {
+    throw new Error(`Persona summary needs 3-5 sentences, got ${sentences.length}.`);
+  }
+  return summary;
 }
 
 function normalizeCvAnalysisPayload(payload) {
@@ -607,6 +651,20 @@ function createAiEngine({ apiKey, model }) {
     }
   }
 
+  async function generatePersonaSummary({ session }) {
+    if (!client) return fallbackPersonaSummary(session);
+    try {
+      const { system, user } = buildPersonaSummaryPrompt({
+        profileDigest: buildSessionDigest(session),
+      });
+      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.6 });
+      return normalizePersonaSummaryPayload(parsed);
+    } catch (error) {
+      console.error("[AI persona summary fallback]", error.message);
+      return fallbackPersonaSummary(session);
+    }
+  }
+
   async function inferUserValues({ session }) {
     const fallback = () =>
       inferUserValuesFallback({
@@ -656,6 +714,7 @@ function createAiEngine({ apiKey, model }) {
     inferRiasecProfile,
     generateJobCharQuestions,
     analyzeCV,
+    generatePersonaSummary,
     inferUserValues,
     scoreProfessionValues,
     generateFirstOutput,
@@ -669,6 +728,7 @@ module.exports = {
   normalizeRiasecScoresPayload,
   normalizeJobCharQuestionsPayload,
   normalizeCvAnalysisPayload,
+  normalizePersonaSummaryPayload,
   normalizeSchwartzValuesPayload,
   normalizeOutputPayload,
   normalizeOutputDetailPayload,

@@ -116,6 +116,7 @@ class SessionStore {
       bigFiveAnswers: {},
       bigFiveScores: null,
       derivedTraits: null,
+      personaSummary: null,
       cvIntent: cvIntent || "new",
       cvText: null,
       cvAnalysis: null,
@@ -185,6 +186,11 @@ class SessionStore {
   setBigFiveScores(session, scores, derivedTraits) {
     session.bigFiveScores = scores;
     session.derivedTraits = derivedTraits;
+    this.touch(session);
+  }
+
+  setPersonaSummary(session, personaSummary) {
+    session.personaSummary = personaSummary;
     this.touch(session);
   }
 
@@ -304,6 +310,7 @@ class SessionStore {
       bigFiveAnswers: session.bigFiveAnswers,
       bigFiveScores: session.bigFiveScores,
       derivedTraits: session.derivedTraits,
+      personaSummary: session.personaSummary,
       cvIntent: session.cvIntent,
       cvProvided: Boolean(session.cvText),
       cvAnalysis: session.cvAnalysis,

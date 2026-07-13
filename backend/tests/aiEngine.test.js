@@ -143,7 +143,28 @@ const {
   normalizeRiasecScoresPayload,
   normalizeJobCharQuestionsPayload,
   normalizeCvAnalysisPayload,
+  normalizePersonaSummaryPayload,
 } = require("../aiEngine");
+
+test("keyless persona summary: 3-5 second-person sentences naming the scores", async () => {
+  const summary = await engine.generatePersonaSummary({ session: fakeSession() });
+  const sentences = summary.split(/[.!?]+/).map((t) => t.trim()).filter(Boolean);
+  assert.ok(sentences.length >= 3 && sentences.length <= 5, summary);
+  assert.match(summary, /\byou\b/i);
+  assert.match(summary, /Openness 70/);
+  assert.match(summary, /Emotional Steadiness 55/);
+});
+
+test("normalizePersonaSummaryPayload enforces 3-5 sentences and non-empty text", () => {
+  const good = "You build things. You finish what you start. You avoid crowds.";
+  assert.equal(normalizePersonaSummaryPayload({ summary: good }), good);
+  assert.throws(() => normalizePersonaSummaryPayload({}), /missing/);
+  assert.throws(() => normalizePersonaSummaryPayload({ summary: "One sentence only." }), /3-5/);
+  assert.throws(
+    () => normalizePersonaSummaryPayload({ summary: "A one. B two. C three. D four. E five. F six." }),
+    /3-5/
+  );
+});
 
 test("normalizeRiasecScoresPayload clamps and requires all six keys", () => {
   const scores = normalizeRiasecScoresPayload({ scores: { R: -5, I: 200, A: 50.6, S: 0, E: 100, C: 33 } });

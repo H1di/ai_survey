@@ -100,6 +100,7 @@ async function completeAssessment() {
   assert.ok(data.userValues, "userValues inferred the moment step becomes tree");
   assert.equal(data.userValues.confidence, "low");
   assert.equal(Object.keys(data.userValues.scores).length, 10);
+  assert.ok(data.personaSummary, "persona summary generated at cv→tree");
   return { sessionId, data };
 }
 
@@ -227,6 +228,7 @@ test("cv with pasted text stores analysis and reaches tree", async () => {
   // Schwartz user vector exists on BOTH cv paths before the graph renders
   assert.equal(data.userValues.source, "inferred");
   assert.equal(Object.keys(data.userValues.scores).length, 10);
+  assert.ok(data.personaSummary, "persona summary on the CV path too");
   for (const v of Object.values(data.userValues.scores)) {
     assert.ok(v >= 0 && v <= 100);
   }

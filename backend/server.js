@@ -372,6 +372,7 @@ app.post("/api/cv", cvUpload.single("file"), async (req, res) => {
     // The Schwartz user vector must exist before the graph renders.
     const userValues = await aiEngine.inferUserValues({ session });
     store.setUserValues(session, userValues);
+    store.setPersonaSummary(session, await aiEngine.generatePersonaSummary({ session }));
     store.advanceStep(session, "tree");
     return sendSessionSnapshot(res, session);
   } catch (error) {
@@ -399,6 +400,7 @@ app.post("/api/cv/journey", async (req, res) => {
       // The Schwartz user vector must exist before the graph renders.
       const userValues = await aiEngine.inferUserValues({ session });
       store.setUserValues(session, userValues);
+      store.setPersonaSummary(session, await aiEngine.generatePersonaSummary({ session }));
       store.advanceStep(session, "tree");
     }
     return sendSessionSnapshot(res, session);
