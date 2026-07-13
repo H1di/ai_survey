@@ -102,7 +102,6 @@ const aiLimiter = rateLimit({
   message: { error: "Too many AI requests from this address. Try again later." },
 });
 for (const path of [
-  "/api/session/big-five-depth",
   "/api/riasec/start",
   "/api/riasec/skip",
   "/api/job-characteristics/rank",
@@ -208,40 +207,12 @@ app.post("/api/session/demographics", (req, res) => {
       (q) => session.demographics[q.id] !== undefined
     );
     if (allAnswered) {
-      store.advanceStep(session, "depth_choice");
+      store.advanceStep(session, "big_five");
     }
 
     return sendSessionSnapshot(res, session);
   } catch (error) {
     return res.status(error.statusCode || 500).json({ error: error.message });
-  }
-});
-
-app.post("/api/session/big-five-depth", async (req, res) => {
-  try {
-    const { sessionId, depth } = req.body || {};
-    const session = store.require(sessionId);
-
-    if (session.step !== "depth_choice") {
-      return res
-        .status(400)
-        .json({ error: "Big Five depth already chosen or not yet available." });
-    }
-    if (depth !== "short" && depth !== "deep") {
-      return res.status(400).json({ error: "depth must be 'short' or 'deep'." });
-    }
-
-    const items = await aiEngine.generateBigFiveItems({ depth });
-    store.setBigFiveDepthAndItems(session, depth, items);
-    store.advanceStep(session, "big_five");
-
-    // bigFiveItems just changed — this is one of the static-list snapshots.
-    return sendSessionSnapshot(res, session, { includeStatic: true });
-  } catch (error) {
-    console.error("[session/big-five-depth]", error);
-    return res
-      .status(error.statusCode || 500)
-      .json({ error: "Failed to start Big Five." });
   }
 });
 

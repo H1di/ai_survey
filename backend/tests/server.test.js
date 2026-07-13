@@ -42,7 +42,7 @@ const RANKING = [
 ];
 
 // Fast-forwards Page 1 + Page 2 up to the job-characteristics step.
-// Static question banks arrive on start / depth / riasec-start snapshots
+// Static question banks arrive on start / GET / riasec-start snapshots
 // only — answer responses are trimmed, so iterate over the captured lists.
 async function walkToJobChar() {
   let { data } = await post("/api/session/start", {
@@ -52,15 +52,16 @@ async function walkToJobChar() {
   });
   const sessionId = data.sessionId;
   const careerJourneyQuestions = data.careerJourneyQuestions;
+  const bigFiveItems = data.bigFiveItems;
+  assert.equal(bigFiveItems.length, 20, "static Mini-IPIP present from the start");
 
   const demoValues = { sex: "female", age: 30, country: "Testland", city: "Testville" };
   for (const q of data.demographicQuestions) {
     ({ data } = await post("/api/session/demographics", { sessionId, questionId: q.id, value: demoValues[q.id] }));
   }
-  assert.equal(data.step, "depth_choice");
+  assert.equal(data.step, "big_five");
 
-  ({ data } = await post("/api/session/big-five-depth", { sessionId, depth: "short" }));
-  for (const item of data.bigFiveItems) {
+  for (const item of bigFiveItems) {
     ({ data } = await post("/api/big-five/answer", { sessionId, itemId: item.id, value: 3 }));
   }
   assert.equal(data.step, "riasec");
@@ -133,6 +134,20 @@ test("values route is gone", async () => {
   assert.equal(res.status, 404);
 });
 
+test("depth era is gone: fixed instrument, no depth route, no depth fields", async () => {
+  const res = await post("/api/session/big-five-depth", { sessionId: "x", depth: "short" });
+  assert.equal(res.status, 404);
+
+  const a = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "x", cvIntent: "new" });
+  const b = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "y", cvIntent: "new" });
+  assert.equal(a.data.bigFiveItems.length, 20);
+  assert.deepEqual(a.data.bigFiveItems, b.data.bigFiveItems, "one fixed instrument for everyone");
+  assert.equal(a.data.bigFiveItems[0].trait, undefined, "scoring keys never serialized");
+  assert.equal("bigFiveDepth" in a.data, false, "depth field gone from the snapshot");
+  assert.equal("depth" in a.data.progress.bigFive, false, "depth gone from progress");
+  assert.equal("depth" in a.data.summary.bigFive, false, "depth gone from summary");
+});
+
 test("step guards: riasec/jobchar/cv routes reject out-of-order calls", async () => {
   const { data: start } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "x", cvIntent: "new" });
   const sessionId = start.sessionId;
@@ -152,11 +167,11 @@ test("riasec skip infers a low-confidence profile and advances", async () => {
   let { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "x", cvIntent: "new" });
   const sessionId = data.sessionId;
   const demoValues = { sex: "male", age: 40, country: "Testland", city: "Testville" };
+  const items = data.bigFiveItems;
   for (const q of data.demographicQuestions) {
     ({ data } = await post("/api/session/demographics", { sessionId, questionId: q.id, value: demoValues[q.id] }));
   }
-  ({ data } = await post("/api/session/big-five-depth", { sessionId, depth: "short" }));
-  for (const item of data.bigFiveItems) {
+  for (const item of items) {
     ({ data } = await post("/api/big-five/answer", { sessionId, itemId: item.id, value: 4 }));
   }
   assert.equal(data.step, "riasec");

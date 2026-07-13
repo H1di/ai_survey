@@ -1,7 +1,6 @@
 const OpenAI = require("openai");
 const {
   buildProfileDigest,
-  buildBigFiveItemsPrompt,
   buildRoadmapPrompt,
   buildRiasecItemsPrompt,
   buildRiasecInferencePrompt,
@@ -22,7 +21,6 @@ const {
 } = require("./schwartzValues");
 const { selectFallbackJobCharQuestions, JOB_CHAR_PARAMS, JOB_CHAR_PARAM_IDS } = require("./questionPool");
 const { DIRECTIONS, getDirection } = require("./directions");
-const { getFallbackItems } = require("./bigFiveItems");
 const { getFallbackRiasecItems } = require("./riasecItems");
 const { rankDirections, inferRiasecScores } = require("./riasec");
 
@@ -353,54 +351,6 @@ function normalizeRoadmapPayload(payload, profession) {
       };
     }),
   };
-}
-
-const BIG_FIVE_TRAITS = ["O", "C", "E", "A", "N"];
-
-// Psychometric guardrails for AI-generated Big Five items: the payload is
-// only accepted when it is a balanced instrument (exact per-trait counts,
-// a real share of reverse-keyed items, no duplicate ids or texts).
-function normalizeBigFiveItemsPayload(payload, expected) {
-  const raw = Array.isArray(payload?.items) ? payload.items : [];
-
-  const items = raw
-    .filter(
-      (i) => i && typeof i.text === "string" && i.text.trim() && BIG_FIVE_TRAITS.includes(i.trait)
-    )
-    .map((i, idx) => ({
-      id: `ai_${idx + 1}`,
-      trait: i.trait,
-      reverse: Boolean(i.reverse),
-      text: i.text.trim().slice(0, 200),
-    }));
-
-  if (items.length !== expected) {
-    throw new Error(`Expected ${expected} valid items, got ${items.length}.`);
-  }
-
-  const seenTexts = new Set();
-  for (const item of items) {
-    const key = item.text.toLowerCase();
-    if (seenTexts.has(key)) {
-      throw new Error(`Duplicate item text: "${item.text}"`);
-    }
-    seenTexts.add(key);
-  }
-
-  const perTrait = expected / BIG_FIVE_TRAITS.length;
-  for (const trait of BIG_FIVE_TRAITS) {
-    const group = items.filter((i) => i.trait === trait);
-    if (group.length !== perTrait) {
-      throw new Error(`Trait ${trait} has ${group.length} items, expected ${perTrait}.`);
-    }
-    const reversed = group.filter((i) => i.reverse).length;
-    const share = reversed / group.length;
-    if (share < 0.3 || share > 0.7) {
-      throw new Error(`Trait ${trait} reverse share ${share} outside [0.3, 0.7].`);
-    }
-  }
-
-  return items;
 }
 
 const RIASEC_TYPES = ["R", "I", "A", "S", "E", "C"];
@@ -738,31 +688,8 @@ function createAiEngine({ apiKey, model }) {
     }
   }
 
-  async function generateBigFiveItems({ depth }) {
-    // AI-generated items are the default instrument (v2); the validated
-    // static IPIP sets remain the fallback and can be forced with
-    // AI_BIG_FIVE_ITEMS=false.
-    if (!client || process.env.AI_BIG_FIVE_ITEMS === "false") {
-      return getFallbackItems(depth);
-    }
-    try {
-      const { system, user } = buildBigFiveItemsPrompt(depth);
-      const parsed = await runJsonCompletion(client, {
-        model,
-        system,
-        user,
-        temperature: 0.85,
-      });
-      return normalizeBigFiveItemsPayload(parsed, depth === "deep" ? 50 : 20);
-    } catch (error) {
-      console.error("[AI Big Five items fallback]", error.message);
-      return getFallbackItems(depth);
-    }
-  }
-
   return {
     generateRoadmap,
-    generateBigFiveItems,
     generateRiasecItems,
     inferRiasecProfile,
     generateJobCharQuestions,
@@ -777,7 +704,6 @@ function createAiEngine({ apiKey, model }) {
 
 module.exports = {
   createAiEngine,
-  normalizeBigFiveItemsPayload,
   normalizeRiasecItemsPayload,
   normalizeRiasecScoresPayload,
   normalizeJobCharQuestionsPayload,

@@ -199,28 +199,6 @@ function buildCvParsePrompt(cvText) {
   return { system, user: `CV text:\n${cvText}\n\nExtract the signal now.` };
 }
 
-function buildBigFiveItemsPrompt(depth) {
-  const count = depth === "deep" ? 50 : 20;
-  const perTrait = count / 5;
-
-  const system = [
-    "You generate Big Five (OCEAN) self-report items in the style of the IPIP item pool.",
-    "Return valid JSON only. No prose, no markdown fences, no commentary.",
-    `JSON schema: {"items":[{"id":"item_1","trait":"O|C|E|A|N","reverse":true|false,"text":"..."}]}`,
-    `Generate exactly ${count} items.`,
-    `Distribute exactly ${perTrait} items per trait across O, C, E, A, N.`,
-    "Roughly half of each trait's items should be reverse-keyed (reverse: true).",
-    "Each `text` is a first-person statement (e.g., 'I am the life of the party.', 'I rarely worry.').",
-    "Items must be answerable on a 1–5 Likert (Strongly disagree → Strongly agree).",
-    "Avoid double-barrelled or negated-twice phrasings. Keep each item under 90 characters.",
-    "Use varied phrasings per session; do not output identical wording each call.",
-  ].join(" ");
-
-  const user = `Generate ${count} Big Five items now.`;
-
-  return { system, user };
-}
-
 const { JOB_CHAR_PARAM_IDS: OUTPUT_PARAM_IDS } = require("./questionPool");
 
 const OUTPUT_SCHEMA =
@@ -326,7 +304,6 @@ function buildRoadmapPrompt({ profileDigest, direction, profession }) {
 
 module.exports = {
   buildProfileDigest,
-  buildBigFiveItemsPrompt,
   buildRiasecItemsPrompt,
   buildRiasecInferencePrompt,
   buildJobCharQuestionsPrompt,

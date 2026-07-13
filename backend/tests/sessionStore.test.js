@@ -119,10 +119,7 @@ test("serializeSessionState exposes the output loop and hides the direction era"
 test("serializeSessionState exposes question lists and answers for back-navigation", () => {
   const store = new SessionStore();
   const s = makeSession(store);
-  store.setBigFiveDepthAndItems(s, "short", [
-    { id: "bf1", text: "Item one", trait: "O", reverse: true },
-  ]);
-  store.recordBigFiveAnswer(s, "bf1", 4);
+  store.recordBigFiveAnswer(s, "mip_1", 4);
   store.setDemographicAnswer(s, "sex", "female");
 
   const snapshot = store.serializeSessionState(s, { done: false }, {}, { includeStatic: true });
@@ -133,9 +130,12 @@ test("serializeSessionState exposes question lists and answers for back-navigati
   }
   assert.deepEqual(snapshot.demographics, { sex: "female" });
 
-  // Big Five items expose only id/text — trait/reverse stay server-side.
-  assert.deepEqual(snapshot.bigFiveItems, [{ id: "bf1", text: "Item one" }]);
-  assert.deepEqual(snapshot.bigFiveAnswers, { bf1: 4 });
+  // Static items are seeded at creation; only id/text serialize —
+  // trait/reverse stay server-side.
+  assert.equal(snapshot.bigFiveItems.length, 20);
+  assert.deepEqual(snapshot.bigFiveItems[0], { id: "mip_1", text: "I am the life of the party." });
+  assert.deepEqual(snapshot.bigFiveAnswers, { mip_1: 4 });
+  assert.equal("bigFiveDepth" in snapshot, false, "depth field removed");
 
   assert.equal("valuesQuestions" in snapshot, false, "values bank is gone");
   assert.equal("valuesAnswers" in snapshot, false);

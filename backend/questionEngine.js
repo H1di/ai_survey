@@ -226,7 +226,7 @@ function buildProgress(session) {
   return {
     step: session.step,
     demographics: { answered: demographicAnswered, total: demographicTotal },
-    bigFive: { answered: bigFiveAnswered, total: bigFiveTotal, depth: session.bigFiveDepth },
+    bigFive: { answered: bigFiveAnswered, total: bigFiveTotal },
     riasec: {
       answered: Object.keys(session.riasecAnswers || {}).length,
       total: (session.riasecItems || []).length,
@@ -250,7 +250,6 @@ function summarizeAnswersForClient(session) {
   return {
     demographics: session.demographics || {},
     bigFive: {
-      depth: session.bigFiveDepth,
       scores: session.bigFiveScores,
       derivedTraits: session.derivedTraits,
     },

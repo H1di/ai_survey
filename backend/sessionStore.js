@@ -11,6 +11,7 @@ const {
   serializeJobCharItem,
 } = require("./questionEngine");
 const { deriveHigherOrder, deriveAxes } = require("./schwartzValues");
+const { MINI_IPIP_20 } = require("./bigFiveItems");
 
 const SERIALIZED_DEMOGRAPHIC_QUESTIONS = DEMOGRAPHIC_QUESTIONS.map(serializeDemographic);
 const SERIALIZED_JOURNEY_QUESTIONS = CAREER_JOURNEY_QUESTIONS.map(
@@ -111,8 +112,7 @@ class SessionStore {
       dreamAnswer,
       step: "demographics",
       demographics: {},
-      bigFiveDepth: null,
-      bigFiveItems: [],
+      bigFiveItems: MINI_IPIP_20,
       bigFiveAnswers: {},
       bigFiveScores: null,
       derivedTraits: null,
@@ -174,15 +174,6 @@ class SessionStore {
 
   advanceStep(session, nextStep) {
     session.step = nextStep;
-    this.touch(session);
-  }
-
-  setBigFiveDepthAndItems(session, depth, items) {
-    session.bigFiveDepth = depth;
-    session.bigFiveItems = items;
-    session.bigFiveAnswers = {};
-    session.bigFiveScores = null;
-    session.derivedTraits = null;
     this.touch(session);
   }
 
@@ -288,10 +279,10 @@ class SessionStore {
     this.touch(session);
   }
 
-  // includeStatic=false trims the per-answer payload: question banks and the
-  // direction catalog only travel on session start, GET (resume), and the
-  // depth choice (where bigFiveItems change). The frontend merges, so answer
-  // responses carry only the state that can actually have moved.
+  // includeStatic=false trims the per-answer payload: question banks only
+  // travel on session start, GET (resume), and riasec-start (where
+  // riasecItems change). The frontend merges, so answer responses carry only
+  // the state that can actually have moved.
   serializeSessionState(session, progress, summary, { includeStatic = true } = {}) {
     const staticPart = includeStatic
       ? {
@@ -310,7 +301,6 @@ class SessionStore {
       step: session.step,
       ...staticPart,
       demographics: session.demographics,
-      bigFiveDepth: session.bigFiveDepth,
       bigFiveAnswers: session.bigFiveAnswers,
       bigFiveScores: session.bigFiveScores,
       derivedTraits: session.derivedTraits,

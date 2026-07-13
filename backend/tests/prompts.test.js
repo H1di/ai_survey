@@ -27,7 +27,7 @@ test("direction-era and branch templates are removed, Page 2 templates kept", ()
   assert.equal(prompts.buildProfessionsPrompt, undefined);
   assert.equal(prompts.buildAnswersDigest, undefined);
   assert.equal(typeof prompts.buildProfileDigest, "function");
-  assert.equal(typeof prompts.buildBigFiveItemsPrompt, "function");
+  assert.equal(prompts.buildBigFiveItemsPrompt, undefined);
 });
 
 // --- output loop (Phase 3) ---

@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { MINI_IPIP_20, IPIP_50, getFallbackItems } = require("../bigFiveItems");
+const { MINI_IPIP_20 } = require("../bigFiveItems");
 const { computeBigFiveScores } = require("../questionEngine");
 
 const TRAITS = ["O", "C", "E", "A", "N"];
@@ -32,9 +32,9 @@ test("Mini-IPIP-20 reverse keys match the published scoring key", () => {
   assert.deepEqual(reversedIds("O"), ["mip_10", "mip_15", "mip_20"].sort());
 });
 
-test("no item text is keyed to two different traits across both sets", () => {
+test("no item text is keyed to two different traits", () => {
   const traitByText = new Map();
-  for (const item of [...MINI_IPIP_20, ...IPIP_50]) {
+  for (const item of MINI_IPIP_20) {
     const text = item.text.toLowerCase();
     if (traitByText.has(text)) {
       assert.equal(
@@ -47,28 +47,13 @@ test("no item text is keyed to two different traits across both sets", () => {
   }
 });
 
-test("IPIP-50 has 10 items per trait", () => {
-  assert.equal(IPIP_50.length, 50);
-  const groups = byTrait(IPIP_50);
+test("an all-neutral answer sheet scores 50 on every trait", () => {
+  const session = {
+    bigFiveItems: MINI_IPIP_20,
+    bigFiveAnswers: Object.fromEntries(MINI_IPIP_20.map((i) => [i.id, 3])),
+  };
+  const scores = computeBigFiveScores(session);
   for (const trait of TRAITS) {
-    assert.equal(groups[trait].length, 10, `trait ${trait} must have 10 items`);
-  }
-});
-
-test("getFallbackItems maps depth to the right set", () => {
-  assert.equal(getFallbackItems("short"), MINI_IPIP_20);
-  assert.equal(getFallbackItems("deep"), IPIP_50);
-});
-
-test("an all-neutral answer sheet scores 50 on every trait, both depths", () => {
-  for (const items of [MINI_IPIP_20, IPIP_50]) {
-    const session = {
-      bigFiveItems: items,
-      bigFiveAnswers: Object.fromEntries(items.map((i) => [i.id, 3])),
-    };
-    const scores = computeBigFiveScores(session);
-    for (const trait of TRAITS) {
-      assert.equal(scores[trait], 50, `trait ${trait} should be 50 for all-3s`);
-    }
+    assert.equal(scores[trait], 50, `trait ${trait} should be 50 for all-3s`);
   }
 });
