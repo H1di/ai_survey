@@ -102,13 +102,13 @@ class SessionStore {
     this.sweepTimer = null;
   }
 
-  createSession({ entryChoice, dreamAnswer, cvIntent }) {
+  createSession({ whyHereAnswer, dreamAnswer }) {
     const id = randomUUID();
     const now = new Date().toISOString();
 
     const session = {
       id,
-      entryChoice,
+      whyHereAnswer,
       dreamAnswer,
       step: "demographics",
       demographics: {},
@@ -117,7 +117,8 @@ class SessionStore {
       bigFiveScores: null,
       derivedTraits: null,
       personaSummary: null,
-      cvIntent: cvIntent || "new",
+      // Chosen on the CV slide via /api/cv/intent, not at session start.
+      cvIntent: null,
       cvText: null,
       cvAnalysis: null,
       riasecItems: [],
@@ -302,7 +303,7 @@ class SessionStore {
 
     return {
       sessionId: session.id,
-      entryChoice: session.entryChoice,
+      whyHereAnswer: session.whyHereAnswer,
       dreamAnswer: session.dreamAnswer,
       step: session.step,
       ...staticPart,

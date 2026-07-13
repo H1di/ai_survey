@@ -78,7 +78,7 @@ test("output detail prompt demands the four advice blocks", () => {
 // --- profile digest (Phase 1) ---
 
 const DIGEST_FIXTURE = {
-  entryChoice: "change",
+  whyHereAnswer: "I want out of my dead-end job",
   dreamAnswer: "open a bakery",
   cvIntent: "use_skills",
   demographics: { sex: "female", age: 34, country: "Poland", city: "Kraków" },
@@ -96,6 +96,8 @@ const DIGEST_FIXTURE = {
 
 test("profile digest carries city, RIASEC, ranked jobChar targets, CV signal", () => {
   const digest = prompts.buildProfileDigest(DIGEST_FIXTURE);
+  assert.match(digest, /Why they are here: "I want out of my dead-end job"/);
+  assert.ok(!/Entry intent/.test(digest), "entryChoice line is gone");
   assert.match(digest, /City: Kraków/);
   assert.match(digest, /code ASI \(measured\)/);
   assert.match(digest, /1\. Meaning \/ Impact: 95\/100/);

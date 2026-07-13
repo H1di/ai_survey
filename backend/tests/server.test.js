@@ -46,9 +46,8 @@ const RANKING = [
 // only — answer responses are trimmed, so iterate over the captured lists.
 async function walkToJobChar() {
   let { data } = await post("/api/session/start", {
-    entryChoice: "find",
+    whyHereAnswer: "figure out what fits me",
     dreamAnswer: "build useful things",
-    cvIntent: "new",
   });
   const sessionId = data.sessionId;
   const careerJourneyQuestions = data.careerJourneyQuestions;
@@ -105,7 +104,7 @@ async function completeAssessment() {
 }
 
 test("answer snapshots omit static question banks; start/GET include them", async () => {
-  let { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "trim me", cvIntent: "new" });
+  let { data } = await post("/api/session/start", { whyHereAnswer: "figure out what fits me", dreamAnswer: "trim me" });
   const sessionId = data.sessionId;
   assert.ok(data.demographicQuestions, "start carries question banks");
   assert.ok(data.careerJourneyQuestions);
@@ -122,12 +121,20 @@ test("answer snapshots omit static question banks; start/GET include them", asyn
   assert.ok(snapshot.demographicQuestions, "GET (resume) carries question banks");
 });
 
-test("session/start requires a valid cvIntent", async () => {
-  const bad = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "x" });
-  assert.equal(bad.status, 400);
-  const good = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "x", cvIntent: "use_skills" });
-  assert.equal(good.status, 200);
-  assert.equal(good.data.cvIntent, "use_skills");
+test("session/start requires both free-text answers and caps them at 500", async () => {
+  let res = await post("/api/session/start", { dreamAnswer: "x" });
+  assert.equal(res.status, 400, "whyHereAnswer required");
+  res = await post("/api/session/start", { whyHereAnswer: "   ", dreamAnswer: "x" });
+  assert.equal(res.status, 400, "blank whyHereAnswer rejected");
+  res = await post("/api/session/start", { whyHereAnswer: "y", dreamAnswer: "" });
+  assert.equal(res.status, 400, "dreamAnswer required");
+
+  const long = "w".repeat(10_000);
+  res = await post("/api/session/start", { whyHereAnswer: long, dreamAnswer: "x" });
+  assert.equal(res.status, 200);
+  assert.equal(res.data.whyHereAnswer.length, 500, "capped like dreamAnswer");
+  assert.equal("entryChoice" in res.data, false, "entryChoice gone from the snapshot");
+  assert.equal(res.data.cvIntent, null, "intent not chosen yet");
 });
 
 test("values route is gone", async () => {
@@ -139,8 +146,8 @@ test("depth era is gone: fixed instrument, no depth route, no depth fields", asy
   const res = await post("/api/session/big-five-depth", { sessionId: "x", depth: "short" });
   assert.equal(res.status, 404);
 
-  const a = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "x", cvIntent: "new" });
-  const b = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "y", cvIntent: "new" });
+  const a = await post("/api/session/start", { whyHereAnswer: "figure out what fits me", dreamAnswer: "x" });
+  const b = await post("/api/session/start", { whyHereAnswer: "figure out what fits me", dreamAnswer: "y" });
   assert.equal(a.data.bigFiveItems.length, 20);
   assert.deepEqual(a.data.bigFiveItems, b.data.bigFiveItems, "one fixed instrument for everyone");
   assert.equal(a.data.bigFiveItems[0].trait, undefined, "scoring keys never serialized");
@@ -150,7 +157,7 @@ test("depth era is gone: fixed instrument, no depth route, no depth fields", asy
 });
 
 test("step guards: riasec/jobchar/cv routes reject out-of-order calls", async () => {
-  const { data: start } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "x", cvIntent: "new" });
+  const { data: start } = await post("/api/session/start", { whyHereAnswer: "figure out what fits me", dreamAnswer: "x" });
   const sessionId = start.sessionId;
   for (const [path, body] of [
     ["/api/riasec/start", { sessionId }],
@@ -165,7 +172,7 @@ test("step guards: riasec/jobchar/cv routes reject out-of-order calls", async ()
 });
 
 test("riasec skip infers a low-confidence profile and advances", async () => {
-  let { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "x", cvIntent: "new" });
+  let { data } = await post("/api/session/start", { whyHereAnswer: "figure out what fits me", dreamAnswer: "x" });
   const sessionId = data.sessionId;
   const demoValues = { sex: "male", age: 40, country: "Testland", city: "Testville" };
   const items = data.bigFiveItems;
@@ -343,7 +350,7 @@ test("full output loop: first -> refine param -> notSuitable -> accept -> detail
 });
 
 test("output guards: ordering, XOR body, accept-once, roadmap gating", async () => {
-  const { data: start } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "x", cvIntent: "new" });
+  const { data: start } = await post("/api/session/start", { whyHereAnswer: "figure out what fits me", dreamAnswer: "x" });
   // outputs require a completed assessment
   let res = await post("/api/output/first", { sessionId: start.sessionId });
   assert.equal(res.status, 400);
@@ -412,7 +419,7 @@ test("monetization, branch, and direction-era routes are gone", async () => {
 
 test("GET /api/session/:id returns enough state to resume after a reload", async () => {
   // Start and answer one demographic, then "reload".
-  let { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "resume me", cvIntent: "use_skills" });
+  let { data } = await post("/api/session/start", { whyHereAnswer: "figure out what fits me", dreamAnswer: "resume me" });
   const sessionId = data.sessionId;
   ({ data } = await post("/api/session/demographics", { sessionId, questionId: "sex", value: "female" }));
 
@@ -422,9 +429,9 @@ test("GET /api/session/:id returns enough state to resume after a reload", async
 
   assert.equal(snapshot.sessionId, sessionId);
   assert.equal(snapshot.step, "demographics");
-  assert.equal(snapshot.entryChoice, "find");
+  assert.equal(snapshot.whyHereAnswer, "figure out what fits me");
   assert.equal(snapshot.dreamAnswer, "resume me");
-  assert.equal(snapshot.cvIntent, "use_skills");
+  assert.equal(snapshot.cvIntent, null);
   assert.ok(snapshot.demographicQuestions.length === 4, "question list present incl. city");
   assert.equal(snapshot.demographics.sex, "female", "saved answers present");
   assert.ok(Array.isArray(snapshot.careerJourneyQuestions) && snapshot.careerJourneyQuestions.length === 7);
@@ -436,12 +443,12 @@ test("GET /api/session/:id returns enough state to resume after a reload", async
 
 test("dreamAnswer is capped at 500 chars before storage and prompts", async () => {
   const long = "x".repeat(10_000);
-  const { status, data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: long, cvIntent: "new" });
+  const { status, data } = await post("/api/session/start", { whyHereAnswer: "figure out what fits me", dreamAnswer: long });
   assert.equal(status, 200);
   assert.equal(data.dreamAnswer.length, 500);
 });
 
 test("snapshots expose aiEnabled so the UI can label demo mode", async () => {
-  const { data } = await post("/api/session/start", { entryChoice: "find", dreamAnswer: "honesty", cvIntent: "new" });
+  const { data } = await post("/api/session/start", { whyHereAnswer: "figure out what fits me", dreamAnswer: "honesty" });
   assert.equal(data.aiEnabled, false, "keyless test run must report aiEnabled=false");
 });

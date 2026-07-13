@@ -16,7 +16,7 @@ const BASE_SYSTEM = [
 ].join(" ");
 
 function buildProfileDigest({
-  entryChoice,
+  whyHereAnswer,
   dreamAnswer,
   cvIntent,
   demographics,
@@ -32,7 +32,8 @@ function buildProfileDigest({
   careerJourneyAnswers,
 }) {
   const lines = [];
-  lines.push(`Entry intent: ${entryChoice}`);
+  // Old sessions predate this field — print only when present.
+  if (whyHereAnswer) lines.push(`Why they are here: "${whyHereAnswer}"`);
   lines.push(
     `Dream answer (secondary context — emotional colour, NOT a domain filter): ${dreamAnswer}`
   );

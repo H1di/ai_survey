@@ -3,20 +3,20 @@ const assert = require("node:assert/strict");
 const { SessionStore } = require("../sessionStore");
 
 function makeSession(store) {
-  return store.createSession({ entryChoice: "find", dreamAnswer: "build things", cvIntent: "new" });
+  return store.createSession({ whyHereAnswer: "figure out what fits me", dreamAnswer: "build things" });
 }
 
 test("createSession initializes v2 + output-loop fields; old models gone", () => {
   const store = new SessionStore();
   const s = makeSession(store);
   // Page 1/2 fields intact
-  assert.equal(s.entryChoice, "find");
+  assert.equal(s.whyHereAnswer, "figure out what fits me");
   assert.equal(s.dreamAnswer, "build things");
   assert.equal(s.step, "demographics");
   assert.deepEqual(s.demographics, {});
   assert.deepEqual(s.bigFiveAnswers, {});
   // v2 assessment fields
-  assert.equal(s.cvIntent, "new");
+  assert.equal(s.cvIntent, null, "intent arrives at the cv step now");
   assert.equal(s.cvText, null);
   assert.equal(s.cvAnalysis, null);
   assert.deepEqual(s.riasecItems, []);
@@ -143,9 +143,9 @@ test("serializeSessionState exposes question lists and answers for back-navigati
 
 test("createSession initializes v2 fields and serialization exposes them", () => {
   const store = new SessionStore();
-  const session = store.createSession({ entryChoice: "find", dreamAnswer: "x", cvIntent: "use_skills" });
+  const session = store.createSession({ whyHereAnswer: "x", dreamAnswer: "x" });
   assert.equal(session.step, "demographics");
-  assert.equal(session.cvIntent, "use_skills");
+  assert.equal(session.cvIntent, null);
 
   const snap = store.serializeSessionState(session, {}, {}, { includeStatic: true });
   assert.ok(Array.isArray(snap.careerJourneyQuestions) && snap.careerJourneyQuestions.length === 7);

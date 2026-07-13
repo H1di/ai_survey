@@ -9,7 +9,7 @@ const engine = createAiEngine({ apiKey: undefined, model: "test" });
 
 function fakeSession(overrides = {}) {
   return {
-    entryChoice: "find",
+    whyHereAnswer: "find my direction",
     dreamAnswer: "build things",
     cvIntent: "new",
     demographics: { age: 30, country: "Testland", city: "Testville" },

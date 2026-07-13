@@ -114,10 +114,6 @@ for (const path of [
   app.use(path, aiLimiter);
 }
 
-function isValidEntryChoice(value) {
-  return value === "change" || value === "find";
-}
-
 const AI_ENABLED = Boolean(process.env.OPENAI_API_KEY);
 
 // Single-flight guard for the AI-heavy output routes. A double-submit or a
@@ -156,27 +152,24 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.post("/api/session/start", (req, res) => {
-  const { entryChoice, dreamAnswer, cvIntent } = req.body || {};
+  const { whyHereAnswer, dreamAnswer } = req.body || {};
 
-  if (!isValidEntryChoice(entryChoice)) {
-    return res.status(400).json({ error: "entryChoice must be 'change' or 'find'." });
-  }
-  if (cvIntent !== "new" && cvIntent !== "use_skills") {
-    return res.status(400).json({ error: "cvIntent must be 'new' or 'use_skills'." });
+  // Both free-text answers are quoted inside every AI prompt — cap them.
+  const normalizedWhyHere =
+    typeof whyHereAnswer === "string" ? whyHereAnswer.trim().slice(0, 500) : "";
+  if (!normalizedWhyHere) {
+    return res.status(400).json({ error: "whyHereAnswer is required." });
   }
 
-  // Capped like feedbackText: the dream is quoted inside every AI prompt.
   const normalizedDream =
     typeof dreamAnswer === "string" ? dreamAnswer.trim().slice(0, 500) : "";
-
   if (!normalizedDream) {
     return res.status(400).json({ error: "dreamAnswer is required." });
   }
 
   const session = store.createSession({
-    entryChoice,
+    whyHereAnswer: normalizedWhyHere,
     dreamAnswer: normalizedDream,
-    cvIntent,
   });
 
   return sendSessionSnapshot(res, session, { includeStatic: true });

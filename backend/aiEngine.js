@@ -70,7 +70,7 @@ function parseJsonObject(content) {
 
 function buildSessionDigest(session) {
   return buildProfileDigest({
-    entryChoice: session.entryChoice,
+    whyHereAnswer: session.whyHereAnswer,
     dreamAnswer: session.dreamAnswer,
     cvIntent: session.cvIntent,
     demographics: session.demographics,
