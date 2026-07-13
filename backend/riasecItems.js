@@ -1,6 +1,6 @@
 // Static Holland RIASEC interest items (public-domain style, written for this
-// app). Fallback instrument when the AI item generator is unavailable —
-// activity statements rated 1–5 for enjoyment, never job titles.
+// app) — the fixed interests instrument. Activity statements rated 1–5 for
+// enjoyment, never job titles.
 
 const RIASEC_POOL = [
   // Realistic
@@ -32,14 +32,13 @@ const RIASEC_POOL = [
 const TYPE_ORDER = ["R", "I", "A", "S", "E", "C"];
 
 // Interleave R,I,A,S,E,C so same-type items never sit in a block (less
-// pattern-y for the respondent). short=2 per type, deep=3 per type.
-function getFallbackRiasecItems(depth) {
-  const perType = depth === "deep" ? 3 : 2;
+// pattern-y for the respondent). Fixed instrument: 2 per type = 12 items.
+function getStaticRiasecItems() {
   const byType = Object.fromEntries(
     TYPE_ORDER.map((t) => [t, RIASEC_POOL.filter((i) => i.type === t)])
   );
   const items = [];
-  for (let round = 0; round < perType; round += 1) {
+  for (let round = 0; round < 2; round += 1) {
     for (const type of TYPE_ORDER) {
       items.push(byType[type][round]);
     }
@@ -47,4 +46,4 @@ function getFallbackRiasecItems(depth) {
   return items.map((item, index) => ({ id: `ri_${index + 1}`, ...item }));
 }
 
-module.exports = { RIASEC_POOL, getFallbackRiasecItems };
+module.exports = { RIASEC_POOL, getStaticRiasecItems };

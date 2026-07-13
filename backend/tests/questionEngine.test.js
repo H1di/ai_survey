@@ -17,7 +17,7 @@ const {
   selectFallbackJobCharQuestions,
   CAREER_JOURNEY_QUESTIONS,
 } = require("../questionPool");
-const { getFallbackRiasecItems } = require("../riasecItems");
+const { getStaticRiasecItems } = require("../riasecItems");
 
 test("serializeRiasecItem strips the scoring type", () => {
   const item = { id: "ri_1", type: "R", text: "Fixing things" };
@@ -25,7 +25,7 @@ test("serializeRiasecItem strips the scoring type", () => {
 });
 
 test("validateRiasecAnswer rejects unknown items and out-of-range values", () => {
-  const session = { riasecItems: getFallbackRiasecItems("short"), riasecAnswers: {} };
+  const session = { riasecItems: getStaticRiasecItems(), riasecAnswers: {} };
   assert.equal(validateRiasecAnswer(session, "ri_1", 4), 4);
   assert.throws(() => validateRiasecAnswer(session, "nope", 3), /Unknown RIASEC item/);
   assert.throws(() => validateRiasecAnswer(session, "ri_1", 0), /1–5/);
@@ -33,7 +33,7 @@ test("validateRiasecAnswer rejects unknown items and out-of-range values", () =>
 });
 
 test("computeRiasecScores: null until complete, then per-type 0–100 means", () => {
-  const items = getFallbackRiasecItems("short");
+  const items = getStaticRiasecItems();
   const session = { riasecItems: items, riasecAnswers: {} };
   assert.equal(computeRiasecScores(session).scores, null);
 

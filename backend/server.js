@@ -5,6 +5,7 @@ const multer = require("multer");
 const rateLimit = require("express-rate-limit");
 const { extractCvText } = require("./cvExtract");
 const { createAiEngine } = require("./aiEngine");
+const { getStaticRiasecItems } = require("./riasecItems");
 const {
   DEMOGRAPHIC_QUESTIONS,
   CAREER_JOURNEY_QUESTIONS,
@@ -102,7 +103,6 @@ const aiLimiter = rateLimit({
   message: { error: "Too many AI requests from this address. Try again later." },
 });
 for (const path of [
-  "/api/riasec/start",
   "/api/riasec/skip",
   "/api/job-characteristics/rank",
   "/api/cv",
@@ -244,7 +244,7 @@ app.post("/api/big-five/answer", (req, res) => {
   }
 });
 
-app.post("/api/riasec/start", async (req, res) => {
+app.post("/api/riasec/start", (req, res) => {
   try {
     const { sessionId } = req.body || {};
     const session = store.require(sessionId);
@@ -252,16 +252,12 @@ app.post("/api/riasec/start", async (req, res) => {
       return res.status(400).json({ error: "Not currently in the RIASEC step." });
     }
     if (!session.riasecItems.length) {
-      const items = await aiEngine.generateRiasecItems({ depth: session.bigFiveDepth });
-      store.setRiasecItems(session, items);
+      store.setRiasecItems(session, getStaticRiasecItems());
     }
     // riasecItems just changed — one of the static-list snapshots.
     return sendSessionSnapshot(res, session, { includeStatic: true });
   } catch (error) {
-    if (!error.statusCode) console.error("[riasec/start]", error);
-    return res
-      .status(error.statusCode || 500)
-      .json({ error: error.statusCode ? error.message : "Failed to start the interests quiz." });
+    return res.status(error.statusCode || 500).json({ error: error.message });
   }
 });
 

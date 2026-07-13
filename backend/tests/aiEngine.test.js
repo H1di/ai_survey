@@ -140,25 +140,10 @@ test("normalizeOutputDetailPayload enforces 2-4 valid entries per block", () => 
 // --- v2 generators (RIASEC, job characteristics, CV) ---
 
 const {
-  normalizeRiasecItemsPayload,
   normalizeRiasecScoresPayload,
   normalizeJobCharQuestionsPayload,
   normalizeCvAnalysisPayload,
 } = require("../aiEngine");
-const { getFallbackRiasecItems } = require("../riasecItems");
-
-test("normalizeRiasecItemsPayload enforces count, per-type balance, unique texts", () => {
-  const good = { items: getFallbackRiasecItems("short").map(({ type, text }) => ({ type, text })) };
-  const items = normalizeRiasecItemsPayload(good, 12);
-  assert.equal(items.length, 12);
-  assert.deepEqual(items.map((i) => i.id), items.map((_, n) => `ri_${n + 1}`));
-
-  assert.throws(() => normalizeRiasecItemsPayload({ items: good.items.slice(0, 11) }, 12), /Expected 12/);
-  const lopsided = { items: good.items.map((i) => ({ ...i, type: "R" })) };
-  assert.throws(() => normalizeRiasecItemsPayload(lopsided, 12), /type R/);
-  const dupes = { items: good.items.map((i) => ({ ...i, text: "Same text" })) };
-  assert.throws(() => normalizeRiasecItemsPayload(dupes, 12), /Duplicate/);
-});
 
 test("normalizeRiasecScoresPayload clamps and requires all six keys", () => {
   const scores = normalizeRiasecScoresPayload({ scores: { R: -5, I: 200, A: 50.6, S: 0, E: 100, C: 33 } });
@@ -199,9 +184,7 @@ test("normalizeCvAnalysisPayload trims, caps, and requires at least one skill", 
   assert.throws(() => normalizeCvAnalysisPayload({ skills: [], domains: [], seniority: "" }), /skill/);
 });
 
-test("keyless engine: riasec items fall back to the static pool, analyzeCV to empty signal", async () => {
-  const items = await engine.generateRiasecItems({ depth: "deep" });
-  assert.equal(items.length, 18);
+test("keyless engine: analyzeCV returns the honest empty signal", async () => {
   const analysis = await engine.analyzeCV({ cvText: "whatever" });
   assert.deepEqual(analysis, { skills: [], domains: [], seniority: "" });
 });

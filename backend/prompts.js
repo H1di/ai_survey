@@ -102,20 +102,6 @@ function buildProfileDigest({
   return lines.join("\n");
 }
 
-function buildRiasecItemsPrompt(count) {
-  const perType = count / 6;
-  const system = [
-    "You generate Holland Code (RIASEC) interest items.",
-    "Return valid JSON only. No prose, no markdown fences.",
-    'JSON schema: {"items":[{"id":"riasec_1","type":"R|I|A|S|E|C","text":"..."}]}',
-    `Generate exactly ${count} items, exactly ${perType} per type, interleaved across the six types.`,
-    "Each text is a concrete activity a person rates for enjoyment on a 1–5 scale.",
-    "Use concrete activities, never job titles. Keep each item under 90 characters.",
-    "Vary phrasing per session; do not reuse canonical inventory wordings.",
-  ].join(" ");
-  return { system, user: `Generate ${count} RIASEC items now.` };
-}
-
 function buildRiasecInferencePrompt({ bigFiveScores, dreamAnswer }) {
   const system = [
     "You estimate a person's Holland RIASEC interest profile from limited signal.",
@@ -304,7 +290,6 @@ function buildRoadmapPrompt({ profileDigest, direction, profession }) {
 
 module.exports = {
   buildProfileDigest,
-  buildRiasecItemsPrompt,
   buildRiasecInferencePrompt,
   buildJobCharQuestionsPrompt,
   buildCvParsePrompt,

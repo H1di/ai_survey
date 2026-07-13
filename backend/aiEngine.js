@@ -2,7 +2,6 @@ const OpenAI = require("openai");
 const {
   buildProfileDigest,
   buildRoadmapPrompt,
-  buildRiasecItemsPrompt,
   buildRiasecInferencePrompt,
   buildJobCharQuestionsPrompt,
   buildCvParsePrompt,
@@ -21,7 +20,6 @@ const {
 } = require("./schwartzValues");
 const { selectFallbackJobCharQuestions, JOB_CHAR_PARAMS, JOB_CHAR_PARAM_IDS } = require("./questionPool");
 const { DIRECTIONS, getDirection } = require("./directions");
-const { getFallbackRiasecItems } = require("./riasecItems");
 const { rankDirections, inferRiasecScores } = require("./riasec");
 
 function cleanText(value, fallback = "") {
@@ -355,28 +353,6 @@ function normalizeRoadmapPayload(payload, profession) {
 
 const RIASEC_TYPES = ["R", "I", "A", "S", "E", "C"];
 
-function normalizeRiasecItemsPayload(payload, count) {
-  const raw = Array.isArray(payload?.items) ? payload.items : [];
-  const items = raw
-    .filter((i) => i && typeof i.text === "string" && i.text.trim() && RIASEC_TYPES.includes(i.type))
-    .map((i, idx) => ({ id: `ri_${idx + 1}`, type: i.type, text: i.text.trim().slice(0, 120) }));
-
-  if (items.length !== count) throw new Error(`Expected ${count} valid items, got ${items.length}.`);
-
-  const seen = new Set();
-  for (const item of items) {
-    const key = item.text.toLowerCase();
-    if (seen.has(key)) throw new Error(`Duplicate RIASEC item text: "${item.text}"`);
-    seen.add(key);
-  }
-  const perType = count / RIASEC_TYPES.length;
-  for (const type of RIASEC_TYPES) {
-    const n = items.filter((i) => i.type === type).length;
-    if (n !== perType) throw new Error(`Expected ${perType} items of type ${type}, got ${n}.`);
-  }
-  return items;
-}
-
 function normalizeRiasecScoresPayload(payload) {
   const raw = payload?.scores || {};
   const scores = {};
@@ -589,19 +565,6 @@ function createAiEngine({ apiKey, model }) {
     }
   }
 
-  async function generateRiasecItems({ depth }) {
-    if (!client) return getFallbackRiasecItems(depth);
-    try {
-      const count = depth === "deep" ? 18 : 12;
-      const { system, user } = buildRiasecItemsPrompt(count);
-      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.85 });
-      return normalizeRiasecItemsPayload(parsed, count);
-    } catch (error) {
-      console.error("[AI riasec items fallback]", error.message);
-      return getFallbackRiasecItems(depth);
-    }
-  }
-
   async function inferRiasecProfile({ session }) {
     if (!client) return inferRiasecScores(session.bigFiveScores);
     try {
@@ -690,7 +653,6 @@ function createAiEngine({ apiKey, model }) {
 
   return {
     generateRoadmap,
-    generateRiasecItems,
     inferRiasecProfile,
     generateJobCharQuestions,
     analyzeCV,
@@ -704,7 +666,6 @@ function createAiEngine({ apiKey, model }) {
 
 module.exports = {
   createAiEngine,
-  normalizeRiasecItemsPayload,
   normalizeRiasecScoresPayload,
   normalizeJobCharQuestionsPayload,
   normalizeCvAnalysisPayload,

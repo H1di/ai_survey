@@ -28,6 +28,7 @@ test("direction-era and branch templates are removed, Page 2 templates kept", ()
   assert.equal(prompts.buildAnswersDigest, undefined);
   assert.equal(typeof prompts.buildProfileDigest, "function");
   assert.equal(prompts.buildBigFiveItemsPrompt, undefined);
+  assert.equal(prompts.buildRiasecItemsPrompt, undefined);
 });
 
 // --- output loop (Phase 3) ---
@@ -123,13 +124,6 @@ test("digest falls back to journey summary / raw excerpt without cvAnalysis", ()
 test("inferred RIASEC is flagged low-confidence in the digest", () => {
   const digest = prompts.buildProfileDigest({ ...DIGEST_FIXTURE, riasecInferred: true });
   assert.match(digest, /code ASI \(inferred, low confidence\)/);
-});
-
-test("riasec items prompt pins count and JSON schema", () => {
-  const { system, user } = prompts.buildRiasecItemsPrompt(12);
-  assert.match(system, /exactly 12 items/);
-  assert.match(system, /"type":"R\|I\|A\|S\|E\|C"/);
-  assert.match(user, /12/);
 });
 
 test("jobChar questions prompt embeds ranking order and count", () => {
