@@ -175,6 +175,9 @@ test("v2 mutators: riasec, jobChar, cv, journey", () => {
   store.setRiasecItems(s, [{ id: "ri_1", type: "R", text: "x" }]);
   store.recordRiasecAnswer(s, "ri_1", 5);
   assert.equal(s.riasecAnswers.ri_1, 5);
+
+  store.setCvIntent(s, "use_skills");
+  assert.equal(s.cvIntent, "use_skills");
   store.setRiasecScores(s, { R: 100, I: 0, A: 0, S: 0, E: 0, C: 0 }, "RIA", { inferred: true });
   assert.equal(s.riasecCode, "RIA");
   assert.equal(s.riasecInferred, true);

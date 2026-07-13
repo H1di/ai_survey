@@ -241,6 +241,11 @@ class SessionStore {
     this.touch(session);
   }
 
+  setCvIntent(session, cvIntent) {
+    session.cvIntent = cvIntent;
+    this.touch(session);
+  }
+
   recordCareerJourneyAnswer(session, questionId, value) {
     session.careerJourneyAnswers[questionId] = value;
     this.touch(session);

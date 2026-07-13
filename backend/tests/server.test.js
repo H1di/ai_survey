@@ -91,6 +91,7 @@ async function walkToCv() {
 async function completeAssessment() {
   const walked = await walkToCv();
   const { sessionId, careerJourneyQuestions } = walked;
+  await post("/api/cv/intent", { sessionId, cvIntent: "new" });
   let data = walked.data;
   for (const q of careerJourneyQuestions) {
     ({ data } = await post("/api/cv/journey", { sessionId, questionId: q.id, value: "test answer" }));
@@ -227,6 +228,7 @@ test("jobChar answers must be one of the option values; completion computes the 
 
 test("cv with pasted text stores analysis and reaches tree", async () => {
   const { sessionId } = await walkToCv();
+  await post("/api/cv/intent", { sessionId, cvIntent: "use_skills" });
   const { data } = await post("/api/cv", { sessionId, cvText: "Nurse for 10 years, ICU team lead." });
   assert.equal(data.step, "tree");
   assert.equal(data.cvProvided, true);
@@ -239,6 +241,24 @@ test("cv with pasted text stores analysis and reaches tree", async () => {
   for (const v of Object.values(data.userValues.scores)) {
     assert.ok(v >= 0 && v <= 100);
   }
+});
+
+test("cv/intent: step guard, value validation, re-selection, snapshot carry", async () => {
+  const { data: start } = await post("/api/session/start", { whyHereAnswer: "x", dreamAnswer: "x" });
+  let res = await post("/api/cv/intent", { sessionId: start.sessionId, cvIntent: "new" });
+  assert.equal(res.status, 400, "rejected before the cv step");
+
+  const { sessionId } = await walkToCv();
+  res = await post("/api/cv/intent", { sessionId, cvIntent: "later" });
+  assert.equal(res.status, 400, "invalid value rejected");
+
+  res = await post("/api/cv/intent", { sessionId, cvIntent: "use_skills" });
+  assert.equal(res.status, 200);
+  assert.equal(res.data.cvIntent, "use_skills");
+
+  res = await post("/api/cv/intent", { sessionId, cvIntent: "new" });
+  assert.equal(res.status, 200, "re-selection allowed while on cv");
+  assert.equal(res.data.cvIntent, "new");
 });
 
 test("cv accepts a multipart .txt upload", async () => {

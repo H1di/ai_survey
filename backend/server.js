@@ -345,6 +345,25 @@ const cvUpload = multer({
   limits: { fileSize: 2 * 1024 * 1024, files: 1 },
 });
 
+// The "where should we start from" choice, made on the CV slide. Re-selection
+// while still on the cv step is allowed; not an AI route.
+app.post("/api/cv/intent", (req, res) => {
+  try {
+    const { sessionId, cvIntent } = req.body || {};
+    const session = store.require(sessionId);
+    if (session.step !== "cv") {
+      return res.status(400).json({ error: "Not currently in the CV step." });
+    }
+    if (cvIntent !== "new" && cvIntent !== "use_skills") {
+      return res.status(400).json({ error: "cvIntent must be 'new' or 'use_skills'." });
+    }
+    store.setCvIntent(session, cvIntent);
+    return sendSessionSnapshot(res, session);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ error: error.message });
+  }
+});
+
 app.post("/api/cv", cvUpload.single("file"), async (req, res) => {
   try {
     const { sessionId } = req.body || {};
