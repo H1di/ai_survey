@@ -50,12 +50,12 @@ A `session.step` state machine on the backend drives the assessment:
 entry → demographics → big_five → riasec → job_characteristics → cv → tree
 ```
 The frontend presents this as a display-only "Career Discovery Journey" rail (`JOURNEY_RAIL` in `frontend/src/lifePath.js`: intro card after entry + condensed strip in the survey header); the rail never changes execution order.
-- **Entry**: `entryChoice` (`change` | `find`) + `cvIntent` (`new` | `use_skills`) + free-text `dreamAnswer` → `POST /api/session/start`.
+- **Entry**: two required free-text answers, both capped at 500 chars — `whyHereAnswer` ("Why are you here?") + `dreamAnswer` → `POST /api/session/start`. The `cvIntent` choice (`new` | `use_skills`) is made later, on the CV slide, via `POST /api/cv/intent` (step-guarded to `cv`, re-selectable).
 - **Demographics**: 4 static questions (sex, age, country, city) from `backend/questionPool.js`. Completing them advances straight to `big_five`.
 - **Big Five**: one fixed instrument — the static public-domain `MINI_IPIP_20` (`backend/bigFiveItems.js`), seeded into the session at creation; no AI item generation, no depth choice. Likert 1–5; scoring (reverse keys, 0–100 normalization, Stability/Plasticity derivation) in `backend/questionEngine.js`.
 - **RIASEC**: one fixed instrument — 12 static enjoyment-Likert activity items (`getStaticRiasecItems` in `backend/riasecItems.js`) served by `POST /api/riasec/start`; `/api/riasec/answer` records; scored per Holland type to 0–100 + top-3 `riasecCode` in `questionEngine.js`. `/api/riasec/skip` infers a low-confidence profile from Big Five + dream instead (`riasecInferred`).
 - **Job characteristics**: user ranks the 7 canonical parameters (`compensation, work_mode, job_security, career_growth, complexity, meaning_impact, social` — `JOB_CHAR_PARAMS`) and picks depth 5|10 → `/api/job-characteristics/rank` generates single-parameter tradeoff questions (AI, static bank fallback); each option encodes a 0–100 target; answers → `jobCharProfile` (unasked params default 50).
-- **CV**: `/api/cv` accepts pasted `cvText` (JSON) or a multipart file (`.pdf`/`.docx`/`.txt`, 2 MB cap, `backend/cvExtract.js`) and AI-parses it to `{skills, domains, seniority}`; without a CV, 7 static career-journey questions via `/api/cv/journey`. Completing either advances to `tree`.
+- **CV**: the slide first asks "Where should we start from?" (`/api/cv/intent`, required in the UI before the paths unlock); then `/api/cv` accepts pasted `cvText` (JSON) or a multipart file (`.pdf`/`.docx`/`.txt`, 2 MB cap, `backend/cvExtract.js`) and AI-parses it to `{skills, domains, seniority}`; without a CV, 7 static career-journey questions via `/api/cv/journey`. Completing either advances to `tree`.
 
 ### Life Path Engine (Page 3 — output loop)
 

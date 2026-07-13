@@ -18,9 +18,8 @@ status and backlog see [`PROJECT_STATUS.md`](./PROJECT_STATUS.md).
 
 ## Product flow
 
-1. **Entry** — why you're here (`Change my career` / `Find my career`), an
-   open-ended dream prompt, and whether to build on existing skills or start
-   fresh.
+1. **Entry** — two open questions: why you're here, and what you would do if
+   you knew you would definitely succeed.
 2. **Assessment** — a server-driven `step` machine
    (`demographics → big_five → riasec → job_characteristics → cv → tree`),
    presented as one "Career Discovery Journey" rail:
@@ -103,7 +102,7 @@ cd frontend && npm test -- --run    # vitest over src/lifePath.js (13 tests)
 
 ### Session + Assessment
 - `POST /api/session/start`
-  - body: `{ "entryChoice": "change|find", "dreamAnswer": "...", "cvIntent": "new|use_skills" }`
+  - body: `{ "whyHereAnswer": "...", "dreamAnswer": "..." }` — both required, capped at 500 chars
 - `GET /api/session/:sessionId` — full session snapshot (used to resume after reload)
 - `POST /api/session/demographics`
   - body: `{ "sessionId": "...", "questionId": "sex|age|country|city", "value": ... }`
@@ -119,6 +118,8 @@ cd frontend && npm test -- --run    # vitest over src/lifePath.js (13 tests)
   - body: `{ "sessionId": "...", "ranking": [7 param ids most→least important], "depth": 5|10 }`
 - `POST /api/job-characteristics/answer`
   - body: `{ "sessionId": "...", "itemId": "...", "value": <one of the option values> }`
+- `POST /api/cv/intent`
+  - body: `{ "sessionId": "...", "cvIntent": "new|use_skills" }` — the "where should we start from" choice, made on the CV slide
 - `POST /api/cv`
   - JSON body: `{ "sessionId": "...", "cvText": "..." }` — or multipart `sessionId` + `file` (.pdf/.docx/.txt, max 2 MB)
 - `POST /api/cv/journey`

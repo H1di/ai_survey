@@ -46,7 +46,7 @@
 
 | Модуль | Что делает | Вход → Выход |
 |---|---|---|
-| `server.js` | Все 16 роутов, `trust proxy` (1 хоп в prod, `TRUST_PROXY` override), step-guard'ы, rate limiting (300/15 мин глобально, 30/15 мин AI-роуты), CORS-allowlist, multer (2 МБ), single-flight lock output/roadmap-роутов (409 на параллель), `buildScoredOutput` — единственное место агрегации Schwartz-оценок output'а | HTTP → снапшот сессии |
+| `server.js` | Все 17 роутов, `trust proxy` (1 хоп в prod, `TRUST_PROXY` override), step-guard'ы, rate limiting (300/15 мин глобально, 30/15 мин AI-роуты), CORS-allowlist, multer (2 МБ), single-flight lock output/roadmap-роутов (409 на параллель), `buildScoredOutput` — единственное место агрегации Schwartz-оценок output'а | HTTP → снапшот сессии |
 | `sessionStore.js` | In-memory `Map` сессий; TTL 24 ч, sweep раз в час (unref'd); все мутаторы (`advanceStep`, `appendOutput`, `acceptOutput`…); `serializeSessionState`. Опциональный write-through + `hydrate()` в Redis, если передан клиент | session-объект ↔ снапшот |
 | `redisClient.js` | Фабрика Upstash-клиента: возвращает `null` без `UPSTASH_REDIS_REST_URL`/`_TOKEN` (→ чистый in-memory), иначе REST-клиент для durable сессий | env → Redis-клиент \| null |
 | `questionEngine.js` | Валидация каждого типа ответа (whitelist, диапазоны) и весь скоринг: Big Five (reverse `6−raw`, нормировка `((mean−1)/4)·100`), Big Two (Stability/Plasticity), RIASEC 0–100 + топ-3 код, jobChar-профиль (неспрошенные = 50), прогресс | (session, answer) → normalized value / scores; бросает `{statusCode}`-ошибки |
@@ -87,11 +87,13 @@
 
 | Шаг | Payload |
 |---|---|
+| Старт сессии | `{whyHereAnswer, dreamAnswer}` — оба обязательны, trim + кап 500 |
 | Демография | `{sessionId, questionId: "sex"\|"age"\|"country"\|"city", value}` |
 | Big Five | `{sessionId, itemId, value: 1–5}` |
 | RIASEC | `{sessionId, itemId, value: 1–5}` |
 | JobChar ранжирование | `{sessionId, ranking: [7 id, перестановка], depth: 5\|10}` |
 | JobChar ответ | `{sessionId, itemId, value}` — value обязан равняться `value` одной из опций пункта |
+| CV intent | `{sessionId, cvIntent: "new"\|"use_skills"}` — выбирается на CV-слайде, перевыбор разрешён |
 | CV | JSON `{sessionId, cvText}` **или** multipart `sessionId` + `file` |
 | Journey | `{sessionId, questionId: "cj_…", value: string ≤400}` |
 | Refine | `{sessionId, outputId, changes: [{param, reason ≤200}]}` **XOR** `{sessionId, outputId, notSuitable: true}` |
@@ -104,11 +106,11 @@
 
 | Генератор | Схема ответа модели | Ключевые проверки нормализатора |
 |---|---|---|
-| Big Five items (t=0.85) | `{items:[{trait:"O\|C\|E\|A\|N", reverse:bool, text}]}` | ровно N пунктов, ровно N/5 на черту, reverse-доля 0.3–0.7 на черту, дедуп текстов |
-| RIASEC items (t=0.85) | `{items:[{type:"R\|I\|A\|S\|E\|C", text}]}` | ровно N, поровну на тип, дедуп, ≤120 симв. |
 | RIASEC inference (t=0.4) | `{scores:{R..C: int}}` | все 6 конечные числа, clamp 0–100 |
 | JobChar questions (t=0.8) | `{items:[{param, text, options:[{value, label}]}]}` | ровно count, param ∈ ranking, 3–4 опции, value clamp 0–100; сортировка по ранжированию |
 | CV parse (t=0.2) | `{skills:[], domains:[], seniority}` | ≥1 skill, лимиты 12/6, обрезка строк |
+| Persona summary (t=0.6) | `{summary}` | непусто, 3–5 предложений, кап 700 симв. |
+| Why this fits (t=0.6) | `{personality:[{point}×2], interests:[{point}], values:[{point}], currentSkills:[{point}×2–3], skillsToDevelop:[string×3–4]}` | жёсткие счётчики на блок, обрезка перебора, кап 220/80 симв. |
 | User values (t=0.4) | `{schwartzValues:{10 ключей: int}}` | все 10 конечные, clamp, **анти-флэт**: max−min ≥ 8 |
 | Profession values (t=0.4) | + `valuesRationale:{key: line}` | то же + rationale ≤3 строк по ≤200 симв. |
 | Oriented Field / 1st Output (t=0.8) | `{orientedField, jobTitle, thesis, parameterFit:{7 ключей}, whyFit, firstMilestone, constraintsNote}` | все 6 текстов непустые, все 7 parameterFit-строк непустые |
@@ -116,19 +118,21 @@
 | Output detail (t=0.7) | `{aiRecommendations:[{title,detail}], events:[{name,why}], universities:[{name,program}], courses:[{name,provider,why}]}` | каждый блок ≥2 валидных записей, обрезка до 4 |
 | Roadmap (t=0.7) | `{stages:[{title, description, timeframe, milestone}]}` | ≥4 стадий (обрезка до 8), title+description обязательны |
 
-Каждый content-промпт получает `buildProfileDigest`: intent, dream (с пометкой
-«не фильтр домена»), демография, OCEAN 0–100, Big Two, RIASEC-вектор + код
-(+флаг inferred), ранжированные jobChar-таргеты, CV-сигнал (парсинг / сырой
-фрагмент ≤300 симв. / journey-ответы).
+Каждый content-промпт получает `buildProfileDigest`: why-here (свободный
+текст), dream (с пометкой «не фильтр домена»), демография, OCEAN 0–100, Big
+Two, RIASEC-вектор + код (+флаг inferred), ранжированные jobChar-таргеты,
+CV-сигнал (парсинг / сырой фрагмент ≤300 симв. / journey-ответы) и intent
+(use_skills/new), когда тот уже выбран.
 
 ### 4.3 Снапшот сессии (backend → frontend)
 
-`serializeSessionState` возвращает: идентичность (`sessionId`, `entryChoice`,
-`dreamAnswer`, `step`, `pathStage`), статичные банки (только с
-`includeStatic`), все ответы и скоры (`demographics`, `bigFiveAnswers/Scores`,
-`derivedTraits`, `riasec*`, `jobChar*`, `careerJourneyAnswers`, `cvAnalysis`,
-`cvProvided`), `userValues` + предвычисленный `userValuesAxes`, `progress`,
-`summary`, output-цепочку (`outputs[]` со всеми Schwartz-полями,
+`serializeSessionState` возвращает: идентичность (`sessionId`,
+`whyHereAnswer`, `dreamAnswer`, `step`, `pathStage`), статичные банки (только
+с `includeStatic`), все ответы и скоры (`demographics`,
+`bigFiveAnswers/Scores`, `derivedTraits`, `personaSummary`, `cvIntent`,
+`riasec*`, `jobChar*`, `careerJourneyAnswers`, `cvAnalysis`, `cvProvided`),
+`userValues` + предвычисленный `userValuesAxes`, `progress`, `summary`,
+output-цепочку (`outputs[]` со всеми Schwartz-полями и `whyThisFits`,
 `acceptedOutputId`, `refinementHistory`, `roadmaps`), плюс `aiEnabled` —
 честный флаг «работает AI или demo-фоллбек». Скоринговые ключи пунктов
 (`trait`, `reverse`, `type`) в снапшот не попадают никогда.

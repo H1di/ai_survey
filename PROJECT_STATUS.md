@@ -4,7 +4,7 @@
 > обновляется (вместе с `ARCHITECTURE.md`, если меняется структура). Новые
 > файлы для логов не создаются — вся история статуса ведётся здесь.
 
-**Дата последнего обновления:** 2026-07-13 (career-discovery journey)
+**Дата последнего обновления:** 2026-07-13 (вечер — entry rework)
 
 ---
 
@@ -12,7 +12,7 @@
 
 ### Бэкенд — опросник (Pages 1–2)
 - **Session state machine** — `entry → demographics → big_five → riasec → job_characteristics → cv → tree` (`backend/server.js`, guard на каждом роуте). Во фронтенде поверх шагов лежит display-only рейл «Career Discovery Journey» (интро-карта + полоса в шапке).
-- **Entry** — `entryChoice` (change|find) + `cvIntent` (new|use_skills) + `dreamAnswer` (обрезка до 500 симв.) → `POST /api/session/start`.
+- **Entry** — два обязательных свободных вопроса: `whyHereAnswer` («Why are you here?») + `dreamAnswer`, оба trim + кап 500 → `POST /api/session/start`. Выбор `cvIntent` (new|use_skills) делается позже, на CV-слайде (`POST /api/cv/intent`, guard на `cv`-шаге, перевыбор разрешён; пути paste/upload/journey заблокированы до выбора).
 - **Демография** — 4 статичных вопроса (sex, age 13–99, country, city) с whitelist-валидацией.
 - **Big Five** — единственный фиксированный инструмент: статичный public-domain Mini-IPIP-20 (`bigFiveItems.js`), сидируется в сессию при создании; без AI-генерации и выбора глубины. Скоринг reverse + нормировка 0–100 + Big Two (Stability/Plasticity).
 - **RIASEC** — фиксированные 12 статичных activity-пунктов (`getStaticRiasecItems`), скоринг 0–100 по 6 типам + топ-3 код; skip-путь с инференсом из Big Five + dream (`riasecInferred`, low-confidence).
@@ -42,7 +42,7 @@
 - Дисклеймеры («не проф. консультация», «preliminary profile», «low confidence») на entry и в профиле.
 
 ### Тесты и CI
-- Backend: **111 тестов** (`node:test` + supertest) — все проходят (проверено 2026-07-13).
+- Backend: **112 тестов** (`node:test` + supertest) — все проходят (проверено 2026-07-13).
 - Frontend: **19 тестов** (Vitest, `lifePath.js`) — все проходят.
 - GitHub Actions CI: backend-тесты + frontend-тесты + build на push/PR в `main`.
 
@@ -50,6 +50,24 @@
 - Backend → Render free tier: `https://ai-survey-backend-3g62.onrender.com` (blueprint `render.yaml`).
 - Frontend → Vercel: `https://ai-survey-frontend-bay.vercel.app`; `frontend/vercel.json` проксирует `/api/*` на Render — фронтенд-код ходит на относительные пути.
 - Автодеплой обоих сервисов на push в `main`. Инструкция — `DEPLOY.md`.
+
+---
+
+## Сделано 2026-07-13, вечер (entry rework, ветка `feat/entry-screen-rework`)
+
+Спека: `docs/superpowers/specs/2026-07-13-entry-screen-rework-design.md`,
+план: `docs/superpowers/plans/2026-07-13-entry-screen-rework.md`.
+
+- **Entry-экран сокращён до двух свободных вопросов** — кнопки change/find
+  удалены; «Why are you here?» стал обязательной textarea (кап 500).
+  `POST /api/session/start` теперь `{whyHereAnswer, dreamAnswer}`;
+  `entryChoice` удалён из сессии и снапшота; дайджест печатает
+  `Why they are here: "<текст>"` (толерантно к старым сессиям без поля).
+- **Выбор use_skills/new переехал на CV-слайд** — новый роут
+  `POST /api/cv/intent` (guard `cv`, перевыбор разрешён, не AI-роут);
+  `createSession` стартует с `cvIntent: null`; кнопки путей CV заблокированы
+  до выбора, resume подсвечивает сохранённый интент из снапшота.
+- Регрессия: **backend 112/112**, frontend 19/19, build чистый.
 
 ---
 
