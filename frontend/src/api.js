@@ -52,13 +52,6 @@ export function submitDemographics(payload) {
   });
 }
 
-export function chooseBigFiveDepth(payload) {
-  return request("/api/session/big-five-depth", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
 export function submitBigFiveAnswer(payload) {
   return request("/api/big-five/answer", {
     method: "POST",

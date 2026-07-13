@@ -5,7 +5,6 @@ import { DetailPanel } from "./components/GraphView/NodeComponent";
 import ProfilePanel from "./components/ProfileCharts";
 import {
   acceptOutput,
-  chooseBigFiveDepth,
   fetchFirstOutput,
   fetchSession,
   generateRoadmap,
@@ -55,7 +54,6 @@ const ENJOY_LIKERT = [
 function stepHeading(step) {
   switch (step) {
     case "demographics": return "About you";
-    case "depth_choice": return "Choose depth";
     case "big_five":     return "Personality";
     case "riasec":              return "Interests";
     case "job_characteristics": return "What matters in a job";
@@ -162,37 +160,6 @@ function DemographicQuestionCard({ q, savedValue, draft, setDraft, busy, onSubmi
           </div>
         </form>
       )}
-    </div>
-  );
-}
-
-function DepthChoiceCard({ busy, onChoose }) {
-  return (
-    <div className="question-card">
-      <h3>How deep do you want to go?</h3>
-      <div className="depth-options">
-        <button
-          type="button"
-          className="depth-card"
-          onClick={() => onChoose("short")}
-          disabled={Boolean(busy)}
-        >
-          <p className="depth-title">Short</p>
-          <p className="depth-meta">20 personality questions • 3–5 minutes</p>
-          <p className="depth-meta">≈50 questions overall • ~12 minutes to your paths</p>
-        </button>
-        <button
-          type="button"
-          className="depth-card"
-          onClick={() => onChoose("deep")}
-          disabled={Boolean(busy)}
-        >
-          <p className="depth-title">Deep</p>
-          <p className="depth-meta">50 personality questions • 8–12 minutes</p>
-          <p className="depth-meta">≈90 questions overall • ~22 minutes to your paths</p>
-        </button>
-      </div>
-      {busy && <p className="depth-loading">Generating items…</p>}
     </div>
   );
 }
@@ -490,7 +457,6 @@ function App() {
   const [busy, setBusy] = useState({
     start: false,
     demo: false,
-    depth: "",
     bigFive: false,
     riasecStart: false,
     riasec: false,
@@ -513,7 +479,7 @@ function App() {
     setSessionId(data.sessionId);
     setStep(data.step);
     setProgress(data.progress || null);
-    // Static question banks only travel on start/resume/depth-choice
+    // Static question banks only travel on start/resume/riasec-start
     // snapshots; answer responses omit them, so merge instead of replacing.
     if (data.demographicQuestions) setDemographicQuestions(data.demographicQuestions);
     if (data.bigFiveItems) setBigFiveItems(data.bigFiveItems);
@@ -543,7 +509,6 @@ function App() {
       riasecScores: data.riasecScores || null,
       riasecCode: data.riasecCode || null,
       riasecInferred: Boolean(data.riasecInferred),
-      bigFiveDepth: data.bigFiveDepth || null,
       userValues: data.userValues || null,
       userValuesAxes: data.userValuesAxes || null,
     });
@@ -649,24 +614,6 @@ function App() {
     if (!prevQ) return;
     setDemoDraft(draftFromAnswer(demoAnswers[prevQ.id]));
     setDemoIndex((i) => Math.max(0, i - 1));
-  };
-
-  const handleChooseDepth = async (depth) => {
-    if (!sessionId) return;
-    setError("");
-    setBusy((p) => ({ ...p, depth }));
-    try {
-      const data = await chooseBigFiveDepth({ sessionId, depth });
-      applySessionSnapshot(data);
-      setRetryAction(null);
-      setBigFiveIndex(0);
-      setRiasecIndex(0);
-    } catch (e) {
-      setError(e.message || "Could not start Big Five.");
-      setRetryAction(() => () => handleChooseDepth(depth));
-    } finally {
-      setBusy((p) => ({ ...p, depth: "" }));
-    }
   };
 
   const handleSubmitBigFive = async (value) => {
@@ -1062,7 +1009,6 @@ function App() {
     setBusy({
       start: false,
       demo: false,
-      depth: "",
       bigFive: false,
       riasecStart: false,
       riasec: false,
@@ -1357,10 +1303,6 @@ function App() {
               canGoBack={demoIndex > 0}
               progress={{ index: demoIndex, total: demographicQuestions.length }}
             />
-          )}
-
-          {step === "depth_choice" && (
-            <DepthChoiceCard busy={busy.depth} onChoose={handleChooseDepth} />
           )}
 
           {step === "big_five" && currentBigFiveItem && (

@@ -133,7 +133,7 @@ export function RiasecBarChart({ scores, code, inferred }) {
 }
 
 export default function ProfilePanel({ profile, valuesMap, onClose }) {
-  const { bigFiveScores, derivedTraits, riasecScores, riasecCode, riasecInferred, bigFiveDepth } =
+  const { bigFiveScores, derivedTraits, riasecScores, riasecCode, riasecInferred } =
     profile || {};
 
   if (!bigFiveScores && !riasecScores) return null;
@@ -147,11 +147,9 @@ export default function ProfilePanel({ profile, valuesMap, onClose }) {
         </button>
       </div>
       <PersonalityRadarChart scores={bigFiveScores} />
-      {bigFiveDepth === "short" && (
-        <p className="profile-panel-note">
-          Based on a 20-item short screen — a rough sketch, not a measured verdict.
-        </p>
-      )}
+      <p className="profile-panel-note">
+        Based on a 20-item short screen — a rough sketch, not a measured verdict.
+      </p>
       <RiasecBarChart scores={riasecScores} code={riasecCode} inferred={riasecInferred} />
       {valuesMap && <SchwartzMap userPoint={valuesMap.userPoint} jobs={valuesMap.jobs} />}
       {derivedTraits?.summary && <p className="profile-panel-summary">{derivedTraits.summary}</p>}
