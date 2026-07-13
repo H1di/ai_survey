@@ -564,3 +564,8 @@
 @media (max-width: 600px) {
   .journey-rail-step { font-size: 11px; }
 }
+
+.cv-upload-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}

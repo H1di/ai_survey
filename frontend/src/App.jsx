@@ -8,6 +8,7 @@ import {
   fetchFirstOutput,
   fetchSession,
   generateRoadmap,
+  postCvIntent,
   refineOutput,
   skipRiasec,
   startRiasec,
@@ -32,11 +33,6 @@ import {
 } from "./lifePath";
 import "./App.css";
 import "./components/GraphView/GraphPage.css";
-
-const ENTRY_OPTIONS = [
-  { value: "change", label: "Change my career" },
-  { value: "find", label: "Find my career" },
-];
 
 const CV_INTENT_OPTIONS = [
   { value: "new", label: "Something completely new" },
@@ -273,7 +269,7 @@ function RiasecQuestionCard({ q, savedValue, busy, onSubmit, onBack, canGoBack, 
   );
 }
 
-function CvCard({ mode, setMode, cvDraft, setCvDraft, busy, onSubmitText, onUploadFile }) {
+function CvCard({ mode, setMode, cvDraft, setCvDraft, busy, intent, intentBusy, onSelectIntent, onSubmitText, onUploadFile }) {
   if (mode === "paste") {
     return (
       <div className="question-card">
@@ -303,21 +299,37 @@ function CvCard({ mode, setMode, cvDraft, setCvDraft, busy, onSubmitText, onUplo
     <div className="question-card">
       <p className="question-category">Your experience</p>
       <h3>Let's factor in what you already have.</h3>
+
+      <p className="entry-prompt">Where should we start from?</p>
+      <div className="entry-options">
+        {CV_INTENT_OPTIONS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            className={`entry-option ${intent === option.value ? "selected" : ""}`}
+            onClick={() => onSelectIntent(option.value)}
+            disabled={busy || intentBusy}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
       <div className="option-list">
-        <button type="button" className="option-button" onClick={() => setMode("paste")} disabled={busy}>
+        <button type="button" className="option-button" onClick={() => setMode("paste")} disabled={busy || !intent}>
           Paste my CV as text
         </button>
-        <label className="option-button cv-upload">
+        <label className={`option-button cv-upload ${!intent ? "cv-upload-disabled" : ""}`}>
           Upload a file (.pdf, .docx, .txt — max 2 MB)
           <input
             type="file"
             accept=".pdf,.docx,.txt"
             hidden
-            disabled={busy}
+            disabled={busy || !intent}
             onChange={(e) => e.target.files?.[0] && onUploadFile(e.target.files[0])}
           />
         </label>
-        <button type="button" className="option-button" onClick={() => setMode("journey")} disabled={busy}>
+        <button type="button" className="option-button" onClick={() => setMode("journey")} disabled={busy || !intent}>
           No CV — ask me 7 quick questions instead
         </button>
       </div>
@@ -448,7 +460,7 @@ function App() {
     Boolean(localStorage.getItem(SESSION_STORAGE_KEY))
   );
 
-  const [entryChoice, setEntryChoice] = useState("");
+  const [whyHereAnswer, setWhyHereAnswer] = useState("");
   const [dreamAnswer, setDreamAnswer] = useState("");
   const [cvIntent, setCvIntent] = useState("");
 
@@ -505,6 +517,7 @@ function App() {
     rank: false,
     jobChar: false,
     cv: false,
+    cvIntent: false,
     journey: false,
     enterTree: false,
     accept: false,
@@ -527,6 +540,7 @@ function App() {
     if (data.riasecItems) setRiasecItems(data.riasecItems);
     if (data.jobCharParams) setJobCharParams(data.jobCharParams);
     if (data.careerJourneyQuestions) setCareerJourneyQuestions(data.careerJourneyQuestions);
+    setCvIntent(data.cvIntent || "");
     setDemoAnswers(data.demographics || {});
     setBigFiveAnswers(data.bigFiveAnswers || {});
     setRiasecAnswers(data.riasecAnswers || {});
@@ -568,9 +582,7 @@ function App() {
         const data = await fetchSession(storedId);
         if (cancelled) return;
         applySessionSnapshot(data);
-        setEntryChoice(data.entryChoice || "");
         setDreamAnswer(data.dreamAnswer || "");
-        setCvIntent(data.cvIntent || "");
         setDemoIndex(firstUnansweredIndex(data.demographicQuestions || [], data.demographics));
         setBigFiveIndex(firstUnansweredIndex(data.bigFiveItems || [], data.bigFiveAnswers));
         setRiasecIndex(firstUnansweredIndex(data.riasecItems || [], data.riasecAnswers));
@@ -596,16 +608,15 @@ function App() {
   }, []);
 
   const handleStartSession = async () => {
-    if (!entryChoice || !cvIntent || !dreamAnswer.trim()) {
+    if (!whyHereAnswer.trim() || !dreamAnswer.trim()) {
       return;
     }
     setError("");
     setBusy((p) => ({ ...p, start: true }));
     try {
       const data = await startSession({
-        entryChoice,
+        whyHereAnswer: whyHereAnswer.trim(),
         dreamAnswer: dreamAnswer.trim(),
-        cvIntent,
       });
       applySessionSnapshot(data);
       localStorage.setItem(SESSION_STORAGE_KEY, data.sessionId);
@@ -771,6 +782,20 @@ function App() {
       setError(e.message || "Could not save.");
     } finally {
       setBusy((p) => ({ ...p, jobChar: false }));
+    }
+  };
+
+  const handleSelectCvIntent = async (value) => {
+    if (!sessionId) return;
+    setError("");
+    setBusy((p) => ({ ...p, cvIntent: true }));
+    try {
+      const data = await postCvIntent({ sessionId, cvIntent: value });
+      applySessionSnapshot(data);
+    } catch (e) {
+      setError(e.message || "Could not save your choice.");
+    } finally {
+      setBusy((p) => ({ ...p, cvIntent: false }));
     }
   };
 
@@ -1059,6 +1084,7 @@ function App() {
       rank: false,
       jobChar: false,
       cv: false,
+      cvIntent: false,
       journey: false,
       enterTree: false,
       accept: false,
@@ -1246,20 +1272,15 @@ function App() {
     <main className="app-shell">
       {stage === "entry" && (
         <section className="entry-screen">
-          <h1>Why are you Here?</h1>
+          <h1>Why are you here?</h1>
 
-          <div className="entry-options">
-            {ENTRY_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={`entry-option ${entryChoice === option.value ? "selected" : ""}`}
-                onClick={() => setEntryChoice(option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <textarea
+            className="dream-input"
+            value={whyHereAnswer}
+            maxLength={500}
+            onChange={(event) => setWhyHereAnswer(event.target.value)}
+            placeholder="Write your honest answer"
+          />
 
           <p className="entry-prompt">
             What would you do if you knew you would definitely succeed?
@@ -1273,25 +1294,11 @@ function App() {
             placeholder="Write your honest answer"
           />
 
-          <p className="entry-prompt">Where should we start from?</p>
-          <div className="entry-options">
-            {CV_INTENT_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={`entry-option ${cvIntent === option.value ? "selected" : ""}`}
-                onClick={() => setCvIntent(option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-
           <button
             type="button"
             className="primary-action"
             onClick={handleStartSession}
-            disabled={busy.start || !entryChoice || !cvIntent || !dreamAnswer.trim()}
+            disabled={busy.start || !whyHereAnswer.trim() || !dreamAnswer.trim()}
           >
             {busy.start ? "Entering..." : "Help to explore my career"}
           </button>
@@ -1414,6 +1421,9 @@ function App() {
               cvDraft={cvDraft}
               setCvDraft={setCvDraft}
               busy={busy.cv}
+              intent={cvIntent}
+              intentBusy={busy.cvIntent}
+              onSelectIntent={handleSelectCvIntent}
               onSubmitText={handleSubmitCvText}
               onUploadFile={handleUploadCv}
             />

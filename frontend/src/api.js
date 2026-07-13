@@ -59,6 +59,10 @@ export function submitBigFiveAnswer(payload) {
   });
 }
 
+export function postCvIntent(payload) {
+  return request("/api/cv/intent", { method: "POST", body: JSON.stringify(payload) });
+}
+
 export function startRiasec(payload) {
   return request("/api/riasec/start", { method: "POST", body: JSON.stringify(payload) });
 }
