@@ -10,6 +10,7 @@ import {
   railIndexForStep,
   bigFiveTakeaways,
   whyThisFitsSections,
+  onetSection,
 } from "./lifePath";
 
 describe("whyThisFitsSections", () => {
@@ -41,6 +42,42 @@ describe("whyThisFitsSections", () => {
       { heading: "Why this fits you", text: "legacy line" },
     ]);
     expect(whyThisFitsSections({})).toEqual([]);
+  });
+});
+
+describe("onetSection", () => {
+  const onet = {
+    soc: "29-1141.00",
+    jobZone: 3,
+    jobZoneLabel: "Medium preparation needed",
+    skills: ["Service Orientation", "Active Listening"],
+    tech: ["Epic Systems", "MEDITECH software"],
+    related: [{ soc: "29-1171.00", title: "Nurse Practitioners" }],
+    usMarket: true,
+    attribution: "This product includes information from O*NET OnLine (v30.3)… CC BY 4.0 license.",
+    salary: { annualMedian: 93600, hourlyMedian: 45 },
+    outlook: { category: "Bright", brightOutlook: true },
+  };
+
+  it("builds the real-world section with US-flagged salary and outlook", () => {
+    const section = onetSection({ onet });
+    expect(section.heading).toMatch(/O\*NET/);
+    expect(section.items.some((i) => i.includes("$93,600") && i.includes("US"))).toBe(true);
+    expect(section.items.some((i) => i.includes("Bright"))).toBe(true);
+    expect(section.items.some((i) => i.includes("Job Zone 3"))).toBe(true);
+    expect(section.items.some((i) => i.includes("Service Orientation"))).toBe(true);
+    expect(section.items.some((i) => i.includes("Epic Systems"))).toBe(true);
+    expect(section.items.some((i) => i.includes("Nurse Practitioners"))).toBe(true);
+    expect(section.footnote).toMatch(/O\*NET/);
+  });
+
+  it("omits salary/outlook lines keyless and returns null without a block", () => {
+    const { salary, outlook, ...bare } = onet;
+    const section = onetSection({ onet: bare });
+    expect(section.items.some((i) => i.includes("$"))).toBe(false);
+    expect(section.items.some((i) => i.includes("outlook"))).toBe(false);
+    expect(onetSection({})).toBe(null);
+    expect(onetSection(null)).toBe(null);
   });
 });
 

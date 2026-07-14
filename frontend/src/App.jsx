@@ -30,6 +30,7 @@ import {
   JOURNEY_RAIL,
   railIndexForStep,
   whyThisFitsSections,
+  onetSection,
 } from "./lifePath";
 import "./App.css";
 import "./components/GraphView/GraphPage.css";
@@ -421,6 +422,38 @@ function JobCharQuestionCard({ q, savedValue, busy, onSubmit, onBack, canGoBack,
   );
 }
 
+// Required by the O*NET Web Services developer terms: the "O*NET in-it"
+// badge linking to services.onetcenter.org plus the exact attribution
+// sentence with the USDOL/ETA trademark acknowledgment. Keep the wording
+// and the badge artwork as published — they are license conditions.
+function OnetAttribution() {
+  return (
+    <div className="onet-attribution">
+      <a
+        href="https://services.onetcenter.org/"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="This site incorporates information from O*NET Web Services. Click to learn more."
+      >
+        <img
+          src="https://www.onetcenter.org/image/link/onet-in-it.svg"
+          width="130"
+          height="60"
+          alt="O*NET in-it"
+        />
+      </a>
+      <p>
+        This site incorporates information from{" "}
+        <a href="https://services.onetcenter.org/" target="_blank" rel="noopener noreferrer">
+          O*NET Web Services
+        </a>{" "}
+        by the U.S. Department of Labor, Employment and Training Administration (USDOL/ETA).
+        O*NET&reg; is a trademark of USDOL/ETA.
+      </p>
+    </div>
+  );
+}
+
 // Side panel for output details and advice lists — same visual language as
 // the roadmap DetailPanel, but section-driven.
 function InfoPanel({ view, onClose }) {
@@ -442,6 +475,7 @@ function InfoPanel({ view, onClose }) {
               ))}
             </ul>
           )}
+          {section.footnote && <p className="detail-footnote">{section.footnote}</p>}
         </div>
       ))}
     </div>
@@ -916,6 +950,7 @@ function App() {
           items: jobCharParams.map((p) => output.parameterFit?.[p.id]).filter(Boolean),
         },
         output.changeSummary ? { heading: "What changed", text: output.changeSummary } : null,
+        onetSection(output),
         { heading: "First milestone", text: output.firstMilestone },
         output.valuesFit
           ? {
@@ -1166,6 +1201,20 @@ function App() {
           </p>
           <h3>{latestOutput.jobTitle}</h3>
           <p className="dock-subtext">{latestOutput.thesis}</p>
+          {(latestOutput.onet?.salary || latestOutput.onet?.outlook?.category) && (
+            <p className="dock-subtext dock-onet-line">
+              {[
+                latestOutput.onet.salary
+                  ? `$${latestOutput.onet.salary.annualMedian.toLocaleString("en-US")}/yr median (US)`
+                  : null,
+                latestOutput.onet.outlook?.category
+                  ? `outlook: ${latestOutput.onet.outlook.category}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          )}
           {latestOutput.changeSummary && (
             <p className="dock-subtext dock-change-summary">{latestOutput.changeSummary}</p>
           )}
@@ -1311,6 +1360,8 @@ function App() {
           </p>
 
           {error && <p className="error-text">{error}</p>}
+
+          <OnetAttribution />
         </section>
       )}
 

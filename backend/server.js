@@ -35,6 +35,8 @@ const {
 } = require("./questionEngine");
 const { SessionStore } = require("./sessionStore");
 const { createRedisClient } = require("./redisClient");
+const { getOccupation, getRelated, JOB_ZONE_LABELS, ONET_ATTRIBUTION } = require("./onet");
+const { createOnetApi } = require("./services/onetApi");
 
 // Tests set their own env (and force fallback by blanking the key) — skip
 // .env entirely so it can't refill a real key underneath them.
@@ -73,6 +75,10 @@ const aiEngine = createAiEngine({
   apiKey: process.env.OPENAI_API_KEY,
   model: MODEL,
 });
+
+// Optional like the OpenAI key: without ONET_API_KEY the occupation card is
+// built from the bundled snapshot alone (no US salary/outlook).
+const onetApi = createOnetApi({ apiKey: process.env.ONET_API_KEY });
 
 const CORS_ORIGINS = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
@@ -438,17 +444,41 @@ function requireCompletedAssessment(session) {
   }
 }
 
+// The real-occupation card for one output: snapshot facts always, live US
+// salary/outlook only when the O*NET key answered. Null when the output was
+// never pinned to a SOC (snapshot missing).
+function buildOnetBlock(socCode, extras) {
+  const occupation = socCode ? getOccupation(socCode) : null;
+  if (!occupation) return null;
+  return {
+    soc: occupation.soc,
+    jobZone: occupation.jobZone,
+    jobZoneLabel: JOB_ZONE_LABELS[occupation.jobZone] || null,
+    skills: occupation.skills,
+    tech: occupation.tech,
+    related: getRelated(occupation.soc),
+    usMarket: true,
+    attribution: ONET_ATTRIBUTION,
+    ...(extras?.salary ? { salary: extras.salary } : {}),
+    ...(extras?.outlook ? { outlook: extras.outlook } : {}),
+  };
+}
+
 // The single place output aggregates are computed: Schwartz-score the raw
 // output, derive poles/axes/top values, and measure fit against the user's
-// inferred value vector. The AI never outputs these numbers.
+// inferred value vector. The AI never outputs these numbers. The live O*NET
+// lookup rides the same await so its latency hides behind the AI call.
 async function buildScoredOutput(session, rawOutput) {
-  const { schwartzValues, valuesRationale } = await aiEngine.scoreProfessionValues({
-    jobTitle: rawOutput.jobTitle,
-    orientedField: rawOutput.orientedField,
-    thesis: rawOutput.thesis,
-    directionId: rawOutput.directionId,
-    jobCharProfile: session.jobCharProfile,
-  });
+  const [{ schwartzValues, valuesRationale }, onetExtras] = await Promise.all([
+    aiEngine.scoreProfessionValues({
+      jobTitle: rawOutput.jobTitle,
+      orientedField: rawOutput.orientedField,
+      thesis: rawOutput.thesis,
+      directionId: rawOutput.directionId,
+      jobCharProfile: session.jobCharProfile,
+    }),
+    onetApi.fetchCareerExtras(rawOutput.socCode),
+  ]);
   const higherOrder = deriveHigherOrder(schwartzValues);
   return {
     ...rawOutput,
@@ -461,6 +491,7 @@ async function buildScoredOutput(session, rawOutput) {
     valuesFit: session.userValues
       ? valuesFit(session.userValues.scores, schwartzValues)
       : null,
+    onet: buildOnetBlock(rawOutput.socCode, onetExtras),
     accepted: null,
     detail: null,
   };

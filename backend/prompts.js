@@ -210,19 +210,46 @@ function buildCvParsePrompt(cvText) {
 const { JOB_CHAR_PARAM_IDS: OUTPUT_PARAM_IDS } = require("./questionPool");
 
 const OUTPUT_SCHEMA =
-  '{"orientedField":"","jobTitle":"","thesis":"","parameterFit":{"compensation":"","work_mode":"","job_security":"","career_growth":"","complexity":"","meaning_impact":"","social":""},"whyFit":"","firstMilestone":"","constraintsNote":""}';
+  '{"orientedField":"","jobTitle":"","socCode":"","thesis":"","parameterFit":{"compensation":"","work_mode":"","job_security":"","career_growth":"","complexity":"","meaning_impact":"","social":""},"whyFit":"","firstMilestone":"","constraintsNote":""}';
+
+// Real O*NET occupations pre-ranked against the user's measured RIASEC
+// profile. Rendered into the user message so the model chooses from
+// evidence, not imagination.
+function shortlistLines(occupationShortlist) {
+  return occupationShortlist
+    .map((o) => `- [${o.soc}] ${o.title} — ${o.blurb}`)
+    .join("\n");
+}
+
+const SHORTLIST_RULE =
+  "The user message lists real O*NET occupations already matched to the user's measured interests. " +
+  "Pick the single best occupation FROM THIS LIST and return its code in socCode. " +
+  "jobTitle may specialize the title (seniority, niche) but must stay recognizably that occupation.";
+
+// Shared by the first-output and refinement prompts: without the explicit
+// sentence-form requirement the model degenerates parameterFit values to bare
+// numbers (observed live on refine).
+const PARAMETER_FIT_RULE =
+  "parameterFit explains the job through EACH of the 7 parameters, referencing the user's stated 0–100 targets (agreements AND honest tensions). " +
+  "One full sentence per parameter — never a bare number.";
 
 // directionHint: [{ id, label }] high-to-low from rankDirections — a grounding
 // signal, not a hard constraint. excludeFields: field families the user
 // already rejected as "not suitable overall".
-function buildOrientedFieldPrompt({ profileDigest, directionHint = [], excludeFields = [] }) {
+function buildOrientedFieldPrompt({
+  profileDigest,
+  directionHint = [],
+  excludeFields = [],
+  occupationShortlist = [],
+}) {
   const system = [
     BASE_SYSTEM,
     "Produce ONE oriented career field and a concrete resulting job.",
     "Return valid JSON only and no extra keys.",
     `JSON schema: ${OUTPUT_SCHEMA}`,
-    "parameterFit explains the job through EACH of the 7 parameters, referencing the user's stated 0–100 targets (agreements AND honest tensions).",
+    PARAMETER_FIT_RULE,
     "Ground everything in labor-market reality and the user's Big Five + RIASEC + CV signal.",
+    occupationShortlist.length ? SHORTLIST_RULE : null,
     excludeFields.length
       ? `The user already rejected these field families entirely — pick something genuinely different: ${excludeFields.join(", ")}.`
       : null,
@@ -233,20 +260,33 @@ function buildOrientedFieldPrompt({ profileDigest, directionHint = [], excludeFi
     .filter(Boolean)
     .join("\n");
 
-  const user = ["Profile:", profileDigest, "Produce the oriented field and job now."].join("\n\n");
+  const user = [
+    "Profile:",
+    profileDigest,
+    occupationShortlist.length
+      ? `Candidate occupations (best interest fit first):\n${shortlistLines(occupationShortlist)}`
+      : null,
+    "Produce the oriented field and job now.",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
   return { system, user };
 }
 
-function buildRefinementPrompt({ profileDigest, previousOutput, changes }) {
+function buildRefinementPrompt({ profileDigest, previousOutput, changes, occupationShortlist = [] }) {
   const system = [
     BASE_SYSTEM,
     "The user rejected the previous output and wants to change specific parameters.",
     "Regenerate ONE new oriented field + job that keeps everything else the same but shifts the named parameters toward the user's stated direction.",
     "Return valid JSON only and no extra keys.",
     `JSON schema: ${OUTPUT_SCHEMA.slice(0, -1)},"changeSummary":""}`,
+    PARAMETER_FIT_RULE,
     "changeSummary: 1-2 sentences on what moved and the trade-off it creates.",
     `Changeable parameters: ${OUTPUT_PARAM_IDS.join(", ")}.`,
-  ].join("\n");
+    occupationShortlist.length ? SHORTLIST_RULE : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const changeLines = changes
     .map((c) => `- ${c.param}: ${c.reason || "(no reason given)"}`)
@@ -263,7 +303,12 @@ function buildRefinementPrompt({ profileDigest, previousOutput, changes }) {
     changeLines,
     "Profile:",
     profileDigest,
-  ].join("\n\n");
+    occupationShortlist.length
+      ? `Candidate occupations (best interest fit first):\n${shortlistLines(occupationShortlist)}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   return { system, user };
 }
@@ -273,7 +318,7 @@ const WHY_THIS_FITS_SCHEMA =
 
 // Second call after an output is generated: a structured, traceable
 // explanation with fixed bullet counts so the UI renders a stable block.
-function buildWhyThisFitsPrompt({ profileDigest, output, topParamLabel }) {
+function buildWhyThisFitsPrompt({ profileDigest, output, topParamLabel, onetSkills = [] }) {
   const system = [
     "You explain why one specific job fits one specific person.",
     "Return valid JSON only and no extra keys.",
@@ -282,16 +327,24 @@ function buildWhyThisFitsPrompt({ profileDigest, output, topParamLabel }) {
     "interests: exactly 1 point tying the person's strongest Holland interest letters to the daily work.",
     `values: exactly 1 point about the person's top-ranked job priority${topParamLabel ? ` (${topParamLabel})` : ""}. If the job conflicts with that priority, say so plainly instead of hiding it.`,
     "currentSkills: 2-3 points naming skills or experience the person already reported and how each transfers.",
-    "skillsToDevelop: 3-4 short skill names (not sentences) the person should build for this job.",
+    "skillsToDevelop: 3-4 short skill names (not sentences) the person should build for this job." +
+      (onetSkills.length
+        ? " Prefer the measured O*NET core skills listed in the user message over invented ones."
+        : ""),
     "Every point must trace to a specific score, rank, or answer from the profile - never a generic claim.",
     "Plain, human words. No jargon. No passive voice. Short sentences. Start with the point.",
   ].join(" ");
   const user = [
     `Job: ${output.jobTitle} (${output.orientedField}). ${output.thesis}`,
+    onetSkills.length
+      ? `Measured O*NET core skills for this occupation: ${onetSkills.join(", ")}`
+      : null,
     "Profile:",
     profileDigest,
     "Explain why this fits now.",
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
   return { system, user };
 }
 

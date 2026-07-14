@@ -460,6 +460,30 @@
   max-width: 46ch;
 }
 
+/* O*NET Web Services license block: badge + required attribution sentence */
+.onet-attribution {
+  margin-top: 28px;
+  text-align: center;
+  max-width: 52ch;
+}
+
+.onet-attribution img {
+  width: 130px;
+  height: 60px;
+  border: none;
+}
+
+.onet-attribution p {
+  margin: 8px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--color-text-faint, #888888);
+}
+
+.onet-attribution a {
+  color: inherit;
+}
+
 /* Job-characteristics ranking list */
 .rank-list {
   list-style: none;
@@ -498,6 +522,8 @@
   font-size: 12px;
 }
 .dock-change-summary { font-style: italic; opacity: 0.85; }
+/* Live O*NET salary/outlook line on the Yes/No review card (US market data) */
+.dock-onet-line { font-size: 12px; opacity: 0.8; }
 .refine-params {
   display: flex;
   flex-direction: column;

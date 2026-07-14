@@ -482,3 +482,32 @@ test("snapshots expose aiEnabled so the UI can label demo mode", async () => {
   const { data } = await post("/api/session/start", { whyHereAnswer: "figure out what fits me", dreamAnswer: "honesty" });
   assert.equal(data.aiEnabled, false, "keyless test run must report aiEnabled=false");
 });
+
+test("every output carries a snapshot-grounded onet block; keyless has no salary", async () => {
+  const { sessionId } = await completeAssessment();
+
+  let { data } = await post("/api/output/first", { sessionId });
+  const [first] = data.outputs;
+  assert.ok(first.socCode, "output pinned to an O*NET occupation");
+  assert.ok(first.onet, "onet block attached");
+  assert.equal(first.onet.soc, first.socCode);
+  assert.ok(first.onet.jobZone >= 1 && first.onet.jobZone <= 5);
+  assert.equal(typeof first.onet.jobZoneLabel, "string");
+  assert.ok(Array.isArray(first.onet.skills));
+  assert.ok(Array.isArray(first.onet.tech));
+  assert.ok(Array.isArray(first.onet.related));
+  for (const rel of first.onet.related) {
+    assert.ok(rel.soc && rel.title, "related resolved to {soc, title}");
+  }
+  assert.equal(first.onet.usMarket, true);
+  assert.match(first.onet.attribution, /O\*NET/);
+  assert.equal(first.onet.salary, undefined, "no live key -> no salary");
+  assert.equal(first.onet.outlook, undefined, "no live key -> no outlook");
+
+  // notSuitable regenerates from a different family with a different SOC
+  ({ data } = await post("/api/output/refine", { sessionId, outputId: first.id, notSuitable: true }));
+  const second = data.outputs[1];
+  assert.ok(second.onet);
+  assert.notEqual(second.socCode, first.socCode);
+  assert.notEqual(second.directionId, first.directionId);
+});

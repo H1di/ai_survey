@@ -287,6 +287,14 @@
   line-height: 1.6;
 }
 
+/* CC-BY attribution line under the O*NET data section */
+.detail-section .detail-footnote {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--color-text-faint);
+  line-height: 1.5;
+}
+
 .detail-section ul {
   list-style: none;
   display: flex;

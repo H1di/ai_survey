@@ -226,6 +226,38 @@ export function whyThisFitsSections(output) {
   ].filter((section) => section.items.length);
 }
 
+// Maps an output's O*NET block to one InfoPanel section. Salary/outlook are
+// live-API extras (absent keyless) and always carry the US-market flag —
+// the audience is not US-only. footnote carries the CC-BY attribution.
+export function onetSection(output) {
+  const onet = output?.onet;
+  if (!onet) return null;
+  const items = [];
+  if (onet.jobZoneLabel) {
+    items.push(`Preparation: ${onet.jobZoneLabel} (Job Zone ${onet.jobZone} of 5).`);
+  }
+  if (onet.salary?.annualMedian) {
+    items.push(
+      `Median pay: $${onet.salary.annualMedian.toLocaleString("en-US")}/year — US labor market.`
+    );
+  }
+  if (onet.outlook?.category) {
+    items.push(
+      `US job outlook: ${onet.outlook.category}${onet.outlook.brightOutlook ? " — new opportunities very likely" : ""}.`
+    );
+  }
+  if (onet.skills?.length) items.push(`Core skills: ${onet.skills.join(", ")}.`);
+  if (onet.tech?.length) items.push(`Tools & technology: ${onet.tech.join(", ")}.`);
+  if (onet.related?.length) {
+    items.push(`Related occupations: ${onet.related.map((r) => r.title).join(", ")}.`);
+  }
+  return {
+    heading: "Real-world data (O*NET)",
+    items,
+    footnote: onet.attribution,
+  };
+}
+
 // Deterministic one-liners per Big Five axis. Bands match the backend's
 // describeTraits (high >= 65, low <= 35). Neuroticism is DISPLAYED as
 // Emotional Steadiness (100 - N); the stored score keeps raw N everywhere.

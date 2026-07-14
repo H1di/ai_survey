@@ -38,8 +38,9 @@ The frontend dev server proxies `/api/*` to `http://localhost:3001` (see `fronte
 `backend/.env` (copy from `backend/.env.example`):
 ```
 OPENAI_API_KEY=...      # optional — without it every AI call uses deterministic fallbacks
+ONET_API_KEY=...        # optional — adds live US salary/outlook; snapshot covers the rest
 ```
-The app must always work keyless: every AI generator in `backend/aiEngine.js` has a deterministic fallback. When touching AI paths, verify both modes.
+The app must always work keyless: every AI generator in `backend/aiEngine.js` has a deterministic fallback, and O*NET occupation data comes from the checked-in snapshot when `ONET_API_KEY` is absent. When touching AI paths, verify both modes.
 
 ## Architecture
 
@@ -60,8 +61,8 @@ The frontend presents this as a display-only "Career Discovery Journey" rail (`J
 ### Life Path Engine (Page 3 — output loop)
 
 After `tree`, a `pathStage` progression: `output → detail`. At the `cv → tree` transition the backend infers `session.userValues` (Schwartz 10-value vector, always low-confidence) and generates `session.personaSummary` (3–5 second-person sentences from Big Five scores, `generatePersonaSummary`, deterministic fallback keyless) — shown as the "Who you are" block in the profile panel next to the deterministic per-axis takeaways (`bigFiveTakeaways` in `frontend/src/lifePath.js`; Neuroticism displays as "Emotional Steadiness" = 100−N, the stored score keeps raw N).
-- `POST /api/output/first` — generates the Oriented Field + 1st Output (idempotent). Grounding: `rankDirections(riasecScores)` over the 15-direction catalog feeds the prompt as a hint; keyless fallback picks the top-ranked direction's `professionSeeds`. Every output is Schwartz-scored (`scoreProfessionValues`) and the backend derives `higherOrder/axes/dominantPole/topValues/valuesFit` in `buildScoredOutput` — the AI never outputs aggregates. A separate second AI call (`generateWhyThisFits`) then attaches `output.whyThisFits` — a structured, traceable explanation (2 personality bullets, 1 interest, 1 values, 2–3 current skills, 3–4 skills to develop); the UI renders it instead of the legacy free-text `whyFit`.
-- `POST /api/output/refine` — the No-loop: `{ outputId, changes: [{param, reason}] }` (1–7 of the 7 canonical params) shifts named parameters while holding the rest, XOR `{ outputId, notSuitable: true }` regenerates from a different field family (all used `directionId`s excluded). Each regeneration appends a parent-linked `output_N` to `session.outputs` (with its own `whyThisFits`) and logs `refinementHistory`.
+- `POST /api/output/first` — generates the Oriented Field + 1st Output (idempotent). Grounding is O*NET-based: `rankDirections(riasecScores)` picks the top-5 direction families, `rankOccupations` (`backend/onet.js`, Pearson correlation against measured O*NET RIASEC profiles) builds a 15-occupation shortlist inside them, and the AI must pick one and return its `socCode` (`resolveShortlistSoc` enforces membership: valid code → title match → shortlist top). Keyless fallback takes the best-correlated unused occupation directly (legacy `professionSeeds` only if the snapshot is missing). Every output is Schwartz-scored (`scoreProfessionValues`) and the backend derives `higherOrder/axes/dominantPole/topValues/valuesFit` in `buildScoredOutput` — the AI never outputs aggregates; the same `Promise.all` attaches `output.onet` (snapshot facts: job zone, skills, tech, related + live US salary/outlook when `ONET_API_KEY` is set). A separate second AI call (`generateWhyThisFits`) then attaches `output.whyThisFits` — a structured, traceable explanation (2 personality bullets, 1 interest, 1 values, 2–3 current skills, 3–4 skills to develop, grounded in the occupation's O*NET skills); the UI renders it instead of the legacy free-text `whyFit`.
+- `POST /api/output/refine` — the No-loop: `{ outputId, changes: [{param, reason}] }` (1–7 of the 7 canonical params) shifts named parameters while holding the rest (shortlist stays in the previous output's direction family, minus used SOCs), XOR `{ outputId, notSuitable: true }` regenerates from a different field family (all used `directionId`s excluded). Each regeneration appends a parent-linked `output_N` to `session.outputs` (with its own `whyThisFits` and `onet` block) and logs `refinementHistory`.
 - `POST /api/output/accept` — the Yes-branch: marks the output accepted (`pathStage="detail"`, accept-once) and generates the four advice blocks (`aiRecommendations/events/universities/courses`) into `output.detail`.
 - `POST /api/roadmap/generate` — `{ sessionId, outputId }`; only for the accepted output, cached in `session.roadmaps` keyed by output id.
 - `backend/schwartzValues.js` — pure Schwartz module: circular order, higher-order poles (hedonism split 50/50), plane axes, `valuesFit` (0.6 axis + 0.4 centered cosine), per-direction prototypes + deterministic fallbacks.
@@ -81,6 +82,9 @@ After `tree`, a `pathStage` progression: `output → detail`. At the `cv → tre
 - `backend/directions.js` — field-family catalog (alphabetical on purpose): prompt hints, fallback `professionSeeds`, Schwartz prototype keys
 - `backend/schwartzValues.js` — Schwartz derivations, values fit, direction prototypes, deterministic value fallbacks
 - `backend/riasec.js` — per-direction Holland weights + `rankDirections(riasecScores)` catalog ranking (direction-prompt hint); `inferRiasecScores` is the Big Five-only quiz-skip fallback
+- `backend/onet.js` — pure lookups + `rankOccupations` (Pearson) over the checked-in O*NET snapshot; exports `ONET_ATTRIBUTION` (CC-BY requirement) and `JOB_ZONE_LABELS`
+- `backend/data/onet-snapshot.json` — 923 occupations (O*NET 30.3): RIASEC profile, job zone, top skills/tech, related SOCs, `directionId`; regenerate with `node scripts/build-onet-snapshot.js <db_30_3_text dir>` (embeds the SOC→direction mapping)
+- `backend/services/onetApi.js` — optional O*NET Web Services client (`ONET_API_KEY`, X-API-Key header): live US salary/outlook per SOC, 24h in-process cache, one 429 retry; absent key or any failure = silent null
 
 ### Frontend
 
@@ -99,6 +103,8 @@ The graph is rebuilt declaratively on each render by `buildLifePathGraph` in `Ap
 - The 7 `JOB_CHAR_PARAMS` keys are a cross-layer contract (prompts, scoring, session, refine panel).
 - The 10 Schwartz value keys (`SCHWARTZ_ORDER`) are likewise shared backend ↔ frontend labels.
 - Refine payload: `{outputId, changes:[{param, reason}]}` XOR `{outputId, notSuitable: true}`.
+- `output.socCode` (O*NET-SOC) + `output.onet` (`soc/jobZone/jobZoneLabel/skills/tech/related/usMarket/attribution` + optional `salary/outlook`): the SOC must come from the prompt shortlist; salary/outlook are US-market and must stay visibly US-flagged in the UI; the attribution line must render wherever O*NET data shows.
+- **O*NET license conditions — do not remove**: the `OnetAttribution` block on the entry screen (official "O*NET in-it" badge hotlinked from onetcenter.org + the exact "This site incorporates information from O*NET Web Services… O*NET® is a trademark of USDOL/ETA." sentence) and the `ONET_ATTRIBUTION` footnote in the details panel. Wording and badge artwork are fixed by the USDOL/ETA developer terms; the API key goes only in the `X-API-Key` header, never in URLs.
 - Big Five items are serialized **without** `trait`/`reverse`; RIASEC items **without** `type` — never leak a scoring key.
 
 ## Testing

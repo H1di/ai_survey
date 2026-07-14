@@ -23,6 +23,32 @@ const {
 const { selectFallbackJobCharQuestions, JOB_CHAR_PARAMS, JOB_CHAR_PARAM_IDS } = require("./questionPool");
 const { DIRECTIONS, getDirection } = require("./directions");
 const { rankDirections, inferRiasecScores } = require("./riasec");
+const { rankOccupations, getOccupation } = require("./onet");
+
+// SOC codes already shown this session — the occupation-level analog of the
+// old seed-title dedupe.
+function usedSocs(session) {
+  return (session.outputs || []).map((o) => o.socCode).filter(Boolean);
+}
+
+function sessionRiasec(session) {
+  return session.riasecScores ?? inferRiasecScores(session.bigFiveScores);
+}
+
+// The AI must pick from the shortlist; hold it to that. Unknown/missing code
+// falls back to a title match, then to the top-ranked candidate.
+function resolveShortlistSoc(payload, shortlist) {
+  if (!Array.isArray(shortlist) || !shortlist.length) return null;
+  if (shortlist.some((o) => o.soc === payload?.socCode)) return payload.socCode;
+  const title = cleanText(payload?.jobTitle).toLowerCase();
+  const match =
+    title &&
+    shortlist.find((o) => {
+      const candidate = o.title.toLowerCase();
+      return candidate === title || candidate.includes(title) || title.includes(candidate);
+    });
+  return match ? match.soc : shortlist[0].soc;
+}
 
 function cleanText(value, fallback = "") {
   if (typeof value !== "string") {
@@ -109,10 +135,40 @@ function fallbackParameterFit(jobCharProfile) {
   return fit;
 }
 
-// Keyless oriented field: top RIASEC-ranked direction (minus excluded field
-// families), first unused profession seed inside it.
+// Shared shape for every snapshot-grounded fallback output.
+function occupationOutput(session, pick) {
+  const direction = getDirection(pick.directionId) || DIRECTIONS[0];
+  return {
+    directionId: pick.directionId,
+    socCode: pick.soc,
+    orientedField: direction.label,
+    jobTitle: pick.title,
+    thesis: pick.blurb,
+    parameterFit: fallbackParameterFit(session.jobCharProfile),
+    whyFit: `Your interest profile (${session.riasecCode || "balanced"}) correlates with the measured interests of working ${pick.title} (O*NET ${pick.soc}) — the strongest real-occupation match in the ${direction.label} family.`,
+    firstMilestone: `Spend two weeks talking to people doing this work and shadow one full day of a real ${pick.title.toLowerCase()} shift.`,
+    constraintsNote:
+      "Demo mode — matched from measured O*NET interest profiles by fixed rules; treat it as a structured starting point, not advice.",
+  };
+}
+
+// Keyless oriented field: walk RIASEC-ranked direction families (minus
+// excluded ones) and take the best-correlated unused O*NET occupation.
 function fallbackFirstOutput(session, excludeDirectionIds = []) {
-  const scores = session.riasecScores ?? inferRiasecScores(session.bigFiveScores);
+  const scores = sessionRiasec(session);
+  const ranked = rankDirections(scores, { excludeIds: excludeDirectionIds });
+  const excludeSocs = usedSocs(session);
+  for (const { id } of ranked) {
+    const [pick] = rankOccupations(scores, { directionIds: [id], excludeSocs, limit: 1 });
+    if (pick) return occupationOutput(session, pick);
+  }
+  return fallbackFirstOutputFromSeeds(session, excludeDirectionIds);
+}
+
+// Last-resort path for a missing/broken snapshot: the legacy hand-written
+// profession seeds.
+function fallbackFirstOutputFromSeeds(session, excludeDirectionIds = []) {
+  const scores = sessionRiasec(session);
   const ranked = rankDirections(scores, { excludeIds: excludeDirectionIds });
   const direction = getDirection(ranked[0]?.id) || DIRECTIONS[0];
   const usedTitles = new Set((session.outputs || []).map((o) => o.jobTitle));
@@ -133,38 +189,48 @@ function fallbackFirstOutput(session, excludeDirectionIds = []) {
 }
 
 // Keyless refinement: stay in the same field family but move to the next
-// unused seed; rewrite only the changed parameters' fit lines.
+// best-correlated unused occupation; families exhausted -> next-ranked family.
+// Rewrites only the changed parameters' fit lines.
 function fallbackRefineOutput(session, previousOutput, changes) {
-  const direction = getDirection(previousOutput.directionId) || DIRECTIONS[0];
-  const usedTitles = new Set((session.outputs || []).map((o) => o.jobTitle));
-  let seed = direction.professionSeeds.find((s) => !usedTitles.has(s.title));
-  let field = direction;
-  if (!seed) {
-    // Seeds exhausted — take the next-ranked field family instead.
-    const scores = session.riasecScores ?? inferRiasecScores(session.bigFiveScores);
-    const ranked = rankDirections(scores, { excludeIds: [direction.id] });
-    field = getDirection(ranked[0]?.id) || DIRECTIONS[0];
-    seed = field.professionSeeds.find((s) => !usedTitles.has(s.title)) || field.professionSeeds[0];
+  const scores = sessionRiasec(session);
+  const excludeSocs = usedSocs(session);
+  if (previousOutput.socCode && !excludeSocs.includes(previousOutput.socCode)) {
+    excludeSocs.push(previousOutput.socCode);
   }
 
-  const parameterFit = fallbackParameterFit(session.jobCharProfile);
-  const labelOf = new Map(JOB_CHAR_PARAMS.map((p) => [p.id, p.label]));
-  for (const change of changes) {
-    parameterFit[change.param] =
-      `${labelOf.get(change.param)}: reworked toward your note — "${change.reason || "no reason given"}".`;
+  let pick = null;
+  if (previousOutput.directionId) {
+    [pick] = rankOccupations(scores, {
+      directionIds: [previousOutput.directionId],
+      excludeSocs,
+      limit: 1,
+    });
   }
+  if (!pick) {
+    const ranked = rankDirections(scores, {
+      excludeIds: previousOutput.directionId ? [previousOutput.directionId] : [],
+    });
+    for (const { id } of ranked) {
+      [pick] = rankOccupations(scores, { directionIds: [id], excludeSocs, limit: 1 });
+      if (pick) break;
+    }
+  }
+
+  const labelOf = new Map(JOB_CHAR_PARAMS.map((p) => [p.id, p.label]));
   const changedLabels = changes.map((c) => labelOf.get(c.param)).join(", ");
 
+  const base = pick
+    ? occupationOutput(session, pick)
+    : fallbackFirstOutputFromSeeds(session, []);
+  for (const change of changes) {
+    base.parameterFit[change.param] =
+      `${labelOf.get(change.param)}: reworked toward your note — "${change.reason || "no reason given"}".`;
+  }
+
   return {
-    directionId: field.id,
-    orientedField: field.label,
-    jobTitle: seed.title,
-    thesis: seed.summary,
-    parameterFit,
-    whyFit: `Kept close to the ${field.label} family while adjusting what you flagged: ${changedLabels}.`,
+    ...base,
+    whyFit: `Kept close to the ${base.orientedField} family while adjusting what you flagged: ${changedLabels}.`,
     firstMilestone: `Compare one week in this role against the previous suggestion on exactly the parameters you changed.`,
-    constraintsNote:
-      "Demo mode — assembled from fixed rules; treat it as a structured starting point, not advice.",
     changeSummary: `Shifted ${changedLabels} while holding the rest steady — expect a trade-off elsewhere in the profile.`,
   };
 }
@@ -290,12 +356,21 @@ function fallbackWhyThisFits(session, output) {
     interests,
     values,
     currentSkills,
-    skillsToDevelop: [
-      `${output.orientedField} fundamentals`,
-      `Day-to-day tools of a ${output.jobTitle}`,
-      "A small public portfolio piece",
-    ],
+    skillsToDevelop: buildFallbackSkillsToDevelop(output),
   };
+}
+
+// Prefer the occupation's measured O*NET core skills over generic phrasing.
+function buildFallbackSkillsToDevelop(output) {
+  const onetSkills = (output.socCode && getOccupation(output.socCode)?.skills) || [];
+  if (onetSkills.length) {
+    return [...onetSkills.slice(0, 3), `Day-to-day tools of a ${output.jobTitle}`];
+  }
+  return [
+    `${output.orientedField} fundamentals`,
+    `Day-to-day tools of a ${output.jobTitle}`,
+    "A small public portfolio piece",
+  ];
 }
 
 // Deterministic "who you are" prose: the same bands describeTraits uses,
@@ -617,15 +692,21 @@ function createAiEngine({ apiKey, model }) {
       return fallbackFirstOutput(session, excludeDirectionIds);
     }
     try {
-      const scores = session.riasecScores ?? inferRiasecScores(session.bigFiveScores);
+      const scores = sessionRiasec(session);
       const ranked = rankDirections(scores, { excludeIds: excludeDirectionIds }).slice(0, 5);
       const excludeFields = excludeDirectionIds
         .map((id) => getDirection(id)?.label)
         .filter(Boolean);
+      const shortlist = rankOccupations(scores, {
+        directionIds: ranked.map((r) => r.id),
+        excludeSocs: usedSocs(session),
+        limit: 15,
+      });
       const prompts = buildOrientedFieldPrompt({
         profileDigest: buildSessionDigest(session),
         directionHint: ranked.map((r) => ({ id: r.id, label: getDirection(r.id)?.label || r.id })),
         excludeFields,
+        occupationShortlist: shortlist,
       });
       const parsed = await runJsonCompletion(client, {
         model,
@@ -634,9 +715,15 @@ function createAiEngine({ apiKey, model }) {
         temperature: 0.8,
         maxTokens: 1500,
       });
-      // Ground the Schwartz fallback + notSuitable exclusions in the closest
-      // catalog family even for AI outputs.
-      return { directionId: ranked[0]?.id || null, ...normalizeOutputPayload(parsed) };
+      // Pin the output to a real shortlist occupation; its family grounds the
+      // Schwartz fallback + notSuitable exclusions even for AI outputs.
+      const socCode = resolveShortlistSoc(parsed, shortlist);
+      const occupation = socCode ? getOccupation(socCode) : null;
+      return {
+        directionId: occupation?.directionId || ranked[0]?.id || null,
+        socCode,
+        ...normalizeOutputPayload(parsed),
+      };
     } catch (error) {
       console.error("[AI first output fallback]", error.message);
       return fallbackFirstOutput(session, excludeDirectionIds);
@@ -648,10 +735,25 @@ function createAiEngine({ apiKey, model }) {
       return fallbackRefineOutput(session, previousOutput, changes);
     }
     try {
+      const scores = sessionRiasec(session);
+      const excludeSocs = usedSocs(session);
+      // Parameter tweaks stay inside the same field family; when it runs dry
+      // the shortlist widens to every family.
+      let shortlist = previousOutput.directionId
+        ? rankOccupations(scores, {
+            directionIds: [previousOutput.directionId],
+            excludeSocs,
+            limit: 15,
+          })
+        : [];
+      if (!shortlist.length) {
+        shortlist = rankOccupations(scores, { excludeSocs, limit: 15 });
+      }
       const prompts = buildRefinementPrompt({
         profileDigest: buildSessionDigest(session),
         previousOutput,
         changes,
+        occupationShortlist: shortlist,
       });
       const parsed = await runJsonCompletion(client, {
         model,
@@ -664,7 +766,13 @@ function createAiEngine({ apiKey, model }) {
       if (!output.changeSummary) {
         output.changeSummary = "Adjusted the parameters you flagged while keeping the rest stable.";
       }
-      return { directionId: previousOutput.directionId || null, ...output };
+      const socCode = resolveShortlistSoc(parsed, shortlist);
+      const occupation = socCode ? getOccupation(socCode) : null;
+      return {
+        directionId: occupation?.directionId || previousOutput.directionId || null,
+        socCode,
+        ...output,
+      };
     } catch (error) {
       console.error("[AI refine output fallback]", error.message);
       return fallbackRefineOutput(session, previousOutput, changes);
@@ -681,6 +789,7 @@ function createAiEngine({ apiKey, model }) {
         profileDigest: buildSessionDigest(session),
         output,
         topParamLabel: session.jobCharRanking ? labelOf.get(session.jobCharRanking[0]) : "",
+        onetSkills: (output.socCode && getOccupation(output.socCode)?.skills) || [],
       });
       const parsed = await runJsonCompletion(client, {
         model,
@@ -877,5 +986,6 @@ module.exports = {
   normalizeWhyThisFitsPayload,
   normalizeSchwartzValuesPayload,
   normalizeOutputPayload,
+  resolveShortlistSoc,
   normalizeOutputDetailPayload,
 };
