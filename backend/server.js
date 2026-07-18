@@ -44,6 +44,8 @@ const { SessionStore } = require("./sessionStore");
 const { createRedisClient } = require("./redisClient");
 const { getOccupation, getRelated, JOB_ZONE_LABELS, ONET_ATTRIBUTION } = require("./onet");
 const { createOnetApi } = require("./services/onetApi");
+const { randomUUID } = require("node:crypto");
+const { logError, resolveStatus } = require("./logger");
 
 // Tests set their own env (and force fallback by blanking the key) — skip
 // .env entirely so it can't refill a real key underneath them.
@@ -90,6 +92,20 @@ const onetApi = createOnetApi({ apiKey: process.env.ONET_API_KEY });
 const CORS_ORIGINS = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
   : ["http://localhost:5173", "http://127.0.0.1:5173"];
+
+// Request-id: assign or propagate a trace id on EVERY request, mounted before
+// body parsing and rate limiting so even malformed-JSON 400s and rate-limit
+// 429s carry the X-Request-Id header. An inbound header is sanitized to a safe
+// charset and truncated; used only when the result is non-empty, else a fresh
+// UUID (an all-invalid-char header must never be echoed back as an empty id).
+app.use((req, res, next) => {
+  const raw = req.get("x-request-id");
+  const cleaned =
+    typeof raw === "string" ? raw.replace(/[^A-Za-z0-9._-]/g, "").slice(0, 64) : "";
+  req.id = cleaned || randomUUID();
+  res.setHeader("X-Request-Id", req.id);
+  next();
+});
 
 // Requests proxied by the Vite dev server are same-origin and bypass CORS,
 // so this only constrains direct cross-origin browser calls.
@@ -151,6 +167,26 @@ function releaseLock(key) {
   inFlightKeys.delete(key);
 }
 
+// Leak-safe error responders (see logger.js). `fail` is for intentional client
+// errors — our own 4xx/409 messages are safe to return verbatim. `sendError`
+// wraps route catch tails: a <500 keeps its intentional message, a 500 is
+// logged and answered with a generic fallback so internal error text never
+// reaches the client. Both attach the request id; neither double-sends.
+function fail(res, req, status, message) {
+  const code = Number.isInteger(status) && status >= 400 && status <= 599 ? status : 500;
+  return res.status(code).json({ error: message, requestId: req && req.id });
+}
+
+function sendError(res, req, error, fallbackMessage) {
+  if (res.headersSent) return;
+  const status = resolveStatus(error);
+  if (status < 500) {
+    return res.status(status).json({ error: error.message, requestId: req && req.id });
+  }
+  logError(req, error);
+  return res.status(500).json({ error: fallbackMessage, requestId: req && req.id });
+}
+
 function sendSessionSnapshot(res, session, { includeStatic = false } = {}) {
   const progress = buildProgress(session);
   const summary = summarizeAnswersForClient(session);
@@ -181,7 +217,7 @@ app.post("/api/session/start", (req, res) => {
   const normalizedDream =
     typeof dreamAnswer === "string" ? dreamAnswer.trim().slice(0, 500) : "";
   if (!normalizedDream) {
-    return res.status(400).json({ error: "dreamAnswer is required." });
+    return fail(res, req, 400, "dreamAnswer is required.");
   }
 
   const session = store.createSession({ dreamAnswer: normalizedDream });
@@ -194,7 +230,7 @@ app.get("/api/session/:sessionId", (req, res) => {
     const session = store.require(req.params.sessionId);
     return sendSessionSnapshot(res, session, { includeStatic: true });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ error: error.message });
+    return sendError(res, req, error, "Something went wrong.");
   }
 });
 
@@ -204,7 +240,7 @@ app.post("/api/session/demographics", (req, res) => {
     const session = store.require(sessionId);
 
     if (session.step !== "demographics") {
-      return res.status(400).json({ error: "Session is past the demographics step." });
+      return fail(res, req, 400, "Session is past the demographics step.");
     }
 
     const normalized = validateDemographicAnswer(questionId, value);
@@ -219,7 +255,7 @@ app.post("/api/session/demographics", (req, res) => {
 
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ error: error.message });
+    return sendError(res, req, error, "Something went wrong.");
   }
 });
 
@@ -229,7 +265,7 @@ app.post("/api/big-five/answer", (req, res) => {
     const session = store.require(sessionId);
 
     if (session.step !== "big_five") {
-      return res.status(400).json({ error: "Not currently in the Big Five step." });
+      return fail(res, req, 400, "Not currently in the Big Five step.");
     }
 
     const normalized = validateBigFiveAnswer(session, itemId, value);
@@ -247,7 +283,7 @@ app.post("/api/big-five/answer", (req, res) => {
 
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ error: error.message });
+    return sendError(res, req, error, "Something went wrong.");
   }
 });
 
@@ -256,7 +292,7 @@ app.post("/api/riasec/start", (req, res) => {
     const { sessionId } = req.body || {};
     const session = store.require(sessionId);
     if (session.step !== "riasec") {
-      return res.status(400).json({ error: "Not currently in the RIASEC step." });
+      return fail(res, req, 400, "Not currently in the RIASEC step.");
     }
     if (!session.riasecItems.length) {
       store.setRiasecItems(session, getStaticRiasecItems());
@@ -264,7 +300,7 @@ app.post("/api/riasec/start", (req, res) => {
     // riasecItems just changed — one of the static-list snapshots.
     return sendSessionSnapshot(res, session, { includeStatic: true });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ error: error.message });
+    return sendError(res, req, error, "Something went wrong.");
   }
 });
 
@@ -273,7 +309,7 @@ app.post("/api/riasec/answer", (req, res) => {
     const { sessionId, itemId, value } = req.body || {};
     const session = store.require(sessionId);
     if (session.step !== "riasec") {
-      return res.status(400).json({ error: "Not currently in the RIASEC step." });
+      return fail(res, req, 400, "Not currently in the RIASEC step.");
     }
     const normalized = validateRiasecAnswer(session, itemId, value);
     store.recordRiasecAnswer(session, itemId, normalized);
@@ -285,7 +321,7 @@ app.post("/api/riasec/answer", (req, res) => {
     }
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ error: error.message });
+    return sendError(res, req, error, "Something went wrong.");
   }
 });
 
@@ -294,17 +330,14 @@ app.post("/api/riasec/skip", async (req, res) => {
     const { sessionId } = req.body || {};
     const session = store.require(sessionId);
     if (session.step !== "riasec") {
-      return res.status(400).json({ error: "Not currently in the RIASEC step." });
+      return fail(res, req, 400, "Not currently in the RIASEC step.");
     }
     const scores = await aiEngine.inferRiasecProfile({ session });
     store.setRiasecScores(session, scores, deriveRiasecCode(scores), { inferred: true });
     store.advanceStep(session, "values");
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    if (!error.statusCode) console.error("[riasec/skip]", error);
-    return res
-      .status(error.statusCode || 500)
-      .json({ error: error.statusCode ? error.message : "Failed to estimate your interests." });
+    return sendError(res, req, error, "Failed to estimate your interests.");
   }
 });
 
@@ -315,14 +348,14 @@ app.post("/api/values/start", (req, res) => {
     const { sessionId } = req.body || {};
     const session = store.require(sessionId);
     if (session.step !== "values") {
-      return res.status(400).json({ error: "Not currently in the values step." });
+      return fail(res, req, 400, "Not currently in the values step.");
     }
     if (!session.valuesTournament) {
       store.setValuesTournament(session, startTournament(WORK_VALUES_ORDER));
     }
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ error: error.message });
+    return sendError(res, req, error, "Something went wrong.");
   }
 });
 
@@ -331,10 +364,10 @@ app.post("/api/values/answer", (req, res) => {
     const { sessionId, comparisonId, winner } = req.body || {};
     const session = store.require(sessionId);
     if (session.step !== "values") {
-      return res.status(400).json({ error: "Not currently in the values step." });
+      return fail(res, req, 400, "Not currently in the values step.");
     }
     if (!session.valuesTournament) {
-      return res.status(400).json({ error: "Tournament has not started." });
+      return fail(res, req, 400, "Tournament has not started.");
     }
     const result = recordAnswer(session.valuesTournament, { comparisonId, winner });
     // Stale/duplicate answers are a no-op: the snapshot is the single source of
@@ -342,7 +375,7 @@ app.post("/api/values/answer", (req, res) => {
     if (result.ok) store.setValuesTournament(session, result.state);
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ error: error.message });
+    return sendError(res, req, error, "Something went wrong.");
   }
 });
 
@@ -353,10 +386,10 @@ app.post("/api/values/confirm", (req, res) => {
     if (session.step !== "values") {
       // Idempotent: a double-submit after advancing just returns the snapshot.
       if (session.userValues) return sendSessionSnapshot(res, session);
-      return res.status(400).json({ error: "Not currently in the values step." });
+      return fail(res, req, 400, "Not currently in the values step.");
     }
     if (!session.valuesTournament || !finalOrder(session.valuesTournament)) {
-      return res.status(400).json({ error: "Finish the comparisons before confirming." });
+      return fail(res, req, 400, "Finish the comparisons before confirming.");
     }
     // `order` must be a permutation of the six keys (the user may have reordered
     // the tournament result in the table); default to the tournament order.
@@ -374,7 +407,7 @@ app.post("/api/values/confirm", (req, res) => {
     store.advanceStep(session, "job_characteristics");
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ error: error.message });
+    return sendError(res, req, error, "Something went wrong.");
   }
 });
 
@@ -383,23 +416,20 @@ app.post("/api/job-characteristics/rank", async (req, res) => {
     const { sessionId, ranking, depth } = req.body || {};
     const session = store.require(sessionId);
     if (session.step !== "job_characteristics") {
-      return res.status(400).json({ error: "Not currently in the job-characteristics step." });
+      return fail(res, req, 400, "Not currently in the job-characteristics step.");
     }
     if (session.jobCharItems.length) {
-      return res.status(400).json({ error: "Ranking already submitted." });
+      return fail(res, req, 400, "Ranking already submitted.");
     }
     if (depth !== 5 && depth !== 10) {
-      return res.status(400).json({ error: "depth must be 5 or 10." });
+      return fail(res, req, 400, "depth must be 5 or 10.");
     }
     const validRanking = validateJobCharRanking(ranking);
     const items = await aiEngine.generateJobCharQuestions({ session, ranking: validRanking, count: depth });
     store.setJobCharRanking(session, validRanking, depth, items);
     return sendSessionSnapshot(res, session, { includeStatic: true });
   } catch (error) {
-    if (!error.statusCode) console.error("[job-characteristics/rank]", error);
-    return res
-      .status(error.statusCode || 500)
-      .json({ error: error.statusCode ? error.message : "Failed to build your priority questions." });
+    return sendError(res, req, error, "Failed to build your priority questions.");
   }
 });
 
@@ -408,7 +438,7 @@ app.post("/api/job-characteristics/answer", (req, res) => {
     const { sessionId, itemId, value } = req.body || {};
     const session = store.require(sessionId);
     if (session.step !== "job_characteristics") {
-      return res.status(400).json({ error: "Not currently in the job-characteristics step." });
+      return fail(res, req, 400, "Not currently in the job-characteristics step.");
     }
     const normalized = validateJobCharAnswer(session, itemId, value);
     store.recordJobCharAnswer(session, itemId, normalized);
@@ -420,7 +450,7 @@ app.post("/api/job-characteristics/answer", (req, res) => {
     }
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ error: error.message });
+    return sendError(res, req, error, "Something went wrong.");
   }
 });
 
@@ -436,15 +466,15 @@ app.post("/api/cv/intent", (req, res) => {
     const { sessionId, cvIntent } = req.body || {};
     const session = store.require(sessionId);
     if (session.step !== "cv") {
-      return res.status(400).json({ error: "Not currently in the CV step." });
+      return fail(res, req, 400, "Not currently in the CV step.");
     }
     if (cvIntent !== "new" && cvIntent !== "use_skills") {
-      return res.status(400).json({ error: "cvIntent must be 'new' or 'use_skills'." });
+      return fail(res, req, 400, "cvIntent must be 'new' or 'use_skills'.");
     }
     store.setCvIntent(session, cvIntent);
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ error: error.message });
+    return sendError(res, req, error, "Something went wrong.");
   }
 });
 
@@ -453,10 +483,10 @@ app.post("/api/cv", cvUpload.single("file"), async (req, res) => {
     const { sessionId } = req.body || {};
     const session = store.require(sessionId);
     if (session.step !== "cv") {
-      return res.status(400).json({ error: "Not currently in the CV step." });
+      return fail(res, req, 400, "Not currently in the CV step.");
     }
     if (!session.cvIntent) {
-      return res.status(400).json({ error: "Choose where to start (cvIntent) first." });
+      return fail(res, req, 400, "Choose where to start (cvIntent) first.");
     }
     let rawText = typeof req.body.cvText === "string" ? req.body.cvText : "";
     if (req.file) {
@@ -464,7 +494,7 @@ app.post("/api/cv", cvUpload.single("file"), async (req, res) => {
     }
     const cvText = rawText.trim().slice(0, 6000);
     if (!cvText) {
-      return res.status(400).json({ error: "Provide cvText or upload a supported file (.pdf/.docx/.pptx/.html/.txt)." });
+      return fail(res, req, 400, "Provide cvText or upload a supported file (.pdf/.docx/.pptx/.html/.txt).");
     }
     const analysis = await aiEngine.analyzeCV({ cvText });
     store.setCvAnalysis(session, cvText, analysis);
@@ -474,10 +504,7 @@ app.post("/api/cv", cvUpload.single("file"), async (req, res) => {
     store.advanceStep(session, "summary");
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    if (!error.statusCode) console.error("[cv]", error);
-    return res
-      .status(error.statusCode || 500)
-      .json({ error: error.statusCode ? error.message : "Failed to analyse the CV." });
+    return sendError(res, req, error, "Failed to analyse the CV.");
   }
 });
 
@@ -486,10 +513,10 @@ app.post("/api/cv/journey", async (req, res) => {
     const { sessionId, questionId, value } = req.body || {};
     const session = store.require(sessionId);
     if (session.step !== "cv") {
-      return res.status(400).json({ error: "Not currently in the CV step." });
+      return fail(res, req, 400, "Not currently in the CV step.");
     }
     if (!session.cvIntent) {
-      return res.status(400).json({ error: "Choose where to start (cvIntent) first." });
+      return fail(res, req, 400, "Choose where to start (cvIntent) first.");
     }
     const normalized = validateCareerJourneyAnswer(questionId, value);
     store.recordCareerJourneyAnswer(session, questionId, normalized);
@@ -505,7 +532,7 @@ app.post("/api/cv/journey", async (req, res) => {
     }
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ error: error.message });
+    return sendError(res, req, error, "Something went wrong.");
   }
 });
 
@@ -518,12 +545,12 @@ app.post("/api/summary/continue", (req, res) => {
     if (session.step !== "summary") {
       // Idempotent: a re-submit after advancing just returns the snapshot.
       if (session.step === "tree") return sendSessionSnapshot(res, session);
-      return res.status(400).json({ error: "Not currently in the summary step." });
+      return fail(res, req, 400, "Not currently in the summary step.");
     }
     store.advanceStep(session, "tree");
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ error: error.message });
+    return sendError(res, req, error, "Something went wrong.");
   }
 });
 
@@ -609,7 +636,7 @@ app.post("/api/output/first", async (req, res) => {
   const { sessionId } = req.body || {};
   const lockKey = `${sessionId}:output`;
   if (!acquireLock(lockKey)) {
-    return res.status(409).json({ error: "Another change to this path is still processing." });
+    return fail(res, req, 409, "Another change to this path is still processing.");
   }
   try {
     const session = store.require(sessionId);
@@ -624,10 +651,7 @@ app.post("/api/output/first", async (req, res) => {
 
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    if (!error.statusCode) console.error("[output/first]", error);
-    return res
-      .status(error.statusCode || 500)
-      .json({ error: error.statusCode ? error.message : "Failed to generate your first output." });
+    return sendError(res, req, error, "Failed to generate your first output.");
   } finally {
     releaseLock(lockKey);
   }
@@ -637,30 +661,26 @@ app.post("/api/output/refine", async (req, res) => {
   const { sessionId, outputId, notSuitable, changes } = req.body || {};
   const lockKey = `${sessionId}:output`;
   if (!acquireLock(lockKey)) {
-    return res.status(409).json({ error: "Another change to this path is still processing." });
+    return fail(res, req, 409, "Another change to this path is still processing.");
   }
   try {
     const session = store.require(sessionId);
     requireCompletedAssessment(session);
 
     if (session.acceptedOutputId) {
-      return res.status(400).json({ error: "An output is already accepted." });
+      return fail(res, req, 400, "An output is already accepted.");
     }
     const previous = session.outputs.find((o) => o.id === outputId);
     if (!previous) {
-      return res.status(400).json({ error: "Unknown output." });
+      return fail(res, req, 400, "Unknown output.");
     }
 
     if (notSuitable && changes !== undefined) {
-      return res.status(400).json({
-        error: "Provide either notSuitable: true or parameter changes — not both.",
-      });
+      return fail(res, req, 400, "Provide either notSuitable: true or parameter changes — not both.");
     }
     const normalizedChanges = notSuitable ? null : validateRefineChanges(changes);
     if (!notSuitable && !normalizedChanges) {
-      return res.status(400).json({
-        error: "Provide either notSuitable: true or 1-7 valid parameter changes.",
-      });
+      return fail(res, req, 400, "Provide either notSuitable: true or 1-7 valid parameter changes.");
     }
 
     let raw;
@@ -683,10 +703,7 @@ app.post("/api/output/refine", async (req, res) => {
 
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    if (!error.statusCode) console.error("[output/refine]", error);
-    return res
-      .status(error.statusCode || 500)
-      .json({ error: error.statusCode ? error.message : "Failed to regenerate the output." });
+    return sendError(res, req, error, "Failed to regenerate the output.");
   } finally {
     releaseLock(lockKey);
   }
@@ -696,18 +713,18 @@ app.post("/api/output/accept", async (req, res) => {
   const { sessionId, outputId } = req.body || {};
   const lockKey = `${sessionId}:output`;
   if (!acquireLock(lockKey)) {
-    return res.status(409).json({ error: "Another change to this path is still processing." });
+    return fail(res, req, 409, "Another change to this path is still processing.");
   }
   try {
     const session = store.require(sessionId);
     requireCompletedAssessment(session);
 
     if (session.acceptedOutputId) {
-      return res.status(400).json({ error: "An output is already accepted." });
+      return fail(res, req, 400, "An output is already accepted.");
     }
     const output = session.outputs.find((o) => o.id === outputId);
     if (!output) {
-      return res.status(400).json({ error: "Unknown output." });
+      return fail(res, req, 400, "Unknown output.");
     }
 
     const detail = await aiEngine.generateOutputDetail({ session, output });
@@ -715,10 +732,7 @@ app.post("/api/output/accept", async (req, res) => {
 
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    if (!error.statusCode) console.error("[output/accept]", error);
-    return res
-      .status(error.statusCode || 500)
-      .json({ error: error.statusCode ? error.message : "Failed to build the advice blocks." });
+    return sendError(res, req, error, "Failed to build the advice blocks.");
   } finally {
     releaseLock(lockKey);
   }
@@ -728,13 +742,13 @@ app.post("/api/roadmap/generate", async (req, res) => {
   const { sessionId, outputId } = req.body || {};
   const lockKey = `${sessionId}:roadmap`;
   if (!acquireLock(lockKey)) {
-    return res.status(409).json({ error: "The roadmap for this output is still building." });
+    return fail(res, req, 409, "The roadmap for this output is still building.");
   }
   try {
     const session = store.require(sessionId);
 
     if (!session.acceptedOutputId || session.acceptedOutputId !== outputId) {
-      return res.status(400).json({ error: "Accept this output before building its roadmap." });
+      return fail(res, req, 400, "Accept this output before building its roadmap.");
     }
     const output = session.outputs.find((o) => o.id === outputId);
 
@@ -745,21 +759,36 @@ app.post("/api/roadmap/generate", async (req, res) => {
 
     return sendSessionSnapshot(res, session);
   } catch (error) {
-    if (!error.statusCode) console.error("[roadmap/generate]", error);
-    return res
-      .status(error.statusCode || 500)
-      .json({ error: error.statusCode ? error.message : "Failed to generate roadmap." });
+    return sendError(res, req, error, "Failed to generate roadmap.");
   } finally {
     releaseLock(lockKey);
   }
 });
 
 // Multer failures (size cap, malformed multipart) are user errors, not 500s.
-app.use((error, _req, res, next) => {
+app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
-    return res.status(400).json({ error: "File too large (max 5 MB) or malformed upload." });
+    return fail(res, req, 400, "File too large (max 5 MB) or malformed upload.");
   }
   return next(error);
+});
+
+// Final error middleware — catches framework errors that never reach a route
+// catch block (express.json parse/size failures, any stray next(error)). Keeps
+// the leak-safe contract: a body-parse error is a generic 400/413, anything
+// else a generic logged 500, always with the request id.
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
+  const status = resolveStatus(error);
+  const isBodyParse =
+    error && (error.type === "entity.parse.failed" || error instanceof SyntaxError);
+  if (status === 413 || error?.type === "entity.too.large") {
+    return fail(res, req, 413, "Request body too large.");
+  }
+  if (isBodyParse) {
+    return fail(res, req, 400, "Malformed JSON body.");
+  }
+  return sendError(res, req, error, "Something went wrong.");
 });
 
 if (require.main === module) {
@@ -778,4 +807,7 @@ if (require.main === module) {
     });
 }
 
-module.exports = { app };
+// `store` and `__locks` are exported for tests only (there is no other
+// consumer): a test can monkeypatch `store.require` to force a 500 or seed a
+// lock key to exercise the single-flight 409 path. Not part of the app's API.
+module.exports = { app, store, __locks: inFlightKeys };
