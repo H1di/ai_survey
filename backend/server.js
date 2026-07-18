@@ -757,7 +757,7 @@ app.post("/api/roadmap/generate", async (req, res) => {
 // Multer failures (size cap, malformed multipart) are user errors, not 500s.
 app.use((error, _req, res, next) => {
   if (error instanceof multer.MulterError) {
-    return res.status(400).json({ error: "File too large (max 2 MB) or malformed upload." });
+    return res.status(400).json({ error: "File too large (max 5 MB) or malformed upload." });
   }
   return next(error);
 });
