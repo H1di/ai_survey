@@ -1,16 +1,20 @@
 # Life Path Explorer
 
 Two-part web app. **Part one** is a psychological assessment
-(demographics → Big Five/OCEAN → RIASEC interests → ranked 7-parameter
-job-characteristic targets → CV or career-journey signal). **Part two** is the
-**Life Path Engine**: the assessment profile feeds AI prompts that produce an
-Oriented Field + a concrete job (the "1st Output"), explained through the 7
-parameters and scored on Schwartz Basic Human Values. The user iterates it
-through a Yes/No loop; accepting an output reveals four advice blocks plus a
-step-by-step roadmap — all rendered as an interactive React Flow graph.
+(demographics → Big Five/OCEAN → RIASEC interests → an adaptive work-values
+tournament → ranked 7-parameter job-characteristic targets → CV or
+career-journey signal). **Part two** is the **Life Path Engine**: the assessment
+profile feeds AI prompts that produce an Oriented Field + a concrete job (the
+"1st Output"), explained through the 7 parameters and scored on the six
+Minnesota / O\*NET Work Values with a fit against your confirmed values
+hierarchy. The user iterates it through a Yes/No loop; accepting an output
+reveals four advice blocks plus a step-by-step roadmap — all rendered as an
+interactive React Flow graph.
 
 Every AI call has a deterministic fallback, so the app works with **no API key**
-(demo mode). Nothing in the flow depends on OpenAI being reachable.
+(demo mode). Nothing in the flow depends on OpenAI being reachable. Real
+occupation data (RIASEC profile, job zone, skills, work values) comes from a
+checked-in O\*NET snapshot, so it works offline too.
 
 For the full technical spec (module map, JSON contracts, data-flow diagram,
 engineering assessment) see [`ARCHITECTURE.md`](./ARCHITECTURE.md); for current
@@ -18,29 +22,34 @@ status and backlog see [`PROJECT_STATUS.md`](./PROJECT_STATUS.md).
 
 ## Product flow
 
-1. **Entry** — two open questions: why you're here, and what you would do if
-   you knew you would definitely succeed.
+1. **Entry** — one open question: what you would do if you knew you would
+   definitely succeed (`dreamAnswer`, required, capped at 500 chars).
 2. **Assessment** — a server-driven `step` machine
-   (`demographics → big_five → riasec → job_characteristics → cv → tree`),
-   presented as one "Career Discovery Journey" rail:
+   (`demographics → big_five → riasec → values → job_characteristics → cv →
+   summary → tree`), presented as one "Career Discovery Journey" rail:
    - **Demographics** — sex, age, country, city.
    - **Big Five** — the fixed public-domain Mini-IPIP-20, Likert 1–5; scored to
      OCEAN 0–100 + Stability/Plasticity.
    - **RIASEC interests** — 12 fixed enjoyment-rated activities scored to a
      Holland code, or skip to infer interests from personality.
+   - **Values** — an adaptive pairwise tournament (Ford–Johnson merge-insertion,
+     ≤10 comparisons) that ranks the six work values, then a reorderable
+     hierarchy you confirm.
    - **Job characteristics** — rank the 7 parameters (compensation, work mode,
      job security, career growth, complexity, meaning/impact, social), then
      answer 5 or 10 trade-off questions that set 0–100 targets per parameter.
    - **Experience** — paste/upload a CV (`.pdf/.docx/.html/.txt`, plus `.pptx`
      with MarkItDown; max 5 MB) or answer 7 career-journey questions.
-3. **Life Path Engine** — an Oriented Field + concrete job, scored on Schwartz
-   values with a fit against your inferred value vector, plus a structured
-   "Why this fits" block that traces every bullet to your scores, ranks, and
-   answers. Say **Yes** to accept (unlocks four advice blocks + a roadmap) or
-   **No** to tune specific parameters or regenerate from a genuinely different
-   field family. Everything renders as a graph you can explore node by node,
-   with a profile panel that includes per-axis takeaways and a "Who you are"
-   summary.
+   - **Summary** — a "who you are" conclusion: a deterministic named archetype,
+     a Big Five radar, AI persona prose, and your confirmed work-values radar.
+3. **Life Path Engine** — an Oriented Field + concrete job (grounded in real
+   O\*NET occupations), scored on the six work values with a fit against your
+   confirmed hierarchy, plus a structured "Why this fits" block that traces every
+   bullet to your scores, ranks, and answers. Say **Yes** to accept (unlocks four
+   advice blocks + a roadmap) or **No** to tune specific parameters or regenerate
+   from a genuinely different field family. Everything renders as a graph you can
+   explore node by node, with a profile panel that includes per-axis takeaways
+   and a "Who you are" summary.
 
 ## Tech stack
 
@@ -48,31 +57,41 @@ status and backlog see [`PROJECT_STATUS.md`](./PROJECT_STATUS.md).
   `framer-motion`. Single page, no router; the server snapshot is the single
   source of truth.
 - **Backend** — Node.js + Express 5 (CommonJS). In-memory sessions with a TTL
-  sweep (see Limitations).
+  sweep, plus optional Upstash Redis durability (see Limitations). **Runs as a
+  single instance** — session state, the single-flight lock, and rate-limit
+  counters are process-local.
 - **AI** — OpenAI `gpt-4.1-mini`, `chat.completions` JSON mode, with a
   deterministic fallback per generator.
+- **Occupation data** — a checked-in O\*NET 30.3 snapshot (with work values
+  merged from O\*NET 28.0); optional live US salary/outlook with an `ONET_API_KEY`.
 
 ## Project structure
 
 - `frontend/` — React app: `src/App.jsx` (stage machine + all state),
   `src/api.js` (fetch wrappers), `src/lifePath.js` (graph builder),
   `src/components/GraphView/` (React Flow wrapper),
-  `src/components/ProfileCharts.jsx` + `SchwartzMap.jsx` (profile panel).
+  `src/components/ProfileCharts.jsx` (Big Five radar + RIASEC bars + work-values
+  radar).
 - `backend/` — Express API, assessment engine, AI prompt engine.
 
 Key backend modules:
-- `server.js` — routes, rate limiting, CORS allowlist, step guards
-- `sessionStore.js` — in-memory sessions + snapshot serializer
+- `server.js` — routes, rate limiting, CORS allowlist, step guards, request-id +
+  leak-safe error responders
+- `logger.js` — dependency-free structured error logging + status/route helpers
+- `sessionStore.js` — in-memory sessions (+ optional Redis) + snapshot serializer
 - `questionEngine.js` — answer validation + all scoring
 - `questionPool.js` — demographics, the 7 job-char params, journey questions
 - `bigFiveItems.js` / `riasecItems.js` — public-domain fallback item pools
+- `valuesTournament.js` — pure Ford–Johnson merge-insertion engine (≤10 comparisons)
+- `workValues.js` — the six Minnesota work values: rank curve, `valuesFit`
+  (centered cosine), per-direction prototypes
 - `cvExtract.js` — CV file → text: MarkItDown-first hybrid (pdf / docx / pptx / html / txt)
 - `services/markitdown.js` — optional MarkItDown CLI wrapper; without the binary the built-in parsers take over
 - `aiEngine.js` — one generator per AI artifact, each with a fallback
 - `prompts.js` — prompt builders + the shared profile digest
 - `directions.js` — field-family catalog (prompt grounding + fallback seeds)
 - `riasec.js` — Holland weights + direction ranking
-- `schwartzValues.js` — Schwartz derivations, values fit, direction prototypes
+- `onet.js` — snapshot lookups + `rankOccupations` (Pearson correlation)
 
 ## Run locally
 
@@ -103,15 +122,15 @@ The Vite dev server proxies `/api/*` to `http://localhost:3001`.
 ## Tests
 
 ```bash
-cd backend && npm test              # node:test + supertest (112 tests)
-cd frontend && npm test -- --run    # vitest over src/lifePath.js (13 tests)
+cd backend && npm test              # node:test + fetch (160+ tests)
+cd frontend && npm test -- --run    # vitest over src/lifePath.js (24 tests)
 ```
 
 ## API Routes
 
 ### Session + Assessment
 - `POST /api/session/start`
-  - body: `{ "whyHereAnswer": "...", "dreamAnswer": "..." }` — both required, capped at 500 chars
+  - body: `{ "dreamAnswer": "..." }` — required, capped at 500 chars
 - `GET /api/session/:sessionId` — full session snapshot (used to resume after reload)
 - `POST /api/session/demographics`
   - body: `{ "sessionId": "...", "questionId": "sex|age|country|city", "value": ... }`
@@ -123,6 +142,12 @@ cd frontend && npm test -- --run    # vitest over src/lifePath.js (13 tests)
   - body: `{ "sessionId": "...", "itemId": "...", "value": 1-5 }`
 - `POST /api/riasec/skip`
   - body: `{ "sessionId": "..." }` — infers a low-confidence interest profile instead of the quiz
+- `POST /api/values/start`
+  - body: `{ "sessionId": "..." }` — starts the pairwise tournament, returns the first A/B comparison
+- `POST /api/values/answer`
+  - body: `{ "sessionId": "...", "comparisonId": "...", "winner": "<one of the pair>" }` — a stale/duplicate comparisonId is a no-op
+- `POST /api/values/confirm`
+  - body: `{ "sessionId": "...", "order": [6 work-value keys] }` — confirms (or reorders) the hierarchy and advances
 - `POST /api/job-characteristics/rank`
   - body: `{ "sessionId": "...", "ranking": [7 param ids most→least important], "depth": 5|10 }`
 - `POST /api/job-characteristics/answer`
@@ -133,10 +158,12 @@ cd frontend && npm test -- --run    # vitest over src/lifePath.js (13 tests)
   - JSON body: `{ "sessionId": "...", "cvText": "..." }` — or multipart `sessionId` + `file` (.pdf/.docx/.pptx/.html/.txt, max 5 MB; the live list is `cvUploadFormats` in every snapshot)
 - `POST /api/cv/journey`
   - body: `{ "sessionId": "...", "questionId": "cj_...", "value": "..." }` — 7 career-journey questions when there is no CV
+- `POST /api/summary/continue`
+  - body: `{ "sessionId": "..." }` — acknowledges the character-conclusion screen and enters the Life Path Engine
 
 ### Life Path Engine (output loop)
 - `POST /api/output/first`
-  - body: `{ "sessionId": "..." }` — generates the Oriented Field + 1st Output (idempotent), Schwartz-scored with a values-fit against the user's inferred value vector
+  - body: `{ "sessionId": "..." }` — generates the Oriented Field + 1st Output (idempotent), work-values-scored with a fit against your confirmed values hierarchy
 - `POST /api/output/refine`
   - body: `{ "sessionId": "...", "outputId": "...", "changes": [{ "param": "<one of the 7>", "reason": "..." }] }` — shifts the named parameters while holding the rest
   - or: `{ "sessionId": "...", "outputId": "...", "notSuitable": true }` — regenerates from a genuinely different field family
@@ -145,12 +172,19 @@ cd frontend && npm test -- --run    # vitest over src/lifePath.js (13 tests)
 - `POST /api/roadmap/generate`
   - body: `{ "sessionId": "...", "outputId": "..." }` — ordered roadmap for the accepted output
 
+Every response carries an `X-Request-Id` header; error responses include a
+matching `requestId` in the body for tracing.
+
 ## Limitations
 
-- **Sessions are in-memory.** A backend restart, deploy, or Render free-tier
-  idle-sleep drops all active sessions; the client keeps its `sessionId` in
-  `localStorage` and resumes only while the server process is alive. Persistence
-  is on the backlog — see `PROJECT_STATUS.md`.
+- **Single instance only.** Sessions live in an in-memory `Map`; the single-flight
+  lock and rate-limit counters are process-local. Optional Upstash Redis
+  (`UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`) persists sessions
+  through a restart / Render free-tier idle-sleep as a durability mirror, but the
+  app must not be scaled to more than one instance (it logs a loud warning if
+  `WEB_CONCURRENCY > 1`). Without Redis, a restart drops all active sessions; the
+  client keeps its `sessionId` in `localStorage` and resumes while the process is
+  alive.
 - Every feature is free — there is no payment flow.
 - This is an exploratory self-reflection tool, not professional career
   counseling or a psychological assessment.

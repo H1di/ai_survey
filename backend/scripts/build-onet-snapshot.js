@@ -2,12 +2,14 @@
 // (https://www.onetcenter.org/database.html, "text" format). Run manually when
 // bumping the O*NET version — the snapshot is checked in, deploys never fetch:
 //
-//   node scripts/build-onet-snapshot.js /path/to/db_30_3_text
+//   node scripts/build-onet-snapshot.js /path/to/db_30_3_text /path/to/"Work Values.txt"
 //
-// The snapshot keeps only what the Life Path Engine needs per occupation:
-// RIASEC profile, job zone, top skills/technology, related SOCs, and the
-// mapping into the 15-direction catalog (Schwartz prototypes + notSuitable
-// exclusions run on direction families).
+// O*NET 30.3 dropped the Work Values descriptor, so the six Minnesota work
+// values are merged in by SOC from the O*NET 28.0 "Work Values.txt" (second
+// arg). The snapshot keeps only what the Life Path Engine needs per occupation:
+// RIASEC profile, job zone, top skills/technology, related SOCs, the six
+// work-value scores, and the mapping into the 15-direction catalog
+// (work-value prototypes + notSuitable exclusions run on direction families).
 const fs = require("node:fs");
 const path = require("node:path");
 const { DIRECTION_IDS } = require("../directions");

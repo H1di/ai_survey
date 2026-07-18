@@ -1,7 +1,7 @@
 // Canonical broad professional field families. Since question-engine v2 the
 // catalog is internal grounding for the Oriented Field output loop: it feeds
 // the RIASEC ranking hint in the oriented-field prompt, the deterministic
-// keyless fallbacks (professionSeeds), and the per-direction Schwartz
+// keyless fallbacks (professionSeeds), and the per-direction work-value
 // prototypes. It spans the full range of human work and stays alphabetical
 // ON PURPOSE so no domain — especially tech — is structurally favored by
 // sitting first in any deterministic walk.

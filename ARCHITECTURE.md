@@ -1,7 +1,7 @@
 # ARCHITECTURE — Life Path Explorer
 
 Постоянная техническая спецификация. Обновляется при изменении структуры
-(вместе с `PROJECT_STATUS.md`). Актуальна на 2026-07-13.
+(вместе с `PROJECT_STATUS.md`). Актуальна на 2026-07-18 (Work-Values миграция + backend-хардеринг).
 
 ---
 
@@ -35,9 +35,11 @@
   снапшотах `start` / `GET session` / `riasec/start` /
   `job-characteristics/rank` (`includeStatic`); ответные снапшоты несут только
   динамику — фронтенд мёржит, а не заменяет.
-- **AI никогда не отдаёт агрегаты.** Модель возвращает сырые баллы и тексты;
-  всё производное (Big Two, RIASEC-код, higher-order полюса Schwartz, оси,
-  valuesFit) считает бэкенд детерминированно.
+- **AI никогда не отдаёт агрегаты и не скорит ценности.** Модель возвращает
+  сырые баллы и тексты; всё производное (Big Two, RIASEC-код, work-values
+  `topValues`/`valuesFit`) считает бэкенд детерминированно. Ценности профессии
+  берутся из O*NET-снапшота (фоллбек — прототип направления), ценности
+  пользователя — из явного турнира, не из AI.
 - Дев-режим: Vite-прокси `/api → localhost:3001`; продакшен: Vercel rewrite
   `/api/* → https://ai-survey-backend-3g62.onrender.com/api/*`. Фронтенд-код в
   обоих случаях ходит на относительные пути.
@@ -46,8 +48,9 @@
 
 | Модуль | Что делает | Вход → Выход |
 |---|---|---|
-| `server.js` | Все 17 роутов, `trust proxy` (1 хоп в prod, `TRUST_PROXY` override), step-guard'ы, rate limiting (300/15 мин глобально, 30/15 мин AI-роуты), CORS-allowlist, multer (5 МБ), single-flight lock output/roadmap-роутов (409 на параллель), `buildScoredOutput` — единственное место агрегации Schwartz-оценок output'а | HTTP → снапшот сессии |
-| `sessionStore.js` | In-memory `Map` сессий; TTL 24 ч, sweep раз в час (unref'd); все мутаторы (`advanceStep`, `appendOutput`, `acceptOutput`…); `serializeSessionState`. Опциональный write-through + `hydrate()` в Redis, если передан клиент | session-объект ↔ снапшот |
+| `server.js` | Все 21 роут, `trust proxy` (1 хоп в prod, `TRUST_PROXY` override), request-id middleware + leak-safe `fail`/`sendError` (см. `logger.js`), step-guard'ы, rate limiting (300/15 мин глобально, 30/15 мин AI-роуты), CORS-allowlist, multer (5 МБ), single-flight lock output/roadmap/cv-роутов (409 на параллель), `buildScoredOutput` — единственное место агрегации work-values оценок output'а. **Один инстанс** (Map/лок/лимиты — process-local) | HTTP → снапшот сессии |
+| `logger.js` | Бездеп-логгер ошибок: `logError` — одна JSON-строка на ≥500 (route-шаблон / UUID-редакция, чтобы id сессии не утёк), `resolveStatus` (clamp 400..599) | (req, err) → лог |
+| `sessionStore.js` | In-memory `Map` сессий (авторитетный process-local набор — **один инстанс**); TTL 24 ч, sweep раз в час (unref'd); все мутаторы (`advanceStep`, `appendOutput`, `acceptOutput`, `finalizeValues`…); `serializeSessionState`; `schemaVersion` + миграция несовместимых сессий на `hydrate()`. Опциональный write-through + `hydrate()` в Redis, если передан клиент | session-объект ↔ снапшот |
 | `redisClient.js` | Фабрика Upstash-клиента: возвращает `null` без `UPSTASH_REDIS_REST_URL`/`_TOKEN` (→ чистый in-memory), иначе REST-клиент для durable сессий | env → Redis-клиент \| null |
 | `questionEngine.js` | Валидация каждого типа ответа (whitelist, диапазоны) и весь скоринг: Big Five (reverse `6−raw`, нормировка `((mean−1)/4)·100`), Big Two (Stability/Plasticity), RIASEC 0–100 + топ-3 код, jobChar-профиль (неспрошенные = 50), прогресс | (session, answer) → normalized value / scores; бросает `{statusCode}`-ошибки |
 | `questionPool.js` | Статика: 4 демо-вопроса, `JOB_CHAR_PARAMS` (7 канонических параметров — кросс-слойный контракт), банк tradeoff-вопросов (2 на параметр), 7 career-journey вопросов, `selectFallbackJobCharQuestions(ranking, 5\|10)` | константы |
@@ -57,9 +60,10 @@
 | `services/markitdown.js` | Обёртка опционального MarkItDown CLI: probe `--version` (кэш по пути бинаря), spawn с таймаутом 20 с, `cleanMarkdown` (картинки/ссылки/пустые строки); `MARKITDOWN_BIN` override | buffer → markdown-текст |
 | `aiEngine.js` | 11 генераторов (`createAiEngine`), каждый: prompt → `runJsonCompletion` → нормализатор → при любой ошибке детерминированный фоллбек. Нормализаторы экспортированы и покрыты тестами | session-данные → валидированный артефакт |
 | `prompts.js` | Билдеры промптов; `BASE_SYSTEM` (анти-tech-bias, «dream — не фильтр домена»); `buildProfileDigest` — единый текстовый дайджест профиля, попадает в каждый content-промпт | параметры → `{system, user}` |
-| `directions.js` | Каталог 15 field-families (алфавитный намеренно — никакой домен не первый в детерминированных обходах): label, examples, 3 `professionSeeds`, id для Schwartz-прототипов | `getDirection(id)`, `DIRECTION_IDS` |
+| `directions.js` | Каталог 15 field-families (алфавитный намеренно — никакой домен не первый в детерминированных обходах): label, examples, 3 `professionSeeds`, id для work-value прототипов | `getDirection(id)`, `DIRECTION_IDS` |
 | `riasec.js` | Holland-веса каждого направления; `rankDirections(scores, {excludeIds})` — взвешенный dot-product; `inferRiasecScores(bigFive)` — эвристика на мета-аналитических связях для skip-пути | RIASEC-вектор → ранжированный каталог |
-| `schwartzValues.js` | Чистый Schwartz-модуль: `SCHWARTZ_ORDER` (10 ценностей, круговой порядок), `deriveHigherOrder` (гедонизм 50/50 между полюсами), `deriveAxes` (±100), `deriveTopValues`, `dominantPole`, `valuesFit` (0.6·axisFit + 0.4·centered-cosine), 15 ручных прототипов направлений + модуляция jobChar-таргетами, эвристика инференса ценностей пользователя | вектора 0–100 → агрегаты |
+| `workValues.js` | Чистый модуль шести Minnesota / O*NET work values: `WORK_VALUES_ORDER` (6 ключей), `rankToWorkValueScores` (rank→интенсивность + `curveVersion`), `deriveTopValues`, `valuesFit` (centered cosine → одно `{overall}` 0–100), прототипы направлений + `buildFallbackProfessionValues` (модуляция jobChar-таргетами) | вектора 0–100 → агрегаты |
+| `valuesTournament.js` | Чистый Ford–Johnson merge-insertion движок: реплей решённых сравнений (resumable, иммунен к stale/двойным ответам), ≤10 сравнений для 6 items, доказано на всех 720 перестановках | (items, decided) → следующее сравнение \| финальный порядок |
 
 ## 3. Структура вопросов
 
@@ -71,7 +75,7 @@
    «не тот шаг → 400». Назад по шагам сервер не ходит; «← Back» на фронтенде —
    навигация по уже отвеченным вопросам внутри блока (перезапись ответа).
 2. Адаптивность достигается не ветвлением, а:
-   - выбором глубины (Big Five 20/50 → RIASEC 12/18; jobChar 5/10);
+   - выбором глубины jobChar (5/10); Big Five и RIASEC — фиксированные статичные инструменты;
    - AI-генерацией пунктов per-session (Big Five, RIASEC, jobChar) с жёсткими
      структурными валидаторами и статичными банками как фоллбеком;
    - jobChar-вопросы взвешены к топу пользовательского ранжирования и
@@ -88,7 +92,8 @@
 
 | Шаг | Payload |
 |---|---|
-| Старт сессии | `{whyHereAnswer, dreamAnswer}` — оба обязательны, trim + кап 500 |
+| Старт сессии | `{dreamAnswer}` — обязателен, trim + кап 500 |
+| Values (турнир) | `/start` → `{comparisonId, a, b}`; `/answer {comparisonId, winner}` (stale — no-op); `/confirm {order}` — перестановка 6 ключей |
 | Демография | `{sessionId, questionId: "sex"\|"age"\|"country"\|"city", value}` |
 | Big Five | `{sessionId, itemId, value: 1–5}` |
 | RIASEC | `{sessionId, itemId, value: 1–5}` |
@@ -101,7 +106,7 @@
 
 Канонические ключи (контракт между промптами, скорингом, сессией и UI):
 - 7 jobChar-параметров: `compensation, work_mode, job_security, career_growth, complexity, meaning_impact, social`;
-- 10 Schwartz-ценностей: `self_direction, stimulation, hedonism, achievement, power, security, conformity, tradition, benevolence, universalism`.
+- 6 work-values: `achievement, independence, recognition, relationships, support, working_conditions`.
 
 ### 4.2 JSON-схемы AI-ответов (все вызовы — JSON mode; нормализатор бросает → фоллбек)
 
@@ -111,32 +116,32 @@
 | JobChar questions (t=0.8) | `{items:[{param, text, options:[{value, label}]}]}` | ровно count, param ∈ ranking, 3–4 опции, value clamp 0–100; сортировка по ранжированию |
 | CV parse (t=0.2) | `{skills:[], domains:[], seniority}` | ≥1 skill, лимиты 12/6, обрезка строк |
 | Persona summary (t=0.6) | `{summary}` | непусто, 3–5 предложений, кап 700 симв. |
-| Why this fits (t=0.6) | `{personality:[{point}×2], interests:[{point}], values:[{point}], currentSkills:[{point}×2–3], skillsToDevelop:[string×3–4]}` | жёсткие счётчики на блок, обрезка перебора, кап 220/80 симв. |
-| User values (t=0.4) | `{schwartzValues:{10 ключей: int}}` | все 10 конечные, clamp, **анти-флэт**: max−min ≥ 8 |
-| Profession values (t=0.4) | + `valuesRationale:{key: line}` | то же + rationale ≤3 строк по ≤200 симв. |
+| Why this fits (t=0.6) | `{personality:[{point}×2], interests:[{point}], values:[{point}], currentSkills:[{point}×2–3], skillsToDevelop:[string×3–4]}` | жёсткие счётчики на блок, обрезка перебора, кап 220/80 симв.; `values`-буллет таргетит топ work-value |
 | Oriented Field / 1st Output (t=0.8) | `{orientedField, jobTitle, thesis, parameterFit:{7 ключей}, whyFit, firstMilestone, constraintsNote}` | все 6 текстов непустые, все 7 parameterFit-строк непустые |
 | Refinement (t=0.8) | та же схема + `changeSummary` | как output; changeSummary дефолтится |
 | Output detail (t=0.7) | `{aiRecommendations:[{title,detail}], events:[{name,why}], universities:[{name,program}], courses:[{name,provider,why}]}` | каждый блок ≥2 валидных записей, обрезка до 4 |
 | Roadmap (t=0.7) | `{stages:[{title, description, timeframe, milestone}]}` | ≥4 стадий (обрезка до 8), title+description обязательны |
 
-Каждый content-промпт получает `buildProfileDigest`: why-here (свободный
-текст), dream (с пометкой «не фильтр домена»), демография, OCEAN 0–100, Big
-Two, RIASEC-вектор + код (+флаг inferred), ранжированные jobChar-таргеты,
+Каждый content-промпт получает `buildProfileDigest`: dream (с пометкой «не
+фильтр домена»), демография, OCEAN 0–100, Big Two, RIASEC-вектор + код (+флаг
+inferred), подтверждённая иерархия work-values, ранжированные jobChar-таргеты,
 CV-сигнал (парсинг / сырой фрагмент ≤300 симв. / journey-ответы) и intent
 (use_skills/new), когда тот уже выбран.
 
 ### 4.3 Снапшот сессии (backend → frontend)
 
-`serializeSessionState` возвращает: идентичность (`sessionId`,
-`whyHereAnswer`, `dreamAnswer`, `step`, `pathStage`), статичные банки (только
-с `includeStatic`), все ответы и скоры (`demographics`,
-`bigFiveAnswers/Scores`, `derivedTraits`, `personaSummary`, `cvIntent`,
-`riasec*`, `jobChar*`, `careerJourneyAnswers`, `cvAnalysis`, `cvProvided`),
-`userValues` + предвычисленный `userValuesAxes`, `progress`, `summary`,
-output-цепочку (`outputs[]` со всеми Schwartz-полями и `whyThisFits`,
-`acceptedOutputId`, `refinementHistory`, `roadmaps`), плюс `aiEnabled` —
-честный флаг «работает AI или demo-фоллбек». Скоринговые ключи пунктов
-(`trait`, `reverse`, `type`) в снапшот не попадают никогда.
+`serializeSessionState` возвращает: идентичность (`sessionId`, `dreamAnswer`,
+`step`, `pathStage`), статичные банки (только с `includeStatic`), все ответы и
+скоры (`demographics`, `bigFiveAnswers/Scores`, `derivedTraits`,
+`personaSummary`, `cvIntent`, `riasec*`, `jobChar*`, `careerJourneyAnswers`,
+`cvAnalysis`, `cvProvided`), `userValues` (иерархия из турнира) +
+`valuesComparison`/`valuesRanking` (текущий пейринг / финальный порядок, оба
+null после confirm), `progress`, `summary`, output-цепочку (`outputs[]` с
+`workValues`/`topValues`/`valuesFit` и `whyThisFits`, `acceptedOutputId`,
+`refinementHistory`, `roadmaps`), плюс `aiEnabled` — честный флаг «работает AI
+или demo-фоллбек». Скоринговые ключи пунктов (`trait`, `reverse`, `type`) в
+снапшот не попадают никогда. Ошибочные ответы несут `requestId` (+ заголовок
+`X-Request-Id` на каждом ответе).
 
 ## 5. Состояние сессии: где живёт и что это ограничивает
 
@@ -178,7 +183,7 @@ flowchart TD
         APPLY["applySessionSnapshot<br/>(снапшот = источник правды)"]
         BUILD["buildLifePathGraph (lifePath.js)<br/>nodes + edges декларативно"]
         FLOW["GraphView — React Flow<br/>me / output / advice / roadmap<br/>+ CameraDirector fitView"]
-        PANELS["Панели: профиль (радар, RIASEC,<br/>Schwartz-карта), детали, refine-dock"]
+        PANELS["Панели: профиль (Big Five радар,<br/>RIASEC, work-values радар), детали, refine-dock"]
     end
 
     subgraph Backend["backend (Express :3001)"]
@@ -197,15 +202,15 @@ flowchart TD
         FB["Детерминированный фоллбек<br/>(IPIP, банки, seeds, прототипы)"]
     end
 
-    subgraph Schwartz["Server-side агрегаты"]
-        SCOREVAL["scoreProfessionValues (AI/прототип)"]
-        DERIVE["buildScoredOutput: higherOrder,<br/>axes, dominantPole, topValues,<br/>valuesFit(user, job)"]
+    subgraph Values["Server-side агрегаты"]
+        SCOREVAL["resolveProfessionWorkValues<br/>(снапшот SOC / прототип)"]
+        DERIVE["buildScoredOutput: topValues,<br/>valuesFit(user, job) → {overall}"]
     end
 
     UI -->|"POST ответ / refine / accept"| API --> GUARD --> VALIDATE
     VALIDATE -->|запись ответа| STORE
     VALIDATE --> SCORE --> STORE
-    GUARD -->|"AI-шаги: items, cv, values,<br/>output, detail, roadmap"| GEN
+    GUARD -->|"AI-шаги: items, cv,<br/>output, detail, roadmap"| GEN
     DIGEST --> GEN
     GEN --> LLM --> NORM
     NORM -->|"валиден"| STORE
@@ -230,7 +235,7 @@ flowchart TD
 
 **Выдержит:** рост числа вопросов и направлений — банки и каталог чисто
 данные, скоринг обобщён; смену модели OpenAI (один env-var); рост фич Page 3 —
-output-цепочка и Schwartz-слой расширяемы и хорошо оттестированы.
+output-цепочка и work-values слой расширяемы и хорошо оттестированы.
 
 **Не выдержит без работ:**
 - **Более одного инстанса бэкенда.** Всё состояние в памяти одного процесса —
@@ -263,12 +268,13 @@ output-цепочка и Schwartz-слой расширяемы и хорошо 
 - **Парсинг устойчив**: JSON mode + `parseJsonObject` с тремя ступенями
   (прямой parse → срез markdown-fence → срез до внешних скобок).
 - **Каждый payload проходит структурный нормализатор**, и нормализаторы
-  реально строгие (точные количества, доли reverse, анти-флэт для Schwartz,
+  реально строгие (точные количества, доли reverse,
   «≥2 записей на блок» для советов). Невалидный ответ модели не долетает до
   пользователя — уходит в детерминированный фоллбек. Нормализаторы покрыты
   тестами напрямую.
-- **Агрегаты отделены от генерации**: модель не может выдать несогласованные
-  higherOrder/fit — они всегда считаются из сырых баллов на сервере.
+- **Агрегаты отделены от генерации**: модель не может выдать несогласованный
+  valuesFit — он всегда считается из сырых баллов на сервере (а ценности
+  вообще не скорятся AI).
 - **Промпты дисциплинированные**: явная схема в каждом system-промпте,
   анти-tech-bias и «dream ≠ фильтр домена» в `BASE_SYSTEM`, температуры
   осмысленно разведены (0.2 парсинг CV → 0.85 генерация пунктов).
@@ -283,7 +289,7 @@ output-цепочка и Schwartz-слой расширяемы и хорошо 
 - **`refineOutput` наследует `directionId` предыдущего output'а**, даже если
   AI фактически сменил область; `output/first` присваивает
   `directionId = ranked[0]` независимо от того, куда реально ушла модель.
-  Влияет на Schwartz-фоллбек и на исключение семейств в notSuitable —
+  Влияет на work-value фоллбек и на исключение семейств в notSuitable —
   неточность, о которой стоит помнить.
 
 ### 7.4 Статус приоритетных фиксов

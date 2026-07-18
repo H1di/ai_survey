@@ -629,9 +629,10 @@ function normalizeCvAnalysisPayload(payload) {
   return analysis;
 }
 
-// Shared by user inference and profession scoring — both return the same
-// 10-score schema. A flat profile carries no signal, so it is rejected into
-// the deterministic fallback rather than silently accepted.
+// Shared JSON-mode completion for every generator: sends the system+user
+// prompt, enforces the output-token ceiling, and parses the model's JSON so the
+// caller's normalizer can validate it (or throw into the deterministic
+// fallback). Values are no longer AI-scored — they come from the tournament.
 async function runJsonCompletion(client, { model, system, user, temperature = 0.7, maxTokens }) {
   const completion = await client.chat.completions.create({
     model,
@@ -686,7 +687,7 @@ function createAiEngine({ apiKey, model }) {
         maxTokens: 1500,
       });
       // Pin the output to a real shortlist occupation; its family grounds the
-      // Schwartz fallback + notSuitable exclusions even for AI outputs.
+      // work-value fallback + notSuitable exclusions even for AI outputs.
       const socCode = resolveShortlistSoc(parsed, shortlist);
       const occupation = socCode ? getOccupation(socCode) : null;
       return {
