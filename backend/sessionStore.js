@@ -274,10 +274,14 @@ class SessionStore {
     this.touch(session);
   }
 
-  // Values come from the explicit pairwise tournament (an instrument), so the
-  // provenance is high-confidence. `order` is the confirmed 1→6 hierarchy;
-  // `scores` are derived from it by rankToWorkValueScores (curveVersion).
-  setUserValues(session, { scores, order, curveVersion }) {
+  // Atomic values confirmation. Values come from the explicit pairwise
+  // tournament (an instrument), so the provenance is high-confidence. This sets
+  // the confirmed hierarchy, drops the finished tournament (so no later snapshot
+  // re-runs the Ford-Johnson sort), and advances the step in a SINGLE persisted
+  // write. Splitting these into separate mutators would issue three
+  // fire-and-forget Redis writes that could land out of order and resurrect the
+  // tournament on a later hydrate.
+  finalizeValues(session, { scores, order, curveVersion, nextStep }) {
     session.userValues = {
       scores,
       order,
@@ -285,6 +289,8 @@ class SessionStore {
       confidence: "explicit",
       curveVersion,
     };
+    session.valuesTournament = null;
+    session.step = nextStep;
     this.touch(session);
   }
 

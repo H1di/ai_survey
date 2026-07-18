@@ -399,12 +399,12 @@ app.post("/api/values/confirm", (req, res) => {
       requested.length === WORK_VALUES_ORDER.length &&
       WORK_VALUES_ORDER.every((k) => requested.includes(k));
     const finalHierarchy = validPermutation ? requested : sorted;
-    store.setUserValues(session, {
+    store.finalizeValues(session, {
       order: finalHierarchy,
       scores: rankToWorkValueScores(finalHierarchy),
       curveVersion: WORK_VALUE_CURVE_VERSION,
+      nextStep: "job_characteristics",
     });
-    store.advanceStep(session, "job_characteristics");
     return sendSessionSnapshot(res, session);
   } catch (error) {
     return sendError(res, req, error, "Something went wrong.");

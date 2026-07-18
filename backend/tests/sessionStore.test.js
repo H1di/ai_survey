@@ -201,14 +201,19 @@ test("v2 mutators: riasec, jobChar, cv, journey", () => {
   assert.equal(s.careerJourneyAnswers.cj_education, "BSc");
 });
 
-test("setUserValues stores the confirmed hierarchy as an explicit instrument", () => {
+test("finalizeValues stores the hierarchy, clears the tournament, and advances", () => {
+  const { startTournament } = require("../valuesTournament");
+  const { WORK_VALUES_ORDER } = require("../workValues");
   const store = new SessionStore();
   const s = makeSession(store);
+  store.setValuesTournament(s, startTournament(WORK_VALUES_ORDER));
+  s.step = "values";
   assert.equal(s.userValues, null);
 
   const order = ["achievement", "independence", "recognition", "relationships", "support", "working_conditions"];
   const scores = { achievement: 100, independence: 84, recognition: 68, relationships: 52, support: 36, working_conditions: 20 };
-  store.setUserValues(s, { order, scores, curveVersion: 1 });
+  store.finalizeValues(s, { order, scores, curveVersion: 1, nextStep: "job_characteristics" });
+
   assert.deepEqual(s.userValues, {
     scores,
     order,
@@ -216,10 +221,14 @@ test("setUserValues stores the confirmed hierarchy as an explicit instrument", (
     confidence: "explicit",
     curveVersion: 1,
   });
+  assert.equal(s.valuesTournament, null, "finished tournament is dropped");
+  assert.equal(s.step, "job_characteristics", "step advanced");
 
   const trimmed = store.serializeSessionState(s, {}, {}, { includeStatic: false });
   assert.deepEqual(trimmed.userValues.scores, scores, "userValues travels in the dynamic part");
   assert.equal(trimmed.userValuesAxes, undefined, "Schwartz plane point is gone");
+  assert.equal(trimmed.valuesComparison, null, "no pending comparison after confirm");
+  assert.equal(trimmed.valuesRanking, null, "no lingering ranking after confirm");
 });
 
 test("valuesComparison serializes the pending pairwise question", () => {
@@ -308,6 +317,39 @@ test("with redis: createSession and touch write the session through", () => {
 
   store.advanceStep(s, "big_five"); // mutator → touch → persist
   assert.equal(JSON.parse(redis.store.get(`session:${s.id}`)).step, "big_five");
+});
+
+test("with redis: finalizeValues persists exactly ONE write with the tournament cleared", () => {
+  const { startTournament } = require("../valuesTournament");
+  const { WORK_VALUES_ORDER } = require("../workValues");
+  const redis = new FakeRedis();
+  let sets = 0;
+  const origSet = redis.set.bind(redis);
+  redis.set = (k, v, o) => {
+    sets += 1;
+    return origSet(k, v, o);
+  };
+  const store = new SessionStore({ redis });
+  const s = makeSession(store);
+  store.setValuesTournament(s, startTournament(WORK_VALUES_ORDER));
+  s.step = "values";
+
+  const scores = { achievement: 100, independence: 84, recognition: 68, relationships: 52, support: 36, working_conditions: 20 };
+  sets = 0; // count only the confirm write, not the setup mutations
+  store.finalizeValues(s, {
+    order: [...WORK_VALUES_ORDER],
+    scores,
+    curveVersion: 1,
+    nextStep: "job_characteristics",
+  });
+
+  // A separate clear-tournament mutator would be a second fire-and-forget write
+  // that could land out of order and resurrect the tournament on hydrate.
+  assert.equal(sets, 1, "confirm persists exactly one whole-session write");
+  const persisted = JSON.parse(redis.store.get(`session:${s.id}`));
+  assert.equal(persisted.valuesTournament, null, "persisted snapshot has no tournament");
+  assert.equal(persisted.step, "job_characteristics");
+  assert.deepEqual(persisted.userValues.scores, scores);
 });
 
 test("with redis: hydrate reloads durable sessions into a fresh store's Map", async () => {
