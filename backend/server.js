@@ -830,6 +830,21 @@ if (require.main === module) {
     .finally(() => {
       app.listen(PORT, () => {
         console.log(`Working Name API listening on http://localhost:${PORT}`);
+        console.log(
+          `Session store: single-instance in-memory Map (${
+            store.redis ? "Redis durability mirror on" : "no Redis — sessions lost on restart"
+          }).`
+        );
+        // The Map, single-flight lock, and rate-limit counters are all
+        // process-local: more than one instance would 404 sessions across
+        // processes. We can't prevent a scaling config, but we fail loud on the
+        // usual multi-process signal so it can't slip by unnoticed.
+        const concurrency = Number(process.env.WEB_CONCURRENCY);
+        if (Number.isFinite(concurrency) && concurrency > 1) {
+          console.error(
+            `[single-instance] WEB_CONCURRENCY=${concurrency} — this backend keeps sessions in a process-local Map and MUST run exactly one instance. Requests will 404 sessions across processes until sessions/locks move to a shared store.`
+          );
+        }
       });
     });
 }

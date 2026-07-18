@@ -12,6 +12,13 @@ services:
   - type: web
     name: ai-survey-backend-3g62
     runtime: node
+    # SINGLE-INSTANCE INVARIANT — do not scale to >1 instance. Sessions live in
+    # an in-memory Map (Redis is only a durability mirror, re-read on boot), and
+    # the single-flight lock + rate-limit counters are process-local. The free
+    # plan runs exactly one instance; on a paid plan, do NOT raise the instance
+    # count without first moving sessions/locks to a shared store, or requests
+    # will 404 sessions across processes. The app also logs a loud warning at
+    # boot if WEB_CONCURRENCY > 1.
     plan: free
     region: oregon
     rootDir: backend

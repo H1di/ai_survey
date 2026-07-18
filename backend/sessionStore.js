@@ -44,6 +44,12 @@ class SessionStore {
   // every mutation is written through to Redis. On startup hydrate() reloads
   // the Map so sessions survive a process restart (e.g. Render idle-sleep).
   constructor({ ttlMs = DEFAULT_TTL_MS, sweepIntervalMs = DEFAULT_SWEEP_INTERVAL_MS, redis = null } = {}) {
+    // SINGLE-INSTANCE INVARIANT: this Map is the authoritative working set for
+    // the synchronous require()/get() interface. It is process-local, so the app
+    // must run as exactly ONE instance — a second process would not see this
+    // Map and would 404 the other's sessions (see the boot warning in server.js
+    // and the note in render.yaml). Redis, when configured, is only a durability
+    // mirror re-read by hydrate() on restart, not a cross-instance source.
     this.sessions = new Map();
     this.ttlMs = ttlMs;
     this.sweepIntervalMs = sweepIntervalMs;
