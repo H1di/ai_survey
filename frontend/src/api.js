@@ -75,6 +75,18 @@ export function skipRiasec(payload) {
   return request("/api/riasec/skip", { method: "POST", body: JSON.stringify(payload) });
 }
 
+export function startValues(payload) {
+  return request("/api/values/start", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function submitValuesAnswer(payload) {
+  return request("/api/values/answer", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function confirmValues(payload) {
+  return request("/api/values/confirm", { method: "POST", body: JSON.stringify(payload) });
+}
+
 export function submitJobCharRanking(payload) {
   return request("/api/job-characteristics/rank", { method: "POST", body: JSON.stringify(payload) });
 }
@@ -89,6 +101,10 @@ export function submitCvText(payload) {
 
 export function submitJourneyAnswer(payload) {
   return request("/api/cv/journey", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function continueSummary(payload) {
+  return request("/api/summary/continue", { method: "POST", body: JSON.stringify(payload) });
 }
 
 export function uploadCvFile({ sessionId, file }) {

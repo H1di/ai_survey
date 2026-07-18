@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import GraphView from "./components/GraphView";
 import { DetailPanel } from "./components/GraphView/NodeComponent";
-import ProfilePanel from "./components/ProfileCharts";
+import ProfilePanel, { PersonalityRadarChart, WorkValuesRadar } from "./components/ProfileCharts";
 import {
   acceptOutput,
+  confirmValues,
+  continueSummary,
   fetchFirstOutput,
   fetchSession,
   generateRoadmap,
@@ -13,6 +15,7 @@ import {
   skipRiasec,
   startRiasec,
   startSession,
+  startValues,
   submitBigFiveAnswer,
   submitDemographics,
   submitCvText,
@@ -20,10 +23,12 @@ import {
   submitJobCharRanking,
   submitJourneyAnswer,
   submitRiasecAnswer,
+  submitValuesAnswer,
   uploadCvFile,
 } from "./api";
 import {
   buildLifePathGraph,
+  deriveArchetype,
   firstUnansweredIndex,
   moveRankItem,
   selectDockCard,
@@ -31,6 +36,7 @@ import {
   railIndexForStep,
   whyThisFitsSections,
   onetSection,
+  WORK_VALUE_META,
 } from "./lifePath";
 import "./App.css";
 import "./components/GraphView/GraphPage.css";
@@ -107,6 +113,8 @@ function stepProgressText(step, progress) {
     return `${progress.bigFive.answered} / ${progress.bigFive.total}`;
   if (step === "riasec" && progress.riasec.total)
     return `${progress.riasec.answered} / ${progress.riasec.total}`;
+  if (step === "values" && progress.values && progress.values.answered)
+    return `${progress.values.answered} / ${progress.values.total}`;
   if (step === "job_characteristics" && progress.jobChar.ranked)
     return `${progress.jobChar.answered} / ${progress.jobChar.total}`;
   if (step === "cv" && progress.journey.answered)
@@ -122,13 +130,16 @@ function overallProgress(progress) {
   if (!progress) return null;
   const bigFiveTotal = progress.bigFive.total || 20;
   const riasecTotal = progress.riasec.total || 12;
+  const valuesTotal = progress.values?.total || 10;
   const jobCharTotal = progress.jobChar.total || 5;
   const journeyTotal = progress.journey.active ? progress.journey.total : 0;
-  const total = progress.demographics.total + bigFiveTotal + riasecTotal + 1 + jobCharTotal + journeyTotal;
+  const total =
+    progress.demographics.total + bigFiveTotal + riasecTotal + valuesTotal + 1 + jobCharTotal + journeyTotal;
   const answered =
     progress.demographics.answered +
     progress.bigFive.answered +
     progress.riasec.answered +
+    (progress.values?.confirmed ? valuesTotal : progress.values?.answered || 0) +
     (progress.jobChar.ranked ? 1 : 0) +
     progress.jobChar.answered +
     (progress.journey.active ? progress.journey.answered : 0);
@@ -391,6 +402,88 @@ function RankCard({ params, ranking, onMove, busy, onChooseDepth }) {
   );
 }
 
+// The adaptive pairwise-comparison card: pick the more important of two values.
+function ValuesComparisonCard({ comparison, busy, onChoose, progress }) {
+  const a = WORK_VALUE_META[comparison.a] || { label: comparison.a, blurb: "" };
+  const b = WORK_VALUE_META[comparison.b] || { label: comparison.b, blurb: "" };
+  return (
+    <div className="question-card">
+      <p className="question-category">
+        What matters more?{progress ? ` (${progress.answered + 1} of up to ${progress.total})` : ""}
+      </p>
+      <h3>Which of these would you rather have in your work?</h3>
+      <div className="values-ab">
+        <button
+          type="button"
+          className="values-ab-option"
+          onClick={() => onChoose(comparison.a)}
+          disabled={busy}
+        >
+          <span className="values-ab-label">{a.label}</span>
+          <span className="values-ab-blurb">{a.blurb}</span>
+        </button>
+        <span className="values-ab-or">or</span>
+        <button
+          type="button"
+          className="values-ab-option"
+          onClick={() => onChoose(comparison.b)}
+          disabled={busy}
+        >
+          <span className="values-ab-label">{b.label}</span>
+          <span className="values-ab-blurb">{b.blurb}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// The reorderable 1→6 hierarchy the tournament produced; the user can tweak it
+// before confirming.
+function ValuesHierarchyCard({ ranking, onMove, busy, onConfirm }) {
+  return (
+    <div className="question-card">
+      <p className="question-category">Your work-value hierarchy</p>
+      <h3>Does this feel like your hierarchy? You can modify it.</h3>
+      <ol className="rank-list">
+        {ranking.map((id, index) => (
+          <li key={id} className="rank-row">
+            <span className="rank-pos">{index + 1}</span>
+            <span className="rank-label">
+              {WORK_VALUE_META[id]?.label || id}
+              <span className="rank-meaning">{WORK_VALUE_META[id]?.blurb}</span>
+            </span>
+            <span className="rank-controls">
+              <button
+                type="button"
+                className="ghost-action"
+                onClick={() => onMove(index, -1)}
+                disabled={busy || index === 0}
+                aria-label={`Move ${WORK_VALUE_META[id]?.label} up`}
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                className="ghost-action"
+                onClick={() => onMove(index, 1)}
+                disabled={busy || index === ranking.length - 1}
+                aria-label={`Move ${WORK_VALUE_META[id]?.label} down`}
+              >
+                ↓
+              </button>
+            </span>
+          </li>
+        ))}
+      </ol>
+      <div className="question-actions single">
+        <button type="button" className="primary-action" onClick={onConfirm} disabled={busy}>
+          {busy ? "Saving…" : "This is my hierarchy"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function JobCharQuestionCard({ q, savedValue, busy, onSubmit, onBack, canGoBack, progress }) {
   return (
     <div className="question-card">
@@ -494,7 +587,6 @@ function App() {
     Boolean(localStorage.getItem(SESSION_STORAGE_KEY))
   );
 
-  const [whyHereAnswer, setWhyHereAnswer] = useState("");
   const [dreamAnswer, setDreamAnswer] = useState("");
   const [cvIntent, setCvIntent] = useState("");
 
@@ -517,6 +609,11 @@ function App() {
   const [jobCharAnswers, setJobCharAnswers] = useState({});
   const [jcIndex, setJcIndex] = useState(0);
   const [rankDraft, setRankDraft] = useState([]);
+  // Work-values step: the pending pairwise comparison, the sorted hierarchy
+  // once comparisons finish, and the reorderable draft the user can tweak.
+  const [valuesComparison, setValuesComparison] = useState(null);
+  const [valuesRanking, setValuesRanking] = useState(null);
+  const [valuesRankDraft, setValuesRankDraft] = useState([]);
   const [careerJourneyQuestions, setCareerJourneyQuestions] = useState([]);
   const [cvUploadFormats, setCvUploadFormats] = useState([".pdf", ".docx", ".txt"]);
   const [careerJourneyAnswers, setCareerJourneyAnswers] = useState({});
@@ -550,6 +647,9 @@ function App() {
     riasec: false,
     riasecSkip: false,
     rank: false,
+    values: false,
+    valuesConfirm: false,
+    summary: false,
     jobChar: false,
     cv: false,
     cvIntent: false,
@@ -602,8 +702,9 @@ function App() {
       riasecCode: data.riasecCode || null,
       riasecInferred: Boolean(data.riasecInferred),
       userValues: data.userValues || null,
-      userValuesAxes: data.userValuesAxes || null,
     });
+    setValuesComparison(data.valuesComparison || null);
+    setValuesRanking(data.valuesRanking || null);
     if (data.aiEnabled !== undefined) setAiEnabled(Boolean(data.aiEnabled));
   };
 
@@ -643,15 +744,37 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Kick off the values tournament the moment the step opens (once).
+  useEffect(() => {
+    if (
+      step === "values" &&
+      sessionId &&
+      !valuesComparison &&
+      !(profile?.userValues) &&
+      !valuesRanking &&
+      !busy.values
+    ) {
+      handleValuesStart();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, sessionId, valuesComparison, valuesRanking]);
+
+  // Prefill the reorderable hierarchy once the comparisons resolve.
+  useEffect(() => {
+    if (valuesRanking && valuesRankDraft.length !== 6) {
+      setValuesRankDraft(valuesRanking);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valuesRanking]);
+
   const handleStartSession = async () => {
-    if (!whyHereAnswer.trim() || !dreamAnswer.trim()) {
+    if (!dreamAnswer.trim()) {
       return;
     }
     setError("");
     setBusy((p) => ({ ...p, start: true }));
     try {
       const data = await startSession({
-        whyHereAnswer: whyHereAnswer.trim(),
         dreamAnswer: dreamAnswer.trim(),
       });
       applySessionSnapshot(data);
@@ -787,6 +910,68 @@ function App() {
     }
   };
 
+  const handleValuesStart = async () => {
+    if (!sessionId) return;
+    setError("");
+    setBusy((p) => ({ ...p, values: true }));
+    try {
+      const data = await startValues({ sessionId });
+      applySessionSnapshot(data);
+    } catch (e) {
+      setError(e.message || "Could not start the values step.");
+    } finally {
+      setBusy((p) => ({ ...p, values: false }));
+    }
+  };
+
+  const handleValuesAnswer = async (winner) => {
+    if (!sessionId || !valuesComparison) return;
+    setError("");
+    setBusy((p) => ({ ...p, values: true }));
+    try {
+      const data = await submitValuesAnswer({
+        sessionId,
+        comparisonId: valuesComparison.comparisonId,
+        winner,
+      });
+      applySessionSnapshot(data);
+    } catch (e) {
+      setError(e.message || "Could not record your choice.");
+    } finally {
+      setBusy((p) => ({ ...p, values: false }));
+    }
+  };
+
+  const handleValuesConfirm = async () => {
+    if (!sessionId || valuesRankDraft.length !== 6) return;
+    setError("");
+    setBusy((p) => ({ ...p, valuesConfirm: true }));
+    try {
+      const data = await confirmValues({ sessionId, order: valuesRankDraft });
+      applySessionSnapshot(data);
+      setValuesRankDraft([]);
+      setJcIndex(0);
+    } catch (e) {
+      setError(e.message || "Could not save your hierarchy.");
+    } finally {
+      setBusy((p) => ({ ...p, valuesConfirm: false }));
+    }
+  };
+
+  const handleSummaryContinue = async () => {
+    if (!sessionId) return;
+    setError("");
+    setBusy((p) => ({ ...p, summary: true }));
+    try {
+      const data = await continueSummary({ sessionId });
+      applySessionSnapshot(data);
+    } catch (e) {
+      setError(e.message || "Could not continue.");
+    } finally {
+      setBusy((p) => ({ ...p, summary: false }));
+    }
+  };
+
   const handleSubmitRanking = async (depth) => {
     if (!sessionId || rankDraft.length !== 7) return;
     setError("");
@@ -914,19 +1099,6 @@ function App() {
   const latestOutput = outputs.length ? outputs[outputs.length - 1] : null;
   const acceptedOutput = outputs.find((o) => o.id === acceptedOutputId) || null;
 
-  const SCHWARTZ_LABELS = {
-    self_direction: "Self-Direction",
-    stimulation: "Stimulation",
-    hedonism: "Hedonism",
-    achievement: "Achievement",
-    power: "Power",
-    security: "Security",
-    conformity: "Conformity",
-    tradition: "Tradition",
-    benevolence: "Benevolence",
-    universalism: "Universalism",
-  };
-
   const ADVICE_VIEWS = {
     aiRecommendations: { title: "AI Recommendations", format: (i) => `${i.title} — ${i.detail}` },
     events: { title: "Events", format: (i) => `${i.name} — ${i.why}` },
@@ -936,9 +1108,6 @@ function App() {
 
   const handleOutputOpen = (output) => {
     setStageDetail(null);
-    const rationaleLines = Object.entries(output.valuesRationale || {}).map(
-      ([key, line]) => `${SCHWARTZ_LABELS[key] || key}: ${line}`
-    );
     setInfoView({
       archetype: output.orientedField,
       title: output.jobTitle,
@@ -954,9 +1123,11 @@ function App() {
         { heading: "First milestone", text: output.firstMilestone },
         output.valuesFit
           ? {
-              heading: `Values match: ${output.valuesFit.overall}/100`,
-              text: `Plane fit ${output.valuesFit.axisFit}, profile fit ${output.valuesFit.detailFit}.`,
-              items: rationaleLines,
+              heading: `Work-values match: ${output.valuesFit.overall}/100`,
+              text: "How this profession's measured work values line up with your hierarchy.",
+              items: (output.topValues || []).map(
+                (k) => `${WORK_VALUE_META[k]?.label || k} — strong for this role`
+              ),
             }
           : null,
         { heading: "Constraints", text: output.constraintsNote },
@@ -1093,6 +1264,9 @@ function App() {
     setJobCharAnswers({});
     setJcIndex(0);
     setRankDraft([]);
+    setValuesComparison(null);
+    setValuesRanking(null);
+    setValuesRankDraft([]);
     setCareerJourneyQuestions([]);
     setCareerJourneyAnswers({});
     setJourneyIndex(0);
@@ -1119,6 +1293,9 @@ function App() {
       riasec: false,
       riasecSkip: false,
       rank: false,
+      values: false,
+      valuesConfirm: false,
+      summary: false,
       jobChar: false,
       cv: false,
       cvIntent: false,
@@ -1140,23 +1317,6 @@ function App() {
     onAdviceOpen: handleAdviceOpen,
     onStageOpen: handleStageOpen,
   });
-
-  // Points for the Schwartz circumplex map: the user's inferred plane point
-  // plus every generated output, all pre-derived by the backend.
-  const valuesMap = profile?.userValuesAxes
-    ? {
-        userPoint: profile.userValuesAxes,
-        jobs: outputs
-          .filter((o) => o.axes)
-          .map((o) => ({
-            id: o.id,
-            label: o.jobTitle,
-            point: o.axes,
-            fit: o.valuesFit ? o.valuesFit.overall : null,
-            accepted: o.id === acceptedOutputId,
-          })),
-      }
-    : null;
 
   const selectedRoadmap = acceptedOutputId ? roadmaps[acceptedOutputId] : null;
   const roadmapVisible = Boolean(selectedRoadmap);
@@ -1323,19 +1483,7 @@ function App() {
     <main className="app-shell">
       {stage === "entry" && (
         <section className="entry-screen">
-          <h1>Why are you here?</h1>
-
-          <textarea
-            className="dream-input"
-            value={whyHereAnswer}
-            maxLength={500}
-            onChange={(event) => setWhyHereAnswer(event.target.value)}
-            placeholder="Write your honest answer"
-          />
-
-          <p className="entry-prompt">
-            What would you do if you knew you would definitely succeed?
-          </p>
+          <h1>What would you do if you knew you would definitely succeed?</h1>
 
           <textarea
             className="dream-input"
@@ -1349,7 +1497,7 @@ function App() {
             type="button"
             className="primary-action"
             onClick={handleStartSession}
-            disabled={busy.start || !whyHereAnswer.trim() || !dreamAnswer.trim()}
+            disabled={busy.start || !dreamAnswer.trim()}
           >
             {busy.start ? "Entering..." : "Help to explore my career"}
           </button>
@@ -1376,15 +1524,18 @@ function App() {
           {step !== "tree" && (() => {
             const overall = overallProgress(progress);
             return overall ? (
-              <div
-                className="overall-progress"
-                role="progressbar"
-                aria-valuenow={overall.answered}
-                aria-valuemin={0}
-                aria-valuemax={overall.total}
-                aria-label={`Overall: ${overall.answered} of ${overall.total} questions`}
-              >
-                <div className="overall-progress-fill" style={{ width: `${overall.percent}%` }} />
+              <div className="overall-progress-row">
+                <div
+                  className="overall-progress"
+                  role="progressbar"
+                  aria-valuenow={overall.answered}
+                  aria-valuemin={0}
+                  aria-valuemax={overall.total}
+                  aria-label={`Overall: ${overall.answered} of ${overall.total} questions`}
+                >
+                  <div className="overall-progress-fill" style={{ width: `${overall.percent}%` }} />
+                </div>
+                <span className="overall-progress-percent">{overall.percent}%</span>
               </div>
             ) : null;
           })()}
@@ -1442,6 +1593,24 @@ function App() {
               onSkip={handleSkipRiasec}
               canSkip={Object.keys(riasecAnswers).length === 0}
               progress={{ index: riasecIndex, total: riasecItems.length }}
+            />
+          )}
+
+          {step === "values" && valuesComparison && (
+            <ValuesComparisonCard
+              comparison={valuesComparison}
+              busy={busy.values}
+              onChoose={handleValuesAnswer}
+              progress={progress?.values}
+            />
+          )}
+
+          {step === "values" && !valuesComparison && valuesRankDraft.length === 6 && !profile?.userValues && (
+            <ValuesHierarchyCard
+              ranking={valuesRankDraft}
+              onMove={(index, delta) => setValuesRankDraft((l) => moveRankItem(l, index, delta))}
+              busy={busy.valuesConfirm}
+              onConfirm={handleValuesConfirm}
             />
           )}
 
@@ -1537,6 +1706,46 @@ function App() {
             </div>
           )}
 
+          {step === "summary" && (() => {
+            const archetype = deriveArchetype({
+              riasecCode: profile?.riasecCode,
+              bigFiveScores: profile?.bigFiveScores,
+            });
+            return (
+              <div className="question-card summary-card">
+                <p className="question-category">Who you are</p>
+                <h3 className="summary-archetype">{archetype.name}</h3>
+                <p className="summary-tagline">{archetype.tagline}</p>
+
+                {profile?.bigFiveScores && (
+                  <PersonalityRadarChart scores={profile.bigFiveScores} />
+                )}
+
+                {profile?.personaSummary && (
+                  <p className="summary-persona">{profile.personaSummary}</p>
+                )}
+
+                {profile?.userValues?.scores && (
+                  <WorkValuesRadar user={profile.userValues.scores} title="What matters to you" />
+                )}
+
+                <div className="question-actions single">
+                  <button
+                    type="button"
+                    className="primary-action"
+                    onClick={handleSummaryContinue}
+                    disabled={busy.summary}
+                  >
+                    {busy.summary ? "Preparing…" : "Continue →"}
+                  </button>
+                </div>
+                <p className="entry-disclaimer">
+                  A preliminary sketch from a short self-report — not a clinical assessment.
+                </p>
+              </div>
+            );
+          })()}
+
           {step === "tree" && (
             <div className="question-card">
               <h3>Assessment complete.</h3>
@@ -1603,7 +1812,7 @@ function App() {
             {profileOpen && (
               <ProfilePanel
                 profile={profile}
-                valuesMap={valuesMap}
+                userValues={profile?.userValues}
                 onClose={() => setProfileOpen(false)}
               />
             )}

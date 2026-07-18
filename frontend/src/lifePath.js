@@ -201,12 +201,97 @@ export const JOURNEY_RAIL = [
   { step: "demographics", label: "About you", time: "~1 min" },
   { step: "big_five", label: "Step 1 — How you think", time: "2–3 min" },
   { step: "riasec", label: "Step 2 — What truly interests you", time: "2 min" },
-  { step: "job_characteristics", label: "Step 3 — What motivates you", time: "2–3 min" },
-  { step: "cv", label: "Step 4 — Your skills & experience", time: "1–2 min" },
+  { step: "values", label: "Step 3 — What matters most", time: "1–2 min" },
+  { step: "job_characteristics", label: "Step 4 — What motivates you", time: "2–3 min" },
+  { step: "cv", label: "Step 5 — Your skills & experience", time: "1–2 min" },
+  { step: "summary", label: "Who you are", time: "~1 min" },
 ];
 
 export function railIndexForStep(step) {
   return JOURNEY_RAIL.findIndex((r) => r.step === step);
+}
+
+// The six Minnesota / O*NET work values, in the backend WORK_VALUES_ORDER. The
+// blurbs are the concrete MIQ-style needs shown in the pairwise tournament and
+// the hierarchy table.
+export const WORK_VALUE_META = {
+  achievement: {
+    label: "Achievement",
+    blurb: "Using your abilities and seeing real accomplishment in your work.",
+  },
+  independence: {
+    label: "Independence",
+    blurb: "Working on your own and making your own decisions.",
+  },
+  recognition: {
+    label: "Recognition",
+    blurb: "Advancement, status, and being recognised for good work.",
+  },
+  relationships: {
+    label: "Relationships",
+    blurb: "Friendly co-workers and being of service to other people.",
+  },
+  support: {
+    label: "Support",
+    blurb: "Supportive management and fair, consistent company policies.",
+  },
+  working_conditions: {
+    label: "Working Conditions",
+    blurb: "Good pay, security, variety, and comfortable conditions.",
+  },
+};
+
+export const WORK_VALUE_ORDER = Object.keys(WORK_VALUE_META);
+export const WORK_VALUE_AXES = WORK_VALUE_ORDER.map((key) => ({
+  key,
+  label: WORK_VALUE_META[key].label,
+}));
+
+// Deterministic character archetype from the RIASEC code + Big Five poles.
+// Keyless-safe and stable across reloads — the persona prose (AI, with a
+// deterministic fallback) carries the nuance; this is the memorable label.
+const RIASEC_ARCHETYPE = {
+  R: "The Maker",
+  I: "The Investigator",
+  A: "The Creator",
+  S: "The Helper",
+  E: "The Driver",
+  C: "The Organizer",
+};
+
+const RIASEC_THEME = {
+  R: "building tangible things",
+  I: "figuring out how things work",
+  A: "creating and expressing",
+  S: "helping people grow",
+  E: "leading and persuading",
+  C: "bringing order to complexity",
+};
+
+export function deriveArchetype({ riasecCode, bigFiveScores } = {}) {
+  const top = (riasecCode || "")[0];
+  const second = (riasecCode || "")[1];
+  const name = RIASEC_ARCHETYPE[top] || "The Explorer";
+  const themes = [RIASEC_THEME[top], RIASEC_THEME[second]].filter(Boolean);
+  const interestLine = themes.length
+    ? `drawn to ${themes.join(" and ")}`
+    : "still mapping what draws you";
+
+  const s = bigFiveScores || {};
+  const trait =
+    (s.O ?? 50) >= 65
+      ? "with an open, idea-hungry mind"
+      : (s.C ?? 50) >= 65
+        ? "with a steady, follow-through streak"
+        : (s.E ?? 50) >= 65
+          ? "who comes alive around people"
+          : (s.A ?? 50) >= 65
+            ? "who leads with cooperation"
+            : (100 - (s.N ?? 50)) >= 65
+              ? "with calm under pressure"
+              : "with a considered, careful style";
+
+  return { name, tagline: `${interestLine} — ${trait}.` };
 }
 
 // Maps the structured whyThisFits block to InfoPanel sections. Outputs

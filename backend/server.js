@@ -12,12 +12,19 @@ const {
   JOB_CHAR_PARAM_IDS,
 } = require("./questionPool");
 const {
-  deriveHigherOrder,
-  deriveAxes,
   deriveTopValues,
-  dominantPole,
   valuesFit,
-} = require("./schwartzValues");
+  buildFallbackProfessionValues,
+  rankToWorkValueScores,
+  WORK_VALUE_CURVE_VERSION,
+  WORK_VALUES_ORDER,
+} = require("./workValues");
+const {
+  startTournament,
+  nextComparison,
+  finalOrder,
+  recordAnswer,
+} = require("./valuesTournament");
 const {
   validateDemographicAnswer,
   validateBigFiveAnswer,
@@ -112,6 +119,7 @@ for (const path of [
   "/api/riasec/skip",
   "/api/job-characteristics/rank",
   "/api/cv",
+  "/api/cv/journey",
   "/api/output/first",
   "/api/output/refine",
   "/api/output/accept",
@@ -167,25 +175,16 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.post("/api/session/start", (req, res) => {
-  const { whyHereAnswer, dreamAnswer } = req.body || {};
+  const { dreamAnswer } = req.body || {};
 
-  // Both free-text answers are quoted inside every AI prompt — cap them.
-  const normalizedWhyHere =
-    typeof whyHereAnswer === "string" ? whyHereAnswer.trim().slice(0, 500) : "";
-  if (!normalizedWhyHere) {
-    return res.status(400).json({ error: "whyHereAnswer is required." });
-  }
-
+  // The dream answer is quoted inside every AI prompt — cap it.
   const normalizedDream =
     typeof dreamAnswer === "string" ? dreamAnswer.trim().slice(0, 500) : "";
   if (!normalizedDream) {
     return res.status(400).json({ error: "dreamAnswer is required." });
   }
 
-  const session = store.createSession({
-    whyHereAnswer: normalizedWhyHere,
-    dreamAnswer: normalizedDream,
-  });
+  const session = store.createSession({ dreamAnswer: normalizedDream });
 
   return sendSessionSnapshot(res, session, { includeStatic: true });
 });
@@ -282,7 +281,7 @@ app.post("/api/riasec/answer", (req, res) => {
     const { scores } = computeRiasecScores(session);
     if (scores) {
       store.setRiasecScores(session, scores, deriveRiasecCode(scores));
-      store.advanceStep(session, "job_characteristics");
+      store.advanceStep(session, "values");
     }
     return sendSessionSnapshot(res, session);
   } catch (error) {
@@ -299,13 +298,83 @@ app.post("/api/riasec/skip", async (req, res) => {
     }
     const scores = await aiEngine.inferRiasecProfile({ session });
     store.setRiasecScores(session, scores, deriveRiasecCode(scores), { inferred: true });
-    store.advanceStep(session, "job_characteristics");
+    store.advanceStep(session, "values");
     return sendSessionSnapshot(res, session);
   } catch (error) {
     if (!error.statusCode) console.error("[riasec/skip]", error);
     return res
       .status(error.statusCode || 500)
       .json({ error: error.statusCode ? error.message : "Failed to estimate your interests." });
+  }
+});
+
+// --- Work-values tournament (adaptive pairwise comparison) -----------------
+
+app.post("/api/values/start", (req, res) => {
+  try {
+    const { sessionId } = req.body || {};
+    const session = store.require(sessionId);
+    if (session.step !== "values") {
+      return res.status(400).json({ error: "Not currently in the values step." });
+    }
+    if (!session.valuesTournament) {
+      store.setValuesTournament(session, startTournament(WORK_VALUES_ORDER));
+    }
+    return sendSessionSnapshot(res, session);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ error: error.message });
+  }
+});
+
+app.post("/api/values/answer", (req, res) => {
+  try {
+    const { sessionId, comparisonId, winner } = req.body || {};
+    const session = store.require(sessionId);
+    if (session.step !== "values") {
+      return res.status(400).json({ error: "Not currently in the values step." });
+    }
+    if (!session.valuesTournament) {
+      return res.status(400).json({ error: "Tournament has not started." });
+    }
+    const result = recordAnswer(session.valuesTournament, { comparisonId, winner });
+    // Stale/duplicate answers are a no-op: the snapshot is the single source of
+    // truth, so returning current state lets the client reconcile silently.
+    if (result.ok) store.setValuesTournament(session, result.state);
+    return sendSessionSnapshot(res, session);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ error: error.message });
+  }
+});
+
+app.post("/api/values/confirm", (req, res) => {
+  try {
+    const { sessionId, order } = req.body || {};
+    const session = store.require(sessionId);
+    if (session.step !== "values") {
+      // Idempotent: a double-submit after advancing just returns the snapshot.
+      if (session.userValues) return sendSessionSnapshot(res, session);
+      return res.status(400).json({ error: "Not currently in the values step." });
+    }
+    if (!session.valuesTournament || !finalOrder(session.valuesTournament)) {
+      return res.status(400).json({ error: "Finish the comparisons before confirming." });
+    }
+    // `order` must be a permutation of the six keys (the user may have reordered
+    // the tournament result in the table); default to the tournament order.
+    const sorted = finalOrder(session.valuesTournament);
+    const requested = Array.isArray(order) ? order : sorted;
+    const validPermutation =
+      requested.length === WORK_VALUES_ORDER.length &&
+      WORK_VALUES_ORDER.every((k) => requested.includes(k));
+    const finalHierarchy = validPermutation ? requested : sorted;
+    store.setUserValues(session, {
+      order: finalHierarchy,
+      scores: rankToWorkValueScores(finalHierarchy),
+      curveVersion: WORK_VALUE_CURVE_VERSION,
+    });
+    store.advanceStep(session, "job_characteristics");
+    return sendSessionSnapshot(res, session);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ error: error.message });
   }
 });
 
@@ -386,6 +455,9 @@ app.post("/api/cv", cvUpload.single("file"), async (req, res) => {
     if (session.step !== "cv") {
       return res.status(400).json({ error: "Not currently in the CV step." });
     }
+    if (!session.cvIntent) {
+      return res.status(400).json({ error: "Choose where to start (cvIntent) first." });
+    }
     let rawText = typeof req.body.cvText === "string" ? req.body.cvText : "";
     if (req.file) {
       rawText = await extractCvText(req.file);
@@ -396,11 +468,10 @@ app.post("/api/cv", cvUpload.single("file"), async (req, res) => {
     }
     const analysis = await aiEngine.analyzeCV({ cvText });
     store.setCvAnalysis(session, cvText, analysis);
-    // The Schwartz user vector must exist before the graph renders.
-    const userValues = await aiEngine.inferUserValues({ session });
-    store.setUserValues(session, userValues);
+    // Persona is shown on the summary screen; user values already came from the
+    // values step. Advance to the character conclusion, not straight to tree.
     store.setPersonaSummary(session, await aiEngine.generatePersonaSummary({ session }));
-    store.advanceStep(session, "tree");
+    store.advanceStep(session, "summary");
     return sendSessionSnapshot(res, session);
   } catch (error) {
     if (!error.statusCode) console.error("[cv]", error);
@@ -417,6 +488,9 @@ app.post("/api/cv/journey", async (req, res) => {
     if (session.step !== "cv") {
       return res.status(400).json({ error: "Not currently in the CV step." });
     }
+    if (!session.cvIntent) {
+      return res.status(400).json({ error: "Choose where to start (cvIntent) first." });
+    }
     const normalized = validateCareerJourneyAnswer(questionId, value);
     store.recordCareerJourneyAnswer(session, questionId, normalized);
 
@@ -424,12 +498,29 @@ app.post("/api/cv/journey", async (req, res) => {
       (q) => session.careerJourneyAnswers[q.id] !== undefined
     );
     if (allAnswered) {
-      // The Schwartz user vector must exist before the graph renders.
-      const userValues = await aiEngine.inferUserValues({ session });
-      store.setUserValues(session, userValues);
+      // Persona shown on the summary screen; user values came from the values
+      // step. Advance to the character conclusion, not straight to tree.
       store.setPersonaSummary(session, await aiEngine.generatePersonaSummary({ session }));
-      store.advanceStep(session, "tree");
+      store.advanceStep(session, "summary");
     }
+    return sendSessionSnapshot(res, session);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ error: error.message });
+  }
+});
+
+// The character-conclusion screen. Nothing to generate (persona was produced at
+// cv completion); acknowledging it advances to the Life Path Engine.
+app.post("/api/summary/continue", (req, res) => {
+  try {
+    const { sessionId } = req.body || {};
+    const session = store.require(sessionId);
+    if (session.step !== "summary") {
+      // Idempotent: a re-submit after advancing just returns the snapshot.
+      if (session.step === "tree") return sendSessionSnapshot(res, session);
+      return res.status(400).json({ error: "Not currently in the summary step." });
+    }
+    store.advanceStep(session, "tree");
     return sendSessionSnapshot(res, session);
   } catch (error) {
     return res.status(error.statusCode || 500).json({ error: error.message });
@@ -464,32 +555,31 @@ function buildOnetBlock(socCode, extras) {
   };
 }
 
-// The single place output aggregates are computed: Schwartz-score the raw
-// output, derive poles/axes/top values, and measure fit against the user's
-// inferred value vector. The AI never outputs these numbers. The live O*NET
-// lookup rides the same await so its latency hides behind the AI call.
+// A profession's work-value profile: measured O*NET snapshot values for the
+// chosen SOC win; the per-direction prototype fills the 40 occupations without
+// them (and any keyless fallback job). The AI never scores values.
+function resolveProfessionWorkValues({ socCode, directionId, jobCharProfile }) {
+  const occ = socCode ? getOccupation(socCode) : null;
+  if (occ?.workValues) return occ.workValues;
+  return buildFallbackProfessionValues(directionId, jobCharProfile);
+}
+
+// The single place output value aggregates are computed: resolve the
+// profession's work values, its top three, and the fit against the user's
+// confirmed hierarchy. The live O*NET lookup rides the same async path.
 async function buildScoredOutput(session, rawOutput) {
-  const [{ schwartzValues, valuesRationale }, onetExtras] = await Promise.all([
-    aiEngine.scoreProfessionValues({
-      jobTitle: rawOutput.jobTitle,
-      orientedField: rawOutput.orientedField,
-      thesis: rawOutput.thesis,
-      directionId: rawOutput.directionId,
-      jobCharProfile: session.jobCharProfile,
-    }),
-    onetApi.fetchCareerExtras(rawOutput.socCode),
-  ]);
-  const higherOrder = deriveHigherOrder(schwartzValues);
+  const onetExtras = await onetApi.fetchCareerExtras(rawOutput.socCode);
+  const workValues = resolveProfessionWorkValues({
+    socCode: rawOutput.socCode,
+    directionId: rawOutput.directionId,
+    jobCharProfile: session.jobCharProfile,
+  });
   return {
     ...rawOutput,
-    schwartzValues,
-    valuesRationale,
-    higherOrder,
-    axes: deriveAxes(higherOrder),
-    dominantPole: dominantPole(higherOrder),
-    topValues: deriveTopValues(schwartzValues),
+    workValues,
+    topValues: deriveTopValues(workValues),
     valuesFit: session.userValues
-      ? valuesFit(session.userValues.scores, schwartzValues)
+      ? valuesFit(session.userValues.scores, workValues)
       : null,
     onet: buildOnetBlock(rawOutput.socCode, onetExtras),
     accepted: null,

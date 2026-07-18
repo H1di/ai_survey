@@ -1,7 +1,9 @@
 const { JOB_CHAR_PARAMS, CAREER_JOURNEY_QUESTIONS } = require("./questionPool");
+const { WORK_VALUES_META } = require("./workValues");
 
 const JOB_CHAR_LABEL = new Map(JOB_CHAR_PARAMS.map((p) => [p.id, p.label]));
 const JOURNEY_QUESTION_BY_ID = new Map(CAREER_JOURNEY_QUESTIONS.map((q) => [q.id, q.question]));
+const WORK_VALUE_LABEL = new Map(WORK_VALUES_META.map((m) => [m.id, m.label]));
 
 const BASE_SYSTEM = [
   "You are an elite career strategist and life-design psychologist.",
@@ -16,7 +18,6 @@ const BASE_SYSTEM = [
 ].join(" ");
 
 function buildProfileDigest({
-  whyHereAnswer,
   dreamAnswer,
   cvIntent,
   demographics,
@@ -27,13 +28,12 @@ function buildProfileDigest({
   riasecInferred,
   jobCharRanking,
   jobCharProfile,
+  userValues,
   cvAnalysis,
   cvText,
   careerJourneyAnswers,
 }) {
   const lines = [];
-  // Old sessions predate this field — print only when present.
-  if (whyHereAnswer) lines.push(`Why they are here: "${whyHereAnswer}"`);
   lines.push(
     `Dream answer (secondary context — emotional colour, NOT a domain filter): ${dreamAnswer}`
   );
@@ -74,6 +74,18 @@ function buildProfileDigest({
     lines.push("Job-characteristic targets (0–100, ranked most→least important):");
     jobCharRanking.forEach((param, index) => {
       lines.push(`${index + 1}. ${JOB_CHAR_LABEL.get(param)}: ${jobCharProfile[param]}/100`);
+    });
+  }
+
+  if (userValues?.order?.length) {
+    lines.push("Work values (Minnesota, ranked most→least important):");
+    userValues.order.forEach((key, index) => {
+      const score = userValues.scores?.[key];
+      lines.push(
+        `${index + 1}. ${WORK_VALUE_LABEL.get(key) || key}${
+          typeof score === "number" ? `: ${score}/100` : ""
+        }`
+      );
     });
   }
 
@@ -145,42 +157,6 @@ function buildJobCharQuestionsPrompt({ ranking, count }) {
   ].join("\n");
   return { system, user };
 }
-
-const SCHWARTZ_CIRCLE_LINE =
-  "self_direction, stimulation, hedonism, achievement, power, security, conformity, tradition, benevolence, universalism";
-
-const SCHWARTZ_SCORES_SCHEMA =
-  '{"schwartzValues":{"self_direction":0,"stimulation":0,"hedonism":0,"achievement":0,"power":0,"security":0,"conformity":0,"tradition":0,"benevolence":0,"universalism":0}}';
-
-function buildUserValuesInferencePrompt({ profileDigest }) {
-  const system = [
-    "You estimate a person's Schwartz Basic Human Values profile from survey signal.",
-    "Return valid JSON only.",
-    `JSON schema: ${SCHWARTZ_SCORES_SCHEMA} with each value an integer 0-100.`,
-    "Circular order (adjacent compatible, opposite conflicting):",
-    `${SCHWARTZ_CIRCLE_LINE}.`,
-    "Opposite values should rarely both be high. Use the full 0–100 range; a flat all-similar profile is a failure.",
-    "Ground the estimate in the Big Five scores, RIASEC interests, ranked job-characteristic targets, and the dream answer.",
-  ].join(" ");
-  const user = ["Profile:", profileDigest, "Estimate the 10 value scores now."].join("\n");
-  return { system, user };
-}
-
-function buildProfessionValuesProfilePrompt({ jobTitle, orientedField, thesis }) {
-  const system = [
-    "You are an occupational psychologist scoring a profession on Schwartz's 10 Basic Human Values.",
-    "Return valid JSON only.",
-    'JSON schema: {"schwartzValues":{"self_direction":0,"stimulation":0,"hedonism":0,"achievement":0,"power":0,"security":0,"conformity":0,"tradition":0,"benevolence":0,"universalism":0},"valuesRationale":{"<key>":"..."}}',
-    "Score what the ROLE structurally rewards or requires, not one employer's culture.",
-    "Circular order (adjacent compatible, opposite conflicting):",
-    `${SCHWARTZ_CIRCLE_LINE}.`,
-    "Opposite values should rarely both be high. Use the full 0–100 range; a flat all-similar profile is a failure.",
-    "valuesRationale: one short line for each of the 3 highest values only.",
-  ].join(" ");
-  const user = `Job: ${jobTitle}. Field: ${orientedField}. Summary: ${thesis}. Score it now.`;
-  return { system, user };
-}
-
 function buildPersonaSummaryPrompt({ profileDigest }) {
   const system = [
     "You turn assessment scores into a short self-portrait the person reads about themselves.",
@@ -318,14 +294,14 @@ const WHY_THIS_FITS_SCHEMA =
 
 // Second call after an output is generated: a structured, traceable
 // explanation with fixed bullet counts so the UI renders a stable block.
-function buildWhyThisFitsPrompt({ profileDigest, output, topParamLabel, onetSkills = [] }) {
+function buildWhyThisFitsPrompt({ profileDigest, output, topValueLabel, onetSkills = [] }) {
   const system = [
     "You explain why one specific job fits one specific person.",
     "Return valid JSON only and no extra keys.",
     `JSON schema: ${WHY_THIS_FITS_SCHEMA}`,
     "personality: exactly 2 points. Each names a Big Five trait, its direction, and the one-line consequence for this job.",
     "interests: exactly 1 point tying the person's strongest Holland interest letters to the daily work.",
-    `values: exactly 1 point about the person's top-ranked job priority${topParamLabel ? ` (${topParamLabel})` : ""}. If the job conflicts with that priority, say so plainly instead of hiding it.`,
+    `values: exactly 1 point about the person's top-ranked work value${topValueLabel ? ` (${topValueLabel})` : ""} and how well this occupation satisfies it. If the job conflicts with that value, say so plainly instead of hiding it.`,
     "currentSkills: 2-3 points naming skills or experience the person already reported and how each transfers.",
     "skillsToDevelop: 3-4 short skill names (not sentences) the person should build for this job." +
       (onetSkills.length
@@ -396,8 +372,6 @@ module.exports = {
   buildJobCharQuestionsPrompt,
   buildCvParsePrompt,
   buildPersonaSummaryPrompt,
-  buildUserValuesInferencePrompt,
-  buildProfessionValuesProfilePrompt,
   buildOrientedFieldPrompt,
   buildRefinementPrompt,
   buildWhyThisFitsPrompt,

@@ -78,7 +78,6 @@ test("output detail prompt demands the four advice blocks", () => {
 // --- profile digest (Phase 1) ---
 
 const DIGEST_FIXTURE = {
-  whyHereAnswer: "I want out of my dead-end job",
   dreamAnswer: "open a bakery",
   cvIntent: "use_skills",
   demographics: { sex: "female", age: 34, country: "Poland", city: "Kraków" },
@@ -89,21 +88,27 @@ const DIGEST_FIXTURE = {
   riasecInferred: false,
   jobCharRanking: ["meaning_impact", "work_mode", "compensation", "social", "complexity", "career_growth", "job_security"],
   jobCharProfile: { compensation: 45, work_mode: 90, job_security: 50, career_growth: 50, complexity: 60, meaning_impact: 95, social: 65 },
+  userValues: {
+    order: ["relationships", "independence", "achievement", "recognition", "support", "working_conditions"],
+    scores: { relationships: 100, independence: 84, achievement: 68, recognition: 52, support: 36, working_conditions: 20 },
+  },
   cvAnalysis: { skills: ["pastry", "team leadership"], domains: ["food service"], seniority: "mid" },
   cvText: "…",
   careerJourneyAnswers: {},
 };
 
-test("profile digest carries city, RIASEC, ranked jobChar targets, CV signal", () => {
+test("profile digest carries city, RIASEC, ranked jobChar targets, work values, CV signal", () => {
   const digest = prompts.buildProfileDigest(DIGEST_FIXTURE);
-  assert.match(digest, /Why they are here: "I want out of my dead-end job"/);
+  assert.ok(!/Why they are here/.test(digest), "why-here line is gone");
   assert.ok(!/Entry intent/.test(digest), "entryChoice line is gone");
   assert.match(digest, /City: Kraków/);
   assert.match(digest, /code ASI \(measured\)/);
   assert.match(digest, /1\. Meaning \/ Impact: 95\/100/);
   assert.match(digest, /7\. Job Security: 50\/100/);
+  assert.match(digest, /Work values \(Minnesota, ranked/);
+  assert.match(digest, /1\. Relationships: 100\/100/);
   assert.match(digest, /skills \[pastry, team leadership\]/);
-  assert.ok(!/Values inventory/.test(digest), "old values block is gone");
+  assert.ok(!/schwartz/i.test(digest), "old Schwartz block is gone");
 });
 
 test("digest falls back to journey summary / raw excerpt without cvAnalysis", () => {
@@ -169,28 +174,15 @@ test("riasec inference prompt includes Big Five and dream", () => {
   assert.match(user, /open a bakery/);
 });
 
-// --- Schwartz (Phase 2) ---
+// --- work values now flow through the digest + whyThisFits, no dedicated
+// Schwartz scoring/inference prompts remain ---
 
-test("user values inference prompt demands the 10-score schema over the digest", () => {
-  const { system, user } = prompts.buildUserValuesInferencePrompt({ profileDigest: "PROFILE_TEXT" });
-  assert.match(system, /"schwartzValues"/);
-  assert.match(system, /self_direction, stimulation, hedonism, achievement, power, security, conformity, tradition, benevolence, universalism/);
-  assert.match(system, /flat/i);
-  assert.match(user, /PROFILE_TEXT/);
-});
-
-test("profession values prompt scores the role, lists circular order, caps rationale at top-3", () => {
-  const { system, user } = prompts.buildProfessionValuesProfilePrompt({
-    jobTitle: "Hospice Nurse",
-    orientedField: "Healthcare",
-    thesis: "Care work with deep human contact.",
+test("whyThisFits prompt targets the person's top work value", () => {
+  const { system } = prompts.buildWhyThisFitsPrompt({
+    profileDigest: "PROFILE_TEXT",
+    output: { jobTitle: "Hospice Nurse" },
+    topValueLabel: "Relationships",
   });
-  assert.match(system, /"schwartzValues"/);
-  assert.match(system, /"valuesRationale"/);
-  assert.match(system, /ROLE structurally rewards/);
-  assert.match(system, /self_direction, stimulation, hedonism, achievement, power, security, conformity, tradition, benevolence, universalism/);
-  assert.match(system, /3 highest values only/);
-  assert.match(user, /Hospice Nurse/);
-  assert.match(user, /Healthcare/);
-  assert.match(user, /deep human contact/);
+  assert.match(system, /top-ranked work value \(Relationships\)/);
+  assert.ok(!/schwartz/i.test(system));
 });

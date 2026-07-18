@@ -93,6 +93,49 @@ const RIASEC_BY_NAME = {
 // OI scale is 1-7; the app's RIASEC vectors are 0-100.
 const normalizeOi = (value) => Math.round(((Number(value) - 1) / 6) * 100);
 
+// O*NET removed the Work Values descriptor after 28.0; we merge the 28.0
+// "Work Values.txt" onto the 30.3 occupation set by SOC. Each SOC carries six
+// EX (Extent, 1-7 importance) rows plus three VH high-point rows we ignore.
+const WORK_VALUE_KEY_BY_ELEMENT_ID = {
+  "1.B.2.a": "achievement",
+  "1.B.2.b": "working_conditions",
+  "1.B.2.c": "recognition",
+  "1.B.2.d": "relationships",
+  "1.B.2.e": "support",
+  "1.B.2.f": "independence",
+};
+
+// EX scale is 1-7; work-value vectors are 0-100 to match the rest of the app.
+const normalizeEx = (value) => Math.round(((Number(value) - 1) / 6) * 100);
+
+// soc -> { 6 work-value keys }. Only complete six-value entries are kept.
+function parseWorkValues(rows) {
+  const bySoc = new Map();
+  for (const r of rows) {
+    if (r["Scale ID"] !== "EX") continue;
+    const key = WORK_VALUE_KEY_BY_ELEMENT_ID[r["Element ID"]];
+    if (!key) continue;
+    const soc = r["O*NET-SOC Code"];
+    if (!bySoc.has(soc)) bySoc.set(soc, {});
+    bySoc.get(soc)[key] = normalizeEx(r["Data Value"]);
+  }
+  for (const [soc, v] of bySoc) {
+    if (Object.keys(v).length !== 6) bySoc.delete(soc);
+  }
+  return bySoc;
+}
+
+// Exact SOC first; fall back to the base occupation code (before the ".detail"
+// suffix) so 30.3 detail codes absent from 28.0 still inherit their base values.
+function buildWorkValuesLookup(bySoc) {
+  const baseIndex = new Map();
+  for (const [soc, v] of bySoc) {
+    const base = soc.split(".")[0];
+    if (!baseIndex.has(base)) baseIndex.set(base, v);
+  }
+  return (soc) => bySoc.get(soc) || baseIndex.get(String(soc).split(".")[0]) || null;
+}
+
 const firstSentence = (text) => {
   const match = String(text || "").match(/^.*?\.(?=\s|$)/);
   return match ? match[0] : String(text || "");
@@ -138,8 +181,9 @@ function topRelated(rows) {
     .map((r) => r["Related O*NET-SOC Code"]);
 }
 
-// tables: parsed rows of the seven source files. Occupations without an OI
-// interest profile are dropped — the snapshot exists to be ranked by RIASEC.
+// tables: parsed rows of the seven source files (+ optional workValues rows).
+// Occupations without an OI interest profile are dropped — the snapshot exists
+// to be ranked by RIASEC.
 function transform(tables) {
   const interestsBySoc = groupBySoc(
     tables.interests.filter((r) => r["Scale ID"] === "OI")
@@ -153,6 +197,9 @@ function transform(tables) {
   ]);
   const techBySoc = groupBySoc(tables.softwareSkills);
   const relatedBySoc = groupBySoc(tables.relatedOccupations);
+  const lookupWorkValues = buildWorkValuesLookup(
+    tables.workValues ? parseWorkValues(tables.workValues) : new Map()
+  );
 
   const occupations = [];
   for (const row of tables.occupationData) {
@@ -181,6 +228,7 @@ function transform(tables) {
       tech: topTech(techBySoc.get(soc) || []),
       related: topRelated(relatedBySoc.get(soc) || []),
       directionId,
+      workValues: lookupWorkValues(soc),
     });
   }
 
@@ -197,10 +245,16 @@ const SOURCE_FILES = {
   relatedOccupations: "Related Occupations.txt",
 };
 
+// O*NET version whose Work Values.txt is merged in (30.3 dropped the descriptor).
+const WORK_VALUES_VERSION = "28.0";
+
 function main() {
   const sourceDir = process.argv[2];
+  const workValuesFile = process.argv[3];
   if (!sourceDir) {
-    console.error("Usage: node scripts/build-onet-snapshot.js <path to db_30_3_text dir>");
+    console.error(
+      "Usage: node scripts/build-onet-snapshot.js <db_30_3_text dir> [<28.0 Work Values.txt>]"
+    );
     process.exit(1);
   }
 
@@ -208,16 +262,27 @@ function main() {
   for (const [key, file] of Object.entries(SOURCE_FILES)) {
     tables[key] = parseTsv(fs.readFileSync(path.join(sourceDir, file), "utf8"));
   }
+  if (workValuesFile) {
+    tables.workValues = parseTsv(fs.readFileSync(workValuesFile, "utf8"));
+  }
 
   const { occupations } = transform(tables);
-  const snapshot = {
-    version: ONET_VERSION,
-    generated: new Date().toISOString().slice(0, 10),
-    attribution:
-      `This product includes information from the O*NET ${ONET_VERSION} Database and ` +
+  const withValues = occupations.filter((o) => o.workValues).length;
+  const attribution = workValuesFile
+    ? `This product includes information from the O*NET ${ONET_VERSION} Database ` +
+      `(occupations, interests, skills) and the O*NET ${WORK_VALUES_VERSION} Database ` +
+      "(work values), plus O*NET Web Services, by the U.S. Department of Labor, Employment " +
+      "and Training Administration (USDOL/ETA). O*NET® is a trademark of USDOL/ETA. " +
+      "Used under the CC BY 4.0 license."
+    : `This product includes information from the O*NET ${ONET_VERSION} Database and ` +
       "O*NET Web Services by the U.S. Department of Labor, Employment and Training " +
       "Administration (USDOL/ETA). O*NET® is a trademark of USDOL/ETA. " +
-      "Used under the CC BY 4.0 license.",
+      "Used under the CC BY 4.0 license.";
+  const snapshot = {
+    version: ONET_VERSION,
+    workValuesVersion: workValuesFile ? WORK_VALUES_VERSION : null,
+    generated: new Date().toISOString().slice(0, 10),
+    attribution,
     occupations,
   };
 
@@ -225,11 +290,21 @@ function main() {
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, JSON.stringify(snapshot));
   const kb = Math.round(fs.statSync(outPath).size / 1024);
-  console.log(`Wrote ${occupations.length} occupations to ${outPath} (${kb} KB)`);
+  console.log(
+    `Wrote ${occupations.length} occupations to ${outPath} (${kb} KB); ` +
+      `${withValues} with work values, ${occupations.length - withValues} on prototype fallback`
+  );
 }
 
 if (require.main === module) {
   main();
 }
 
-module.exports = { mapSocToDirection, parseTsv, transform, ONET_VERSION };
+module.exports = {
+  mapSocToDirection,
+  parseTsv,
+  transform,
+  parseWorkValues,
+  buildWorkValuesLookup,
+  ONET_VERSION,
+};

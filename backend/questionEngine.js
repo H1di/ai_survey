@@ -8,6 +8,9 @@ const {
 
 const TRAIT_KEYS = ["O", "C", "E", "A", "N"];
 
+// Worst-case Ford-Johnson comparisons to sort the 6 work values.
+const WORK_VALUES_TOURNAMENT_MAX = 10;
+
 function serializeDemographic(q) {
   return {
     id: q.id,
@@ -241,6 +244,13 @@ function buildProgress(session) {
       answered: Object.keys(session.careerJourneyAnswers || {}).length,
       total: CAREER_JOURNEY_QUESTIONS.length,
       active: !session.cvText,
+    },
+    // Ford-Johnson sorts 6 values in <=10 comparisons; the denominator is fixed
+    // at the worst case so the overall percent stays monotonic.
+    values: {
+      answered: session.valuesTournament ? session.valuesTournament.decided.length : 0,
+      total: WORK_VALUES_TOURNAMENT_MAX,
+      confirmed: Boolean(session.userValues),
     },
     done: session.step === "tree",
   };

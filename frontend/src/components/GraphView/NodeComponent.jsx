@@ -15,18 +15,14 @@ export function MeNode() {
   );
 }
 
-// Short human labels for the Schwartz value keys shown on output nodes.
+// Short human labels for the Minnesota work-value keys shown on output nodes.
 const VALUE_LABELS = {
-  self_direction: 'Self-Direction',
-  stimulation: 'Stimulation',
-  hedonism: 'Hedonism',
   achievement: 'Achievement',
-  power: 'Power',
-  security: 'Security',
-  conformity: 'Conformity',
-  tradition: 'Tradition',
-  benevolence: 'Benevolence',
-  universalism: 'Universalism',
+  independence: 'Independence',
+  recognition: 'Recognition',
+  relationships: 'Relationships',
+  support: 'Support',
+  working_conditions: 'Working Conditions',
 };
 
 export function OutputNode({ data }) {

@@ -6,20 +6,15 @@ const {
   buildJobCharQuestionsPrompt,
   buildCvParsePrompt,
   buildPersonaSummaryPrompt,
-  buildUserValuesInferencePrompt,
-  buildProfessionValuesProfilePrompt,
   buildOrientedFieldPrompt,
   buildRefinementPrompt,
   buildWhyThisFitsPrompt,
   buildOutputDetailPrompt,
 } = require("./prompts");
 const {
-  SCHWARTZ_ORDER,
-  SCHWARTZ_VALUE_META,
-  deriveTopValues,
+  WORK_VALUES_META,
   buildFallbackProfessionValues,
-  inferUserValuesFallback,
-} = require("./schwartzValues");
+} = require("./workValues");
 const { selectFallbackJobCharQuestions, JOB_CHAR_PARAMS, JOB_CHAR_PARAM_IDS } = require("./questionPool");
 const { DIRECTIONS, getDirection } = require("./directions");
 const { rankDirections, inferRiasecScores } = require("./riasec");
@@ -96,7 +91,6 @@ function parseJsonObject(content) {
 
 function buildSessionDigest(session) {
   return buildProfileDigest({
-    whyHereAnswer: session.whyHereAnswer,
     dreamAnswer: session.dreamAnswer,
     cvIntent: session.cvIntent,
     demographics: session.demographics,
@@ -107,6 +101,7 @@ function buildSessionDigest(session) {
     riasecInferred: session.riasecInferred,
     jobCharRanking: session.jobCharRanking,
     jobCharProfile: session.jobCharProfile,
+    userValues: session.userValues,
     cvAnalysis: session.cvAnalysis,
     cvText: session.cvText,
     careerJourneyAnswers: session.careerJourneyAnswers,
@@ -637,31 +632,6 @@ function normalizeCvAnalysisPayload(payload) {
 // Shared by user inference and profession scoring — both return the same
 // 10-score schema. A flat profile carries no signal, so it is rejected into
 // the deterministic fallback rather than silently accepted.
-function normalizeSchwartzValuesPayload(payload) {
-  const raw = payload?.schwartzValues || {};
-  const scores = {};
-  for (const key of SCHWARTZ_ORDER) {
-    const n = Number(raw[key]);
-    if (!Number.isFinite(n)) throw new Error(`Schwartz score ${key} missing or not a number.`);
-    scores[key] = Math.max(0, Math.min(100, Math.round(n)));
-  }
-  const nums = SCHWARTZ_ORDER.map((k) => scores[k]);
-  if (Math.max(...nums) - Math.min(...nums) < 8) {
-    throw new Error("Flat Schwartz profile rejected.");
-  }
-
-  const rationale = {};
-  const rawRationale = payload?.valuesRationale || {};
-  for (const [key, line] of Object.entries(rawRationale)) {
-    if (!SCHWARTZ_ORDER.includes(key)) continue;
-    const text = cleanText(line).slice(0, 200);
-    if (!text) continue;
-    rationale[key] = text;
-    if (Object.keys(rationale).length === 3) break;
-  }
-  return { scores, rationale };
-}
-
 async function runJsonCompletion(client, { model, system, user, temperature = 0.7, maxTokens }) {
   const completion = await client.chat.completions.create({
     model,
@@ -784,11 +754,13 @@ function createAiEngine({ apiKey, model }) {
   async function generateWhyThisFits({ session, output }) {
     if (!client) return fallbackWhyThisFits(session, output);
     try {
-      const labelOf = new Map(JOB_CHAR_PARAMS.map((p) => [p.id, p.label]));
+      const valueLabelOf = new Map(WORK_VALUES_META.map((m) => [m.id, m.label]));
       const prompts = buildWhyThisFitsPrompt({
         profileDigest: buildSessionDigest(session),
         output,
-        topParamLabel: session.jobCharRanking ? labelOf.get(session.jobCharRanking[0]) : "",
+        topValueLabel: session.userValues?.order?.[0]
+          ? valueLabelOf.get(session.userValues.order[0])
+          : "",
         onetSkills: (output.socCode && getOccupation(output.socCode)?.skills) || [],
       });
       const parsed = await runJsonCompletion(client, {
@@ -917,58 +889,12 @@ function createAiEngine({ apiKey, model }) {
     }
   }
 
-  async function inferUserValues({ session }) {
-    const fallback = () =>
-      inferUserValuesFallback({
-        bigFiveScores: session.bigFiveScores,
-        riasecScores: session.riasecScores,
-        jobCharProfile: session.jobCharProfile,
-      });
-    if (!client) return fallback();
-    try {
-      const { system, user } = buildUserValuesInferencePrompt({
-        profileDigest: buildSessionDigest(session),
-      });
-      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.4, maxTokens: 400 });
-      return normalizeSchwartzValuesPayload(parsed).scores;
-    } catch (error) {
-      console.error("[AI user values fallback]", error.message);
-      return fallback();
-    }
-  }
-
-  async function scoreProfessionValues({ jobTitle, orientedField, thesis, directionId, jobCharProfile }) {
-    const fallback = () => {
-      const schwartzValues = buildFallbackProfessionValues(directionId, jobCharProfile);
-      const topKey = deriveTopValues(schwartzValues)[0];
-      const label = SCHWARTZ_VALUE_META.find((m) => m.id === topKey)?.label || topKey;
-      return {
-        schwartzValues,
-        valuesRationale: {
-          [topKey]: `${label} is what day-to-day work as a ${jobTitle || "professional in this field"} rewards most.`,
-        },
-      };
-    };
-    if (!client) return fallback();
-    try {
-      const { system, user } = buildProfessionValuesProfilePrompt({ jobTitle, orientedField, thesis });
-      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.4, maxTokens: 400 });
-      const { scores, rationale } = normalizeSchwartzValuesPayload(parsed);
-      return { schwartzValues: scores, valuesRationale: rationale };
-    } catch (error) {
-      console.error("[AI profession values fallback]", error.message);
-      return fallback();
-    }
-  }
-
   return {
     generateRoadmap,
     inferRiasecProfile,
     generateJobCharQuestions,
     analyzeCV,
     generatePersonaSummary,
-    inferUserValues,
-    scoreProfessionValues,
     generateFirstOutput,
     refineOutput,
     generateWhyThisFits,
@@ -984,7 +910,6 @@ module.exports = {
   normalizeCvAnalysisPayload,
   normalizePersonaSummaryPayload,
   normalizeWhyThisFitsPayload,
-  normalizeSchwartzValuesPayload,
   normalizeOutputPayload,
   resolveShortlistSoc,
   normalizeOutputDetailPayload,

@@ -32,7 +32,6 @@ async function post(path, body) {
 
 test("AI-priced routes return 429 once the strict limit is exceeded", async () => {
   const { data } = await post("/api/session/start", {
-    whyHereAnswer: "figure out what fits me",
     dreamAnswer: "rate limit probe",
   });
   const sessionId = data.sessionId;
@@ -50,7 +49,6 @@ test("AI-priced routes return 429 once the strict limit is exceeded", async () =
 
 test("non-AI routes stay under the global limiter only", async () => {
   const { status } = await post("/api/session/start", {
-    whyHereAnswer: "figure out what fits me",
     dreamAnswer: "still fine",
   });
   assert.equal(status, 200);

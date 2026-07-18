@@ -11,6 +11,9 @@ import {
   bigFiveTakeaways,
   whyThisFitsSections,
   onetSection,
+  deriveArchetype,
+  WORK_VALUE_AXES,
+  WORK_VALUE_ORDER,
 } from "./lifePath";
 
 describe("whyThisFitsSections", () => {
@@ -100,13 +103,15 @@ describe("bigFiveTakeaways", () => {
 });
 
 describe("journey rail", () => {
-  it("covers the five survey steps in execution order", () => {
+  it("covers the survey steps in execution order incl. values + summary", () => {
     expect(JOURNEY_RAIL.map((r) => r.step)).toEqual([
       "demographics",
       "big_five",
       "riasec",
+      "values",
       "job_characteristics",
       "cv",
+      "summary",
     ]);
     for (const entry of JOURNEY_RAIL) {
       expect(entry.label.length).toBeGreaterThan(0);
@@ -116,9 +121,46 @@ describe("journey rail", () => {
 
   it("maps steps to rail positions; off-rail steps return -1", () => {
     expect(railIndexForStep("demographics")).toBe(0);
-    expect(railIndexForStep("cv")).toBe(4);
+    expect(railIndexForStep("values")).toBe(3);
+    expect(railIndexForStep("cv")).toBe(5);
+    expect(railIndexForStep("summary")).toBe(6);
     expect(railIndexForStep("tree")).toBe(-1);
     expect(railIndexForStep("depth_choice")).toBe(-1);
+  });
+});
+
+describe("work values", () => {
+  it("WORK_VALUE_AXES exposes the 6 keys with labels in order", () => {
+    expect(WORK_VALUE_AXES.map((a) => a.key)).toEqual(WORK_VALUE_ORDER);
+    expect(WORK_VALUE_ORDER).toEqual([
+      "achievement",
+      "independence",
+      "recognition",
+      "relationships",
+      "support",
+      "working_conditions",
+    ]);
+    for (const axis of WORK_VALUE_AXES) {
+      expect(axis.label.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("deriveArchetype", () => {
+  it("names the archetype from the top RIASEC letter and a Big Five pole", () => {
+    const a = deriveArchetype({
+      riasecCode: "SIE",
+      bigFiveScores: { O: 40, C: 80, E: 40, A: 55, N: 45 },
+    });
+    expect(a.name).toBe("The Helper");
+    expect(a.tagline).toMatch(/helping people grow/);
+    expect(a.tagline).toMatch(/follow-through/);
+  });
+
+  it("falls back to a safe label when no RIASEC code is present", () => {
+    const a = deriveArchetype({});
+    expect(a.name).toBe("The Explorer");
+    expect(typeof a.tagline).toBe("string");
   });
 });
 

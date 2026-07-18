@@ -10,8 +10,24 @@ const {
   serializeRiasecItem,
   serializeJobCharItem,
 } = require("./questionEngine");
-const { deriveHigherOrder, deriveAxes } = require("./schwartzValues");
+const { WORK_VALUES_ORDER } = require("./workValues");
+const { nextComparison, finalOrder } = require("./valuesTournament");
 const { MINI_IPIP_20 } = require("./bigFiveItems");
+
+// Bump when the session shape changes incompatibly. hydrate() expires any
+// persisted session below this version so old Schwartz-shaped sessions can't
+// crash the new work-values UI contract.
+const SESSION_SCHEMA_VERSION = 2;
+
+// A persisted session is compatible only if it carries the current schema
+// version and, when it already has values, a 6-key work-values vector (not the
+// old 10-key Schwartz one).
+function isSchemaCompatible(session) {
+  if (session.schemaVersion !== SESSION_SCHEMA_VERSION) return false;
+  const scores = session.userValues?.scores;
+  if (scores && !WORK_VALUES_ORDER.every((k) => k in scores)) return false;
+  return true;
+}
 
 const SERIALIZED_DEMOGRAPHIC_QUESTIONS = DEMOGRAPHIC_QUESTIONS.map(serializeDemographic);
 const SERIALIZED_JOURNEY_QUESTIONS = CAREER_JOURNEY_QUESTIONS.map(
@@ -68,10 +84,15 @@ class SessionStore {
       for (const key of keys) {
         const raw = await this.redis.get(key);
         const session = typeof raw === "string" ? JSON.parse(raw) : raw;
-        if (session && session.id) {
-          this.sessions.set(session.id, session);
-          loaded += 1;
+        if (!session || !session.id) continue;
+        if (!isSchemaCompatible(session)) {
+          // Old Schwartz-shaped session — drop it rather than half-migrate a
+          // live state machine; the user restarts on the current flow.
+          Promise.resolve(this.redis.del(key)).catch(() => {});
+          continue;
         }
+        this.sessions.set(session.id, session);
+        loaded += 1;
       }
     } while (cursor !== "0");
     return loaded;
@@ -102,13 +123,13 @@ class SessionStore {
     this.sweepTimer = null;
   }
 
-  createSession({ whyHereAnswer, dreamAnswer }) {
+  createSession({ dreamAnswer }) {
     const id = randomUUID();
     const now = new Date().toISOString();
 
     const session = {
       id,
-      whyHereAnswer,
+      schemaVersion: SESSION_SCHEMA_VERSION,
       dreamAnswer,
       step: "demographics",
       demographics: {},
@@ -132,6 +153,8 @@ class SessionStore {
       jobCharAnswers: {},
       jobCharProfile: null,
       careerJourneyAnswers: {},
+      // Adaptive work-values tournament (backend/valuesTournament.js state).
+      valuesTournament: null,
       userValues: null,
       // Page 3 — Life Path Engine (Oriented Field / output loop)
       pathStage: "output",
@@ -251,10 +274,22 @@ class SessionStore {
     this.touch(session);
   }
 
-  // No PVQ instrument yet — the Schwartz vector is always inferred from the
-  // rest of the assessment, so the confidence flag is fixed at "low".
-  setUserValues(session, scores) {
-    session.userValues = { scores, confidence: "low", source: "inferred" };
+  // Values come from the explicit pairwise tournament (an instrument), so the
+  // provenance is high-confidence. `order` is the confirmed 1→6 hierarchy;
+  // `scores` are derived from it by rankToWorkValueScores (curveVersion).
+  setUserValues(session, { scores, order, curveVersion }) {
+    session.userValues = {
+      scores,
+      order,
+      source: "tournament",
+      confidence: "explicit",
+      curveVersion,
+    };
+    this.touch(session);
+  }
+
+  setValuesTournament(session, tournament) {
+    session.valuesTournament = tournament;
     this.touch(session);
   }
 
@@ -308,7 +343,6 @@ class SessionStore {
 
     return {
       sessionId: session.id,
-      whyHereAnswer: session.whyHereAnswer,
       dreamAnswer: session.dreamAnswer,
       step: session.step,
       ...staticPart,
@@ -331,10 +365,15 @@ class SessionStore {
       jobCharProfile: session.jobCharProfile,
       careerJourneyAnswers: session.careerJourneyAnswers,
       userValues: session.userValues,
-      // Pre-derived plane point for the Schwartz map — keeps the axis math
-      // single-sourced on the backend.
-      userValuesAxes: session.userValues
-        ? deriveAxes(deriveHigherOrder(session.userValues.scores))
+      // The pending pairwise comparison (null once the hierarchy is sorted or
+      // not yet started) — the frontend renders it as the A/B question.
+      valuesComparison: session.valuesTournament
+        ? nextComparison(session.valuesTournament)
+        : null,
+      // The sorted 1→6 hierarchy once the comparisons finish (null until then)
+      // — the frontend prefills the reorderable table with it before confirm.
+      valuesRanking: session.valuesTournament
+        ? finalOrder(session.valuesTournament)
         : null,
       progress,
       summary,

@@ -3,15 +3,16 @@ const assert = require("node:assert/strict");
 const { SessionStore } = require("../sessionStore");
 
 function makeSession(store) {
-  return store.createSession({ whyHereAnswer: "figure out what fits me", dreamAnswer: "build things" });
+  return store.createSession({ dreamAnswer: "build things" });
 }
 
 test("createSession initializes v2 + output-loop fields; old models gone", () => {
   const store = new SessionStore();
   const s = makeSession(store);
   // Page 1/2 fields intact
-  assert.equal(s.whyHereAnswer, "figure out what fits me");
   assert.equal(s.dreamAnswer, "build things");
+  assert.equal(s.schemaVersion, 2);
+  assert.equal(s.valuesTournament, null);
   assert.equal(s.step, "demographics");
   assert.deepEqual(s.demographics, {});
   assert.deepEqual(s.bigFiveAnswers, {});
@@ -38,6 +39,7 @@ test("createSession initializes v2 + output-loop fields; old models gone", () =>
   assert.deepEqual(s.refinementHistory, []);
   assert.deepEqual(s.roadmaps, {});
   // Old models gone
+  assert.equal("whyHereAnswer" in s, false);
   assert.equal("valuesAnswers" in s, false);
   assert.equal("valuesScores" in s, false);
   assert.equal("directionQuestions" in s, false);
@@ -143,7 +145,7 @@ test("serializeSessionState exposes question lists and answers for back-navigati
 
 test("createSession initializes v2 fields and serialization exposes them", () => {
   const store = new SessionStore();
-  const session = store.createSession({ whyHereAnswer: "x", dreamAnswer: "x" });
+  const session = store.createSession({ dreamAnswer: "x" });
   assert.equal(session.step, "demographics");
   assert.equal(session.cvIntent, null);
 
@@ -199,19 +201,37 @@ test("v2 mutators: riasec, jobChar, cv, journey", () => {
   assert.equal(s.careerJourneyAnswers.cj_education, "BSc");
 });
 
-test("setUserValues wraps scores as inferred low-confidence; axes serialized alongside", () => {
+test("setUserValues stores the confirmed hierarchy as an explicit instrument", () => {
   const store = new SessionStore();
   const s = makeSession(store);
   assert.equal(s.userValues, null);
 
-  const scores = { self_direction: 80, stimulation: 60, hedonism: 50, achievement: 55, power: 30, security: 40, conformity: 35, tradition: 30, benevolence: 65, universalism: 70 };
-  store.setUserValues(s, scores);
-  assert.deepEqual(s.userValues, { scores, confidence: "low", source: "inferred" });
+  const order = ["achievement", "independence", "recognition", "relationships", "support", "working_conditions"];
+  const scores = { achievement: 100, independence: 84, recognition: 68, relationships: 52, support: 36, working_conditions: 20 };
+  store.setUserValues(s, { order, scores, curveVersion: 1 });
+  assert.deepEqual(s.userValues, {
+    scores,
+    order,
+    source: "tournament",
+    confidence: "explicit",
+    curveVersion: 1,
+  });
 
   const trimmed = store.serializeSessionState(s, {}, {}, { includeStatic: false });
   assert.deepEqual(trimmed.userValues.scores, scores, "userValues travels in the dynamic part");
-  assert.ok(Number.isFinite(trimmed.userValuesAxes.x_open_vs_conserv), "plane point pre-derived");
-  assert.ok(Number.isFinite(trimmed.userValuesAxes.y_transc_vs_enhance));
+  assert.equal(trimmed.userValuesAxes, undefined, "Schwartz plane point is gone");
+});
+
+test("valuesComparison serializes the pending pairwise question", () => {
+  const { startTournament } = require("../valuesTournament");
+  const { WORK_VALUES_ORDER } = require("../workValues");
+  const store = new SessionStore();
+  const s = makeSession(store);
+  store.setValuesTournament(s, startTournament(WORK_VALUES_ORDER));
+  const snap = store.serializeSessionState(s, {}, {}, { includeStatic: false });
+  assert.ok(snap.valuesComparison && snap.valuesComparison.comparisonId, "pending comparison exposed");
+  assert.ok(WORK_VALUES_ORDER.includes(snap.valuesComparison.a));
+  assert.ok(WORK_VALUES_ORDER.includes(snap.valuesComparison.b));
 });
 
 test("old branch/theme methods are gone", () => {

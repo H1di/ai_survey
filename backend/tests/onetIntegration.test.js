@@ -14,7 +14,6 @@ const engine = createAiEngine({ apiKey: undefined, model: "test" });
 
 function fakeSession(overrides = {}) {
   return {
-    whyHereAnswer: "find my direction",
     dreamAnswer: "help people recover",
     cvIntent: "new",
     demographics: { age: 28, country: "Testland", city: "Testville" },
@@ -73,7 +72,7 @@ test("whyThisFits prompt grounds skills in O*NET when provided", () => {
   const { user } = buildWhyThisFitsPrompt({
     profileDigest: "digest",
     output: { jobTitle: "Registered Nurse", orientedField: "Healthcare", thesis: "t" },
-    topParamLabel: "Meaning & impact",
+    topValueLabel: "Relationships",
     onetSkills: ["Service Orientation", "Active Listening"],
   });
   assert.match(user, /O\*NET.*Service Orientation, Active Listening/);

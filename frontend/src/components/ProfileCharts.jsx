@@ -11,12 +11,13 @@ import {
   Cell,
   ResponsiveContainer,
 } from "recharts";
-import SchwartzMap from "./SchwartzMap";
-import { bigFiveTakeaways } from "../lifePath";
+import { bigFiveTakeaways, WORK_VALUE_AXES } from "../lifePath";
 import "./ProfileCharts.css";
 
 const ACCENT = "#863bff";
 const ACCENT_SOFT = "rgba(134, 59, 255, 0.25)";
+const JOB_ACCENT = "#1f9d78";
+const JOB_SOFT = "rgba(31, 157, 120, 0.22)";
 const MUTED = "#666666";
 
 // Axis keys mirror the O/C/E/A/N naming the backend sends to the AI, so a
@@ -145,7 +146,59 @@ export function RiasecBarChart({ scores, code, inferred }) {
   );
 }
 
-export default function ProfilePanel({ profile, valuesMap, onClose }) {
+// Six-axis Minnesota Work Values radar. `user` alone shows the person's
+// hierarchy; passing `job` overlays the profession for a shape comparison.
+export function WorkValuesRadar({ user, job, title = "Work values" }) {
+  if (!user) return null;
+  const data = WORK_VALUE_AXES.map((axis) => ({
+    key: axis.key,
+    label: axis.label,
+    you: user[axis.key] ?? 0,
+    ...(job ? { job: job[axis.key] ?? 0 } : {}),
+  }));
+
+  return (
+    <div className="profile-chart">
+      <p className="profile-chart-title">{title}</p>
+      <ResponsiveContainer width="100%" height={230}>
+        <RadarChart data={data} outerRadius="64%" cx="50%">
+          <PolarGrid stroke="#e0e0e0" />
+          <PolarAngleAxis
+            dataKey="label"
+            tick={{ fontSize: 10, fill: MUTED }}
+          />
+          <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+          {job && (
+            <Radar
+              name="This profession"
+              dataKey="job"
+              stroke={JOB_ACCENT}
+              fill={JOB_SOFT}
+              fillOpacity={1}
+              isAnimationActive={false}
+            />
+          )}
+          <Radar
+            name="You"
+            dataKey="you"
+            stroke={ACCENT}
+            fill={ACCENT_SOFT}
+            fillOpacity={job ? 0.55 : 1}
+            isAnimationActive={false}
+          />
+        </RadarChart>
+      </ResponsiveContainer>
+      {job && (
+        <p className="profile-panel-note">
+          <span style={{ color: ACCENT }}>■</span> You &nbsp;
+          <span style={{ color: JOB_ACCENT }}>■</span> This profession
+        </p>
+      )}
+    </div>
+  );
+}
+
+export default function ProfilePanel({ profile, userValues, onClose }) {
   const { bigFiveScores, derivedTraits, personaSummary, riasecScores, riasecCode, riasecInferred } =
     profile || {};
 
@@ -170,7 +223,7 @@ export default function ProfilePanel({ profile, valuesMap, onClose }) {
         </div>
       )}
       <RiasecBarChart scores={riasecScores} code={riasecCode} inferred={riasecInferred} />
-      {valuesMap && <SchwartzMap userPoint={valuesMap.userPoint} jobs={valuesMap.jobs} />}
+      {userValues?.scores && <WorkValuesRadar user={userValues.scores} title="Your work values" />}
       {derivedTraits?.summary && <p className="profile-panel-summary">{derivedTraits.summary}</p>}
       <p className="profile-panel-note">
         Directions and professions are picked from these survey scores — your dream answer only

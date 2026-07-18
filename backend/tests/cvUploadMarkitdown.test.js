@@ -38,7 +38,6 @@ async function post(path, body) {
 // for the annotated version).
 async function walkToCv() {
   let { data } = await post("/api/session/start", {
-    whyHereAnswer: "figure out what fits me",
     dreamAnswer: "build useful things",
   });
   const sessionId = data.sessionId;
@@ -54,6 +53,13 @@ async function walkToCv() {
   for (const item of data.riasecItems) {
     ({ data } = await post("/api/riasec/answer", { sessionId, itemId: item.id, value: 4 }));
   }
+  // values tournament: pick `a` every comparison, then confirm
+  ({ data } = await post("/api/values/start", { sessionId }));
+  while (data.valuesComparison) {
+    const { comparisonId, a } = data.valuesComparison;
+    ({ data } = await post("/api/values/answer", { sessionId, comparisonId, winner: a }));
+  }
+  ({ data } = await post("/api/values/confirm", { sessionId }));
   ({ data } = await post("/api/job-characteristics/rank", {
     sessionId,
     ranking: ["compensation", "work_mode", "job_security", "career_growth", "complexity", "meaning_impact", "social"],
@@ -69,13 +75,12 @@ async function walkToCv() {
 
 test("snapshots advertise .pptx when markitdown is available", async () => {
   const { data } = await post("/api/session/start", {
-    whyHereAnswer: "x",
     dreamAnswer: "x",
   });
   assert.ok(data.cvUploadFormats.includes(".pptx"), `got ${JSON.stringify(data.cvUploadFormats)}`);
 });
 
-test("a .pptx upload converts via markitdown and reaches tree", async () => {
+test("a .pptx upload converts via markitdown and reaches the summary step", async () => {
   const { sessionId } = await walkToCv();
   const form = new FormData();
   form.append("sessionId", sessionId);
@@ -89,6 +94,6 @@ test("a .pptx upload converts via markitdown and reaches tree", async () => {
   const res = await fetch(`${base}/api/cv`, { method: "POST", body: form });
   const data = await res.json();
   assert.equal(res.status, 200);
-  assert.equal(data.step, "tree");
+  assert.equal(data.step, "summary");
   assert.equal(data.cvProvided, true);
 });
