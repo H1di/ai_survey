@@ -479,9 +479,21 @@ app.post("/api/cv/intent", (req, res) => {
 });
 
 app.post("/api/cv", cvUpload.single("file"), async (req, res) => {
+  // Require the session BEFORE locking so a missing/unknown id 404s rather than
+  // sharing an `undefined:cv` bucket, then single-flight the completion: a
+  // double-submit would otherwise double the AI spend (analyzeCV +
+  // generatePersonaSummary) and advance the step twice.
+  let session;
   try {
-    const { sessionId } = req.body || {};
-    const session = store.require(sessionId);
+    session = store.require((req.body || {}).sessionId);
+  } catch (error) {
+    return sendError(res, req, error, "Something went wrong.");
+  }
+  const lockKey = `${session.id}:cv`;
+  if (!acquireLock(lockKey)) {
+    return fail(res, req, 409, "Another change to this path is still processing.");
+  }
+  try {
     if (session.step !== "cv") {
       return fail(res, req, 400, "Not currently in the CV step.");
     }
@@ -505,13 +517,26 @@ app.post("/api/cv", cvUpload.single("file"), async (req, res) => {
     return sendSessionSnapshot(res, session);
   } catch (error) {
     return sendError(res, req, error, "Failed to analyse the CV.");
+  } finally {
+    releaseLock(lockKey);
   }
 });
 
 app.post("/api/cv/journey", async (req, res) => {
+  const { sessionId, questionId, value } = req.body || {};
+  // Require before locking (see /api/cv); single-flight so a double-submit of
+  // the final answer can't generate the persona or advance the step twice.
+  let session;
   try {
-    const { sessionId, questionId, value } = req.body || {};
-    const session = store.require(sessionId);
+    session = store.require(sessionId);
+  } catch (error) {
+    return sendError(res, req, error, "Something went wrong.");
+  }
+  const lockKey = `${session.id}:cv`;
+  if (!acquireLock(lockKey)) {
+    return fail(res, req, 409, "Another change to this path is still processing.");
+  }
+  try {
     if (session.step !== "cv") {
       return fail(res, req, 400, "Not currently in the CV step.");
     }
@@ -533,6 +558,8 @@ app.post("/api/cv/journey", async (req, res) => {
     return sendSessionSnapshot(res, session);
   } catch (error) {
     return sendError(res, req, error, "Something went wrong.");
+  } finally {
+    releaseLock(lockKey);
   }
 });
 
