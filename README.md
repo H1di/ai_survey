@@ -67,6 +67,10 @@ status and backlog see [`PROJECT_STATUS.md`](./PROJECT_STATUS.md).
 
 ## Project structure
 
+> Question logic & scoring algorithms in depth (Big Five/RIASEC scoring, the
+> Ford–Johnson values tournament, Pearson occupation grounding, `valuesFit`):
+> see [`ASSESSMENT-LOGIC.md`](ASSESSMENT-LOGIC.md).
+
 - `frontend/` — React app: `src/App.jsx` (stage machine + all state),
   `src/api.js` (fetch wrappers), `src/lifePath.js` (graph builder),
   `src/components/GraphView/` (React Flow wrapper),
