@@ -119,6 +119,10 @@ describe("journey rail", () => {
     }
   });
 
+  it("labels the work-values step 'Your values'", () => {
+    expect(JOURNEY_RAIL.find((r) => r.step === "values").label).toBe("Step 3 — Your values");
+  });
+
   it("maps steps to rail positions; off-rail steps return -1", () => {
     expect(railIndexForStep("demographics")).toBe(0);
     expect(railIndexForStep("values")).toBe(3);

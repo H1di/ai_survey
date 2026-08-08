@@ -49,11 +49,11 @@ stateDiagram-v2
     tree --> [*]: Page 3 (pathStage: output -> detail)
 ```
 
-«Адаптивность» здесь достигается **не ветвлением дерева вопросов**, а: выбором
-глубины job-characteristics (5/10), per-session AI-генерацией пунктов с жёсткими
-валидаторами и статичными банками-фоллбеками, взвешиванием job-char вопросов к
-топу пользовательского ранжирования, и опциональными путями (RIASEC-skip,
-CV-текст vs journey-вопросы). Сам порядок блоков неизменен.
+«Адаптивность» здесь достигается **не ветвлением дерева вопросов**, а: адаптивным
+попарным турниром work-values (Ford–Johnson), персональным ранжированием 7
+job-характеристик, per-session AI-генерацией артефактов с жёсткими валидаторами и
+детерминированными фоллбеками, и опциональными путями (RIASEC-skip, CV-текст vs
+journey-вопросы). Сам порядок блоков неизменен.
 
 ---
 
@@ -304,35 +304,26 @@ curveVersion = 1
 social`. Эти ключи используются дословно в промптах, скоринге, сессии и панели
 рефайна.
 
-**Поток:** `POST /api/job-characteristics/rank {ranking[7], depth: 5|10}` →
-генерируются single-parameter tradeoff-вопросы → ответы → профиль.
+**Поток:** пользователь упорядочивает 7 параметров («Order these from most to
+least important in your next job») → `POST /api/job-characteristics/rank
+{ranking[7]}` → фиксированная кривая ранг→таргет даёт профиль → шаг закрыт.
+Никаких tradeoff-вопросов и выбора глубины: шаг — один экран ранжирования, роут
+синхронный и не тратит AI.
 
-### 6.1 Генерация вопросов и глубина
+### 6.1 Профиль из ранжирования
 
-Каждый вопрос давит на *один* параметр; каждая опция кодирует **целевое значение
-0–100** по нему (например, для `compensation`: «Top-of-market pay…» = 95 …
-«Modest pay…» = 20). Вопросы генерирует AI, фоллбек — статичный банк
-(`JOB_CHAR_QUESTION_BANK`, по 2 вопроса на параметр). Раскладка по глубине
-(`selectFallbackJobCharQuestions`):
-
-- **depth 5:** по одному вопросу на каждый из топ-5 параметров ранжирования.
-- **depth 10:** по два на топ-3 + по одному на остальные 4 → `3·2 + 4 = 10`.
-
-Вопросы взвешены и отсортированы к топу пользовательского ранжирования.
-
-### 6.2 Профиль
-
-**Источник:** `questionEngine.js:computeJobCharProfile`. По каждому параметру —
-среднее целевых значений его отвеченных опций:
+**Источник:** `questionEngine.js:rankToJobCharTargets` (`JOB_CHAR_CURVE_VERSION`).
+Линейная кривая от верхнего якоря к нижнему по позиции в ранжировании:
 
 ```
-profile[param] = round( Σ answered_option_values / count )
+profile[ranking[i]] = round( 90 − (90 − 25) · i / 6 )
+→ 90, 79, 68, 58, 47, 36, 25
 ```
 
-**Не заданные (низко ранжированные) параметры получают нейтральные 50** — это и
-есть роль ранжирования: важное спрашивается детально, неважное садится в
-середину. Результат — `jobCharProfile` (7 чисел 0–100), позже влияет на
-work-value фоллбеки профессий (см. §9.3).
+Ранг — это и есть измерение: важное получает высокий таргет, неважное садится к
+низу шкалы. Результат — `jobCharProfile` (7 чисел 0–100), позже влияет на
+work-value фоллбеки профессий (см. §9.3). `store.finalizeJobChar` пишет ranking +
+profile + `curveVersion` и переводит шаг в `cv` одной записью.
 
 ---
 
@@ -502,7 +493,7 @@ valuesFit = { overall: round(cosFit) }
 | RIASEC | Likert 1–5 ×12 | `((mean−1)/4)·100`; топ-3 → код | `riasecScores`, `riasecCode` | `questionEngine.js`, `riasecItems.js` |
 | RIASEC-skip | `bigFiveScores` | линейные эвристики | `riasecInferred` | `riasec.js:inferRiasecScores` |
 | Values | ≤10 попарных | Ford–Johnson merge-insertion → кривая `[100…20]` | `userValues` | `valuesTournament.js`, `workValues.js` |
-| Job char | ранг 7 + ответы | среднее целей опций; unasked=50 | `jobCharProfile` | `questionEngine.js`, `questionPool.js` |
+| Job char | ранг 7 | кривая ранг→таргет `[90…25]` | `jobCharProfile` | `questionEngine.js`, `questionPool.js` |
 | Направления | `riasecScores` | взвеш. dot-product → топ-5 | direction-семьи | `riasec.js:rankDirections` |
 | Профессии | `riasecScores` + семьи | **Pearson** по O*NET → shortlist 15 | shortlist | `onet.js:rankOccupations` |
 | Fit ценностей | `userValues` + проф. | центрированный косинус → `{overall}` | `valuesFit` | `workValues.js:valuesFit` |

@@ -32,8 +32,8 @@ const {
   computeRiasecScores,
   deriveRiasecCode,
   validateJobCharRanking,
-  validateJobCharAnswer,
-  computeJobCharProfile,
+  rankToJobCharTargets,
+  JOB_CHAR_CURVE_VERSION,
   validateCareerJourneyAnswer,
   computeBigFiveScores,
   deriveBigFiveTraits,
@@ -133,7 +133,6 @@ const aiLimiter = rateLimit({
 });
 for (const path of [
   "/api/riasec/skip",
-  "/api/job-characteristics/rank",
   "/api/cv",
   "/api/cv/journey",
   "/api/output/first",
@@ -411,43 +410,23 @@ app.post("/api/values/confirm", (req, res) => {
   }
 });
 
-app.post("/api/job-characteristics/rank", async (req, res) => {
+// The whole job-characteristics step: the user orders the 7 parameters and a
+// fixed rank->target curve turns that order into the 0-100 profile. No AI, no
+// follow-up questions — submitting the ranking completes the step.
+app.post("/api/job-characteristics/rank", (req, res) => {
   try {
-    const { sessionId, ranking, depth } = req.body || {};
+    const { sessionId, ranking } = req.body || {};
     const session = store.require(sessionId);
     if (session.step !== "job_characteristics") {
       return fail(res, req, 400, "Not currently in the job-characteristics step.");
-    }
-    if (session.jobCharItems.length) {
-      return fail(res, req, 400, "Ranking already submitted.");
-    }
-    if (depth !== 5 && depth !== 10) {
-      return fail(res, req, 400, "depth must be 5 or 10.");
     }
     const validRanking = validateJobCharRanking(ranking);
-    const items = await aiEngine.generateJobCharQuestions({ session, ranking: validRanking, count: depth });
-    store.setJobCharRanking(session, validRanking, depth, items);
-    return sendSessionSnapshot(res, session, { includeStatic: true });
-  } catch (error) {
-    return sendError(res, req, error, "Failed to build your priority questions.");
-  }
-});
-
-app.post("/api/job-characteristics/answer", (req, res) => {
-  try {
-    const { sessionId, itemId, value } = req.body || {};
-    const session = store.require(sessionId);
-    if (session.step !== "job_characteristics") {
-      return fail(res, req, 400, "Not currently in the job-characteristics step.");
-    }
-    const normalized = validateJobCharAnswer(session, itemId, value);
-    store.recordJobCharAnswer(session, itemId, normalized);
-
-    const { profile } = computeJobCharProfile(session);
-    if (profile) {
-      store.setJobCharProfile(session, profile);
-      store.advanceStep(session, "cv");
-    }
+    store.finalizeJobChar(session, {
+      ranking: validRanking,
+      profile: rankToJobCharTargets(validRanking),
+      curveVersion: JOB_CHAR_CURVE_VERSION,
+      nextStep: "cv",
+    });
     return sendSessionSnapshot(res, session);
   } catch (error) {
     return sendError(res, req, error, "Something went wrong.");

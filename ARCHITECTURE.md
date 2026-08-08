@@ -32,9 +32,8 @@
   только view-state (индексы вопросов, busy-флаги, открытые панели).
 - **Статичные банки вопросов** (`demographicQuestions`, `bigFiveItems`,
   `riasecItems`, `jobCharParams`, `careerJourneyQuestions`) едут только в
-  снапшотах `start` / `GET session` / `riasec/start` /
-  `job-characteristics/rank` (`includeStatic`); ответные снапшоты несут только
-  динамику — фронтенд мёржит, а не заменяет.
+  снапшотах `start` / `GET session` / `riasec/start` (`includeStatic`);
+  ответные снапшоты несут только динамику — фронтенд мёржит, а не заменяет.
 - **AI никогда не отдаёт агрегаты и не скорит ценности.** Модель возвращает
   сырые баллы и тексты; всё производное (Big Two, RIASEC-код, work-values
   `topValues`/`valuesFit`) считает бэкенд детерминированно. Ценности профессии
@@ -52,8 +51,8 @@
 | `logger.js` | Бездеп-логгер ошибок: `logError` — одна JSON-строка на ≥500 (route-шаблон / UUID-редакция, чтобы id сессии не утёк), `resolveStatus` (clamp 400..599) | (req, err) → лог |
 | `sessionStore.js` | In-memory `Map` сессий (авторитетный process-local набор — **один инстанс**); TTL 24 ч, sweep раз в час (unref'd); все мутаторы (`advanceStep`, `appendOutput`, `acceptOutput`, `finalizeValues`…); `serializeSessionState`; `schemaVersion` + миграция несовместимых сессий на `hydrate()`. Опциональный write-through + `hydrate()` в Redis, если передан клиент | session-объект ↔ снапшот |
 | `redisClient.js` | Фабрика Upstash-клиента: возвращает `null` без `UPSTASH_REDIS_REST_URL`/`_TOKEN` (→ чистый in-memory), иначе REST-клиент для durable сессий | env → Redis-клиент \| null |
-| `questionEngine.js` | Валидация каждого типа ответа (whitelist, диапазоны) и весь скоринг: Big Five (reverse `6−raw`, нормировка `((mean−1)/4)·100`), Big Two (Stability/Plasticity), RIASEC 0–100 + топ-3 код, jobChar-профиль (неспрошенные = 50), прогресс | (session, answer) → normalized value / scores; бросает `{statusCode}`-ошибки |
-| `questionPool.js` | Статика: 4 демо-вопроса, `JOB_CHAR_PARAMS` (7 канонических параметров — кросс-слойный контракт), банк tradeoff-вопросов (2 на параметр), 7 career-journey вопросов, `selectFallbackJobCharQuestions(ranking, 5\|10)` | константы |
+| `questionEngine.js` | Валидация каждого типа ответа (whitelist, диапазоны) и весь скоринг: Big Five (reverse `6−raw`, нормировка `((mean−1)/4)·100`), Big Two (Stability/Plasticity), RIASEC 0–100 + топ-3 код, jobChar-таргеты из ранжирования (`rankToJobCharTargets`, кривая 90→25), прогресс | (session, answer) → normalized value / scores; бросает `{statusCode}`-ошибки |
+| `questionPool.js` | Статика: 4 демо-вопроса, `JOB_CHAR_PARAMS` (7 канонических параметров — кросс-слойный контракт), 7 career-journey вопросов | константы |
 | `bigFiveItems.js` | Public-domain Mini-IPIP-20 — единственный фиксированный инструмент Big Five, сидируется в сессию при создании | `MINI_IPIP_20` |
 | `riasecItems.js` | Статичный фиксированный инструмент RIASEC (12 айтемов, interleaved) | `getStaticRiasecItems()` |
 | `cvExtract.js` | Файл → текст: MarkItDown-first гибрид (pdf/docx/pptx/html/txt); фоллбеки pdf-parse / mammoth / tag-strip / utf8, `.pptx` без MarkItDown → 400; `getCvUploadExtensions()` для снапшота; любая ошибка чтения → 400 | multer file → string |
@@ -80,11 +79,10 @@
    «не тот шаг → 400». Назад по шагам сервер не ходит; «← Back» на фронтенде —
    навигация по уже отвеченным вопросам внутри блока (перезапись ответа).
 2. Адаптивность достигается не ветвлением, а:
-   - выбором глубины jobChar (5/10); Big Five и RIASEC — фиксированные статичные инструменты;
-   - AI-генерацией пунктов per-session (Big Five, RIASEC, jobChar) с жёсткими
-     структурными валидаторами и статичными банками как фоллбеком;
-   - jobChar-вопросы взвешены к топу пользовательского ранжирования и
-     сортируются по нему;
+   - адаптивным попарным турниром work-values (Ford–Johnson, ≤10 сравнений);
+     Big Five, RIASEC и jobChar — фиксированные инструменты без AI-генерации;
+   - персональным ранжированием 7 jobChar-параметров, из которого
+     детерминированная кривая выводит таргеты;
    - опциональными путями: RIASEC-skip (инференс), CV-текст vs 7
      journey-вопросов.
 3. На Page 3 «ветвление» — это цепочка output'ов: каждый refine/notSuitable
@@ -102,8 +100,7 @@
 | Демография | `{sessionId, questionId: "sex"\|"age"\|"country"\|"city", value}` |
 | Big Five | `{sessionId, itemId, value: 1–5}` |
 | RIASEC | `{sessionId, itemId, value: 1–5}` |
-| JobChar ранжирование | `{sessionId, ranking: [7 id, перестановка], depth: 5\|10}` |
-| JobChar ответ | `{sessionId, itemId, value}` — value обязан равняться `value` одной из опций пункта |
+| JobChar ранжирование | `{sessionId, ranking: [7 id, перестановка]}` — закрывает шаг, таргеты выводит кривая ранг→значение |
 | CV intent | `{sessionId, cvIntent: "new"\|"use_skills"}` — выбирается на CV-слайде, перевыбор разрешён |
 | CV | JSON `{sessionId, cvText}` **или** multipart `sessionId` + `file` |
 | Journey | `{sessionId, questionId: "cj_…", value: string ≤400}` |
@@ -194,7 +191,7 @@ flowchart TD
     subgraph Backend["backend (Express :3001)"]
         GUARD["server.js: rate limit → CORS →<br/>step-guard шага сессии"]
         VALIDATE["questionEngine: валидация ответа<br/>(whitelist / диапазон / опция)"]
-        SCORE["Скоринг при закрытии блока:<br/>Big Five → OCEAN + Big Two<br/>RIASEC → 0–100 + код<br/>jobChar → профиль таргетов"]
+        SCORE["Скоринг при закрытии блока:<br/>Big Five → OCEAN + Big Two<br/>RIASEC → 0–100 + код<br/>jobChar → кривая ранг→таргет"]
         STORE[("sessionStore<br/>in-memory Map, TTL 24 ч")]
         SNAP["serializeSessionState<br/>(+ static-банки только на start/resume)"]
     end

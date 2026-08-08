@@ -97,11 +97,7 @@ async function walkToJobChar() {
 async function walkToCv() {
   const walked = await walkToJobChar();
   const { sessionId, careerJourneyQuestions } = walked;
-  let { data } = await post("/api/job-characteristics/rank", { sessionId, ranking: RANKING, depth: 5 });
-  assert.equal(data.jobCharItems.length, 5);
-  for (const item of data.jobCharItems) {
-    ({ data } = await post("/api/job-characteristics/answer", { sessionId, itemId: item.id, value: item.options[0].value }));
-  }
+  const { data } = await post("/api/job-characteristics/rank", { sessionId, ranking: RANKING });
   assert.equal(data.step, "cv");
   return { sessionId, data, careerJourneyQuestions };
 }
@@ -181,7 +177,7 @@ test("step guards: riasec/jobchar/cv routes reject out-of-order calls", async ()
     ["/api/riasec/skip", { sessionId }],
     ["/api/values/start", { sessionId }],
     ["/api/values/confirm", { sessionId, order: [] }],
-    ["/api/job-characteristics/rank", { sessionId, ranking: RANKING, depth: 5 }],
+    ["/api/job-characteristics/rank", { sessionId, ranking: RANKING }],
     ["/api/cv", { sessionId, cvText: "hi" }],
     ["/api/cv/journey", { sessionId, questionId: "cj_education", value: "x" }],
     ["/api/summary/continue", { sessionId }],
@@ -210,39 +206,29 @@ test("riasec skip infers a low-confidence profile and advances", async () => {
   assert.equal(data.riasecCode.length, 3);
 });
 
-test("job-characteristics/rank validates ranking permutation, depth, and re-rank", async () => {
+test("job-characteristics/rank validates the permutation and rejects a re-rank", async () => {
   const { sessionId } = await walkToJobChar();
-  let res = await post("/api/job-characteristics/rank", { sessionId, ranking: ["compensation"], depth: 5 });
-  assert.equal(res.status, 400);
-  res = await post("/api/job-characteristics/rank", { sessionId, ranking: RANKING, depth: 7 });
-  assert.equal(res.status, 400, "depth must be 5 or 10");
-  res = await post("/api/job-characteristics/rank", { sessionId, ranking: RANKING, depth: 10 });
+  let res = await post("/api/job-characteristics/rank", { sessionId, ranking: ["compensation"] });
+  assert.equal(res.status, 400, "ranking must cover all 7 params");
+  res = await post("/api/job-characteristics/rank", { sessionId, ranking: [...RANKING.slice(1), RANKING[0]] });
   assert.equal(res.status, 200);
-  assert.equal(res.data.jobCharItems.length, 10);
-  res = await post("/api/job-characteristics/rank", { sessionId, ranking: RANKING, depth: 5 });
-  assert.equal(res.status, 400, "ranking already submitted");
+  assert.equal(res.data.step, "cv", "submitting the ranking completes the step");
+  res = await post("/api/job-characteristics/rank", { sessionId, ranking: RANKING });
+  assert.equal(res.status, 400, "the step is closed — no re-ranking");
 });
 
-test("jobChar answers must be one of the option values; completion computes the profile", async () => {
-  const { sessionId, data: ranked } = await (async () => {
-    const walked = await walkToJobChar();
-    const { data } = await post("/api/job-characteristics/rank", { sessionId: walked.sessionId, ranking: RANKING, depth: 5 });
-    return { sessionId: walked.sessionId, data };
-  })();
+test("the ranking alone derives the 0-100 targets, top-ranked first", async () => {
+  const { sessionId } = await walkToJobChar();
+  const { data } = await post("/api/job-characteristics/rank", { sessionId, ranking: RANKING });
 
-  const item = ranked.jobCharItems[0];
-  let res = await post("/api/job-characteristics/answer", { sessionId, itemId: item.id, value: 42.5 });
-  assert.equal(res.status, 400);
-
-  let data = ranked;
-  for (const q of ranked.jobCharItems) {
-    ({ data } = await post("/api/job-characteristics/answer", { sessionId, itemId: q.id, value: q.options[0].value }));
+  assert.deepEqual(data.jobCharRanking, RANKING);
+  const targets = RANKING.map((param) => data.jobCharProfile[param]);
+  assert.equal(targets.length, 7);
+  for (const t of targets) assert.ok(t >= 0 && t <= 100, "targets stay in 0-100");
+  for (let i = 1; i < targets.length; i += 1) {
+    assert.ok(targets[i] < targets[i - 1], "each rank scores below the one above it");
   }
-  assert.equal(data.step, "cv");
-  assert.ok(data.jobCharProfile, "profile computed on completion");
-  for (const param of RANKING) {
-    assert.equal(typeof data.jobCharProfile[param], "number");
-  }
+  assert.equal(data.jobCharItems, undefined, "no tradeoff battery travels any more");
 });
 
 test("cv with pasted text stores analysis and reaches the summary step", async () => {

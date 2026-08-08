@@ -69,29 +69,23 @@ function validateJobCharRanking(ranking) {
   return ranking;
 }
 
-function validateJobCharAnswer(session, itemId, value) {
-  const item = (session.jobCharItems || []).find((i) => i.id === itemId);
-  if (!item) throw httpErr(404, "Unknown job-characteristics question.");
-  const n = Number(value);
-  if (!item.options.some((o) => o.value === n)) {
-    throw httpErr(400, "Answer must be one of the question's option values.");
-  }
-  return n;
-}
+// The 7 job-characteristic targets come straight from the user's ranking —
+// the step asks for an order, not a battery of tradeoff questions. A fixed
+// linear curve turns rank 1..7 into a 0-100 target (90 down to 25), the same
+// shape as rankToWorkValueScores for the work values. Bump the version when
+// the curve moves so stored profiles stay interpretable.
+const JOB_CHAR_CURVE_VERSION = 1;
+const JOB_CHAR_TOP_TARGET = 90;
+const JOB_CHAR_BOTTOM_TARGET = 25;
 
-function computeJobCharProfile(session) {
-  const items = session.jobCharItems || [];
-  const answered = items.filter((i) => session.jobCharAnswers[i.id] !== undefined).length;
-  if (!items.length || answered < items.length) return { profile: null, answered };
-
+function rankToJobCharTargets(ranking) {
+  const span = JOB_CHAR_TOP_TARGET - JOB_CHAR_BOTTOM_TARGET;
+  const lastRank = ranking.length - 1;
   const profile = {};
-  for (const param of JOB_CHAR_PARAM_IDS) {
-    const group = items.filter((i) => i.param === param);
-    profile[param] = group.length
-      ? Math.round(group.reduce((s, i) => s + session.jobCharAnswers[i.id], 0) / group.length)
-      : 50; // unasked (low-ranked) parameters sit at the neutral midpoint
-  }
-  return { profile, answered };
+  ranking.forEach((param, index) => {
+    profile[param] = Math.round(JOB_CHAR_TOP_TARGET - (span * index) / lastRank);
+  });
+  return profile;
 }
 
 function validateCareerJourneyAnswer(questionId, value) {
@@ -99,10 +93,6 @@ function validateCareerJourneyAnswer(questionId, value) {
   const s = typeof value === "string" ? value.trim() : "";
   if (!s) throw httpErr(400, "Answer cannot be empty.");
   return s.slice(0, 400);
-}
-
-function serializeJobCharItem(item) {
-  return { id: item.id, param: item.param, text: item.text, options: item.options };
 }
 
 function httpErr(status, message) {
@@ -235,11 +225,7 @@ function buildProgress(session) {
       total: (session.riasecItems || []).length,
       inferred: session.riasecInferred,
     },
-    jobChar: {
-      ranked: Boolean(session.jobCharRanking),
-      answered: Object.keys(session.jobCharAnswers || {}).length,
-      total: (session.jobCharItems || []).length,
-    },
+    jobChar: { ranked: Boolean(session.jobCharRanking) },
     journey: {
       answered: Object.keys(session.careerJourneyAnswers || {}).length,
       total: CAREER_JOURNEY_QUESTIONS.length,
@@ -278,15 +264,14 @@ function summarizeAnswersForClient(session) {
 module.exports = {
   serializeDemographic,
   serializeRiasecItem,
-  serializeJobCharItem,
   validateRiasecAnswer,
   computeRiasecScores,
   deriveRiasecCode,
   validateDemographicAnswer,
   validateBigFiveAnswer,
   validateJobCharRanking,
-  validateJobCharAnswer,
-  computeJobCharProfile,
+  rankToJobCharTargets,
+  JOB_CHAR_CURVE_VERSION,
   validateCareerJourneyAnswer,
   computeBigFiveScores,
   deriveBigFiveTraits,

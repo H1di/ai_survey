@@ -133,15 +133,6 @@ test("inferred RIASEC is flagged low-confidence in the digest", () => {
   assert.match(digest, /code ASI \(inferred, low confidence\)/);
 });
 
-test("jobChar questions prompt embeds ranking order and count", () => {
-  const { system, user } = prompts.buildJobCharQuestionsPrompt({
-    ranking: DIGEST_FIXTURE.jobCharRanking,
-    count: 5,
-  });
-  assert.match(system, /exactly 5 questions/);
-  assert.match(user, /meaning_impact, work_mode, compensation/);
-});
-
 test("cv parse prompt embeds the text and the extended schema", () => {
   const { system, user } = prompts.buildCvParsePrompt("10 years as a nurse");
   assert.match(system, /"roles":\[/);

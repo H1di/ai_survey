@@ -201,8 +201,8 @@ export const JOURNEY_RAIL = [
   { step: "demographics", label: "About you", time: "~1 min" },
   { step: "big_five", label: "Step 1 — How you think", time: "2–3 min" },
   { step: "riasec", label: "Step 2 — What truly interests you", time: "2 min" },
-  { step: "values", label: "Step 3 — What matters most", time: "1–2 min" },
-  { step: "job_characteristics", label: "Step 4 — What motivates you", time: "2–3 min" },
+  { step: "values", label: "Step 3 — Your values", time: "1–2 min" },
+  { step: "job_characteristics", label: "Step 4 — What motivates you", time: "~1 min" },
   { step: "cv", label: "Step 5 — Your skills & experience", time: "1–2 min" },
   { step: "summary", label: "Who you are", time: "~1 min" },
 ];

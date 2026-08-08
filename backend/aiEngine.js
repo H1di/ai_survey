@@ -3,7 +3,6 @@ const {
   buildProfileDigest,
   buildRoadmapPrompt,
   buildRiasecInferencePrompt,
-  buildJobCharQuestionsPrompt,
   buildCvParsePrompt,
   buildPersonaSummaryPrompt,
   buildOrientedFieldPrompt,
@@ -15,7 +14,7 @@ const {
   WORK_VALUES_META,
   buildFallbackProfessionValues,
 } = require("./workValues");
-const { selectFallbackJobCharQuestions, JOB_CHAR_PARAMS, JOB_CHAR_PARAM_IDS } = require("./questionPool");
+const { JOB_CHAR_PARAMS, JOB_CHAR_PARAM_IDS } = require("./questionPool");
 const { DIRECTIONS, getDirection } = require("./directions");
 const { rankDirections, inferRiasecScores } = require("./riasec");
 const { rankOccupations, getOccupation } = require("./onet");
@@ -549,35 +548,6 @@ function normalizeRiasecScoresPayload(payload) {
   return scores;
 }
 
-function normalizeJobCharQuestionsPayload(payload, { count, ranking }) {
-  const raw = Array.isArray(payload?.items) ? payload.items : [];
-  if (raw.length !== count) throw new Error(`Expected ${count} questions, got ${raw.length}.`);
-
-  const items = raw.map((item) => {
-    if (!ranking.includes(item?.param)) throw new Error(`Invalid param: ${item?.param}`);
-    const text = cleanText(item?.text);
-    if (!text) throw new Error("Question missing text.");
-    const options = Array.isArray(item?.options) ? item.options : [];
-    if (options.length < 3 || options.length > 4) {
-      throw new Error(`Question needs 3–4 options, got ${options.length}.`);
-    }
-    return {
-      param: item.param,
-      text,
-      options: options.map((o) => {
-        const value = Number(o?.value);
-        const label = cleanText(o?.label);
-        if (!Number.isFinite(value) || !label) throw new Error("Option needs a numeric value and a label.");
-        return { value: Math.max(0, Math.min(100, Math.round(value))), label };
-      }),
-    };
-  });
-
-  // Serve questions in the user's importance order regardless of AI ordering.
-  items.sort((a, b) => ranking.indexOf(a.param) - ranking.indexOf(b.param));
-  return items.map((item, index) => ({ id: `jc_${index + 1}`, ...item }));
-}
-
 function normalizeWhyThisFitsPayload(payload) {
   const points = (list, min, max, name) => {
     const entries = (Array.isArray(list) ? list : [])
@@ -846,18 +816,6 @@ function createAiEngine({ apiKey, model }) {
     }
   }
 
-  async function generateJobCharQuestions({ session, ranking, count }) {
-    if (!client) return selectFallbackJobCharQuestions(ranking, count);
-    try {
-      const { system, user } = buildJobCharQuestionsPrompt({ ranking, count });
-      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.8, maxTokens: 1200 });
-      return normalizeJobCharQuestionsPayload(parsed, { count, ranking });
-    } catch (error) {
-      console.error("[AI jobChar questions fallback]", error.message);
-      return selectFallbackJobCharQuestions(ranking, count);
-    }
-  }
-
   // Keyless fallback returns an EMPTY signal on purpose: the profile digest
   // then quotes a raw excerpt instead of pretending a parse happened.
   async function analyzeCV({ cvText }) {
@@ -893,7 +851,6 @@ function createAiEngine({ apiKey, model }) {
   return {
     generateRoadmap,
     inferRiasecProfile,
-    generateJobCharQuestions,
     analyzeCV,
     generatePersonaSummary,
     generateFirstOutput,
@@ -907,7 +864,6 @@ module.exports = {
   createAiEngine,
   runJsonCompletion,
   normalizeRiasecScoresPayload,
-  normalizeJobCharQuestionsPayload,
   normalizeCvAnalysisPayload,
   normalizePersonaSummaryPayload,
   normalizeWhyThisFitsPayload,

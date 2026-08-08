@@ -8,7 +8,6 @@ const {
 const {
   serializeDemographic,
   serializeRiasecItem,
-  serializeJobCharItem,
 } = require("./questionEngine");
 const { WORK_VALUES_ORDER } = require("./workValues");
 const { nextComparison, finalOrder } = require("./valuesTournament");
@@ -16,8 +15,10 @@ const { MINI_IPIP_20 } = require("./bigFiveItems");
 
 // Bump when the session shape changes incompatibly. hydrate() expires any
 // persisted session below this version so old Schwartz-shaped sessions can't
-// crash the new work-values UI contract.
-const SESSION_SCHEMA_VERSION = 2;
+// crash the new work-values UI contract. v3 dropped the job-characteristics
+// tradeoff questions (jobCharItems/jobCharAnswers/jobCharDepth) — a session
+// parked mid-battery has nowhere to land on the ranking-only step.
+const SESSION_SCHEMA_VERSION = 3;
 
 // A persisted session is compatible only if it carries the current schema
 // version and, when it already has values, a 6-key work-values vector (not the
@@ -154,10 +155,8 @@ class SessionStore {
       riasecCode: null,
       riasecInferred: false,
       jobCharRanking: null,
-      jobCharDepth: null,
-      jobCharItems: [],
-      jobCharAnswers: {},
       jobCharProfile: null,
+      jobCharCurveVersion: null,
       careerJourneyAnswers: {},
       // Adaptive work-values tournament (backend/valuesTournament.js state).
       valuesTournament: null,
@@ -245,22 +244,13 @@ class SessionStore {
     this.touch(session);
   }
 
-  setJobCharRanking(session, ranking, depth, items) {
+  // The whole job-characteristics step in one write: the ranking, the targets
+  // derived from it, and the step advance — there is nothing to answer after.
+  finalizeJobChar(session, { ranking, profile, curveVersion, nextStep }) {
     session.jobCharRanking = ranking;
-    session.jobCharDepth = depth;
-    session.jobCharItems = items;
-    session.jobCharAnswers = {};
-    session.jobCharProfile = null;
-    this.touch(session);
-  }
-
-  recordJobCharAnswer(session, itemId, value) {
-    session.jobCharAnswers[itemId] = value;
-    this.touch(session);
-  }
-
-  setJobCharProfile(session, profile) {
     session.jobCharProfile = profile;
+    session.jobCharCurveVersion = curveVersion;
+    session.step = nextStep;
     this.touch(session);
   }
 
@@ -371,9 +361,6 @@ class SessionStore {
       riasecCode: session.riasecCode,
       riasecInferred: session.riasecInferred,
       jobCharRanking: session.jobCharRanking,
-      jobCharDepth: session.jobCharDepth,
-      jobCharItems: session.jobCharItems.map(serializeJobCharItem),
-      jobCharAnswers: session.jobCharAnswers,
       jobCharProfile: session.jobCharProfile,
       careerJourneyAnswers: session.careerJourneyAnswers,
       userValues: session.userValues,

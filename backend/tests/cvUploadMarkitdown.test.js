@@ -63,11 +63,7 @@ async function walkToCv() {
   ({ data } = await post("/api/job-characteristics/rank", {
     sessionId,
     ranking: ["compensation", "work_mode", "job_security", "career_growth", "complexity", "meaning_impact", "social"],
-    depth: 5,
   }));
-  for (const item of data.jobCharItems) {
-    ({ data } = await post("/api/job-characteristics/answer", { sessionId, itemId: item.id, value: item.options[0].value }));
-  }
   assert.equal(data.step, "cv");
   await post("/api/cv/intent", { sessionId, cvIntent: "use_skills" });
   return { sessionId };

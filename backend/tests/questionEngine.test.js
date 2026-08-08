@@ -7,14 +7,12 @@ const {
   computeRiasecScores,
   deriveRiasecCode,
   validateJobCharRanking,
-  validateJobCharAnswer,
-  computeJobCharProfile,
+  rankToJobCharTargets,
   validateCareerJourneyAnswer,
 } = require("../questionEngine");
 const {
   DEMOGRAPHIC_QUESTIONS,
   JOB_CHAR_PARAM_IDS,
-  selectFallbackJobCharQuestions,
   CAREER_JOURNEY_QUESTIONS,
 } = require("../questionPool");
 const { getStaticRiasecItems } = require("../riasecItems");
@@ -62,44 +60,27 @@ test("validateJobCharRanking accepts only a permutation of all 7 params", () => 
   );
 });
 
-test("fallback jobChar questions follow ranking order and depth weighting", () => {
+test("rankToJobCharTargets: strictly descending 0-100 targets in ranking order", () => {
   const ranking = [...JOB_CHAR_PARAM_IDS];
-  const five = selectFallbackJobCharQuestions(ranking, 5);
-  assert.equal(five.length, 5);
-  assert.deepEqual(five.map((q) => q.param), ranking.slice(0, 5));
-  const ten = selectFallbackJobCharQuestions(ranking, 10);
-  assert.equal(ten.length, 10);
-  // top-3 params get 2 questions each, the remaining 4 get 1
-  for (const p of ranking.slice(0, 3)) assert.equal(ten.filter((q) => q.param === p).length, 2);
-  for (const p of ranking.slice(3)) assert.equal(ten.filter((q) => q.param === p).length, 1);
-  assert.deepEqual(ten.map((q) => q.id), ten.map((_, n) => `jc_${n + 1}`));
-  for (const q of ten) {
-    assert.ok(q.options.length >= 3 && q.options.length <= 4);
-    for (const o of q.options) assert.ok(o.value >= 0 && o.value <= 100 && o.label);
+  const profile = rankToJobCharTargets(ranking);
+
+  assert.deepEqual(Object.keys(profile).sort(), [...ranking].sort(), "every param gets a target");
+  const targets = ranking.map((p) => profile[p]);
+  assert.equal(targets[0], 90, "top rank sits at the high anchor");
+  assert.equal(targets[targets.length - 1], 25, "last rank sits at the low anchor");
+  for (const t of targets) {
+    assert.ok(Number.isInteger(t) && t >= 0 && t <= 100, "targets are integers inside 0-100");
+  }
+  for (let i = 1; i < targets.length; i += 1) {
+    assert.ok(targets[i] < targets[i - 1], "each rank scores below the one above it");
   }
 });
 
-test("validateJobCharAnswer only accepts one of the item's option values", () => {
-  const items = selectFallbackJobCharQuestions([...JOB_CHAR_PARAM_IDS], 5);
-  const session = { jobCharItems: items, jobCharAnswers: {} };
-  const legal = items[0].options[0].value;
-  assert.equal(validateJobCharAnswer(session, items[0].id, legal), legal);
-  assert.throws(() => validateJobCharAnswer(session, items[0].id, 42.5), /option/);
-  assert.throws(() => validateJobCharAnswer(session, "jc_99", legal), /Unknown/);
-});
-
-test("computeJobCharProfile: null until complete, then per-param means with 50 default", () => {
-  const ranking = [...JOB_CHAR_PARAM_IDS];
-  const items = selectFallbackJobCharQuestions(ranking, 5);
-  const session = { jobCharItems: items, jobCharAnswers: {} };
-  assert.equal(computeJobCharProfile(session).profile, null);
-  for (const item of items) session.jobCharAnswers[item.id] = item.options[0].value;
-  const { profile } = computeJobCharProfile(session);
-  for (const p of ranking.slice(0, 5)) {
-    const item = items.find((i) => i.param === p);
-    assert.equal(profile[p], item.options[0].value);
-  }
-  for (const p of ranking.slice(5)) assert.equal(profile[p], 50, "unasked params default to 50");
+test("rankToJobCharTargets follows the order, not the param identity", () => {
+  const reversed = [...JOB_CHAR_PARAM_IDS].reverse();
+  const profile = rankToJobCharTargets(reversed);
+  assert.equal(profile[reversed[0]], 90);
+  assert.equal(profile[JOB_CHAR_PARAM_IDS[0]], 25, "a param ranked last lands on the low anchor");
 });
 
 test("career journey: 7 questions; answers trimmed and capped at 400 chars", () => {

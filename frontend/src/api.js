@@ -91,10 +91,6 @@ export function submitJobCharRanking(payload) {
   return request("/api/job-characteristics/rank", { method: "POST", body: JSON.stringify(payload) });
 }
 
-export function submitJobCharAnswer(payload) {
-  return request("/api/job-characteristics/answer", { method: "POST", body: JSON.stringify(payload) });
-}
-
 export function submitCvText(payload) {
   return request("/api/cv", { method: "POST", body: JSON.stringify(payload) });
 }

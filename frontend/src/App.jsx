@@ -19,7 +19,6 @@ import {
   submitBigFiveAnswer,
   submitDemographics,
   submitCvText,
-  submitJobCharAnswer,
   submitJobCharRanking,
   submitJourneyAnswer,
   submitRiasecAnswer,
@@ -115,15 +114,13 @@ function stepProgressText(step, progress) {
     return `${progress.riasec.answered} / ${progress.riasec.total}`;
   if (step === "values" && progress.values && progress.values.answered)
     return `${progress.values.answered} / ${progress.values.total}`;
-  if (step === "job_characteristics" && progress.jobChar.ranked)
-    return `${progress.jobChar.answered} / ${progress.jobChar.total}`;
   if (step === "cv" && progress.journey.answered)
     return `${progress.journey.answered} / ${progress.journey.total}`;
   return "";
 }
 
 // One journey, one bar. Unknown-yet block sizes assume the short variants so
-// the bar can only get more accurate, never jump backwards. The rank step
+// the bar can only get more accurate, never jump backwards. The ranking step
 // counts as one "question"; the CV block counts as the 7 journey questions
 // until a CV text makes them moot.
 function overallProgress(progress) {
@@ -131,17 +128,15 @@ function overallProgress(progress) {
   const bigFiveTotal = progress.bigFive.total || 20;
   const riasecTotal = progress.riasec.total || 12;
   const valuesTotal = progress.values?.total || 10;
-  const jobCharTotal = progress.jobChar.total || 5;
   const journeyTotal = progress.journey.active ? progress.journey.total : 0;
   const total =
-    progress.demographics.total + bigFiveTotal + riasecTotal + valuesTotal + 1 + jobCharTotal + journeyTotal;
+    progress.demographics.total + bigFiveTotal + riasecTotal + valuesTotal + 1 + journeyTotal;
   const answered =
     progress.demographics.answered +
     progress.bigFive.answered +
     progress.riasec.answered +
     (progress.values?.confirmed ? valuesTotal : progress.values?.answered || 0) +
     (progress.jobChar.ranked ? 1 : 0) +
-    progress.jobChar.answered +
     (progress.journey.active ? progress.journey.answered : 0);
   if (!total) return null;
   return { answered, total, percent: Math.min(100, Math.round((answered / total) * 100)) };
@@ -350,7 +345,7 @@ function CvCard({ mode, setMode, cvDraft, setCvDraft, busy, intent, intentBusy, 
   );
 }
 
-function RankCard({ params, ranking, onMove, busy, onChooseDepth }) {
+function RankCard({ params, ranking, onMove, busy, onConfirm }) {
   const byId = new Map(params.map((p) => [p.id, p]));
   return (
     <div className="question-card">
@@ -387,17 +382,11 @@ function RankCard({ params, ranking, onMove, busy, onChooseDepth }) {
           </li>
         ))}
       </ol>
-      <div className="depth-options">
-        <button type="button" className="depth-card" onClick={() => onChooseDepth(5)} disabled={busy}>
-          <p className="depth-title">Quick</p>
-          <p className="depth-meta">5 targeted questions on your top priorities</p>
-        </button>
-        <button type="button" className="depth-card" onClick={() => onChooseDepth(10)} disabled={busy}>
-          <p className="depth-title">Thorough</p>
-          <p className="depth-meta">10 questions, finer-grained targets</p>
+      <div className="question-actions single">
+        <button type="button" className="primary-action" onClick={onConfirm} disabled={busy}>
+          {busy ? "Saving…" : "This is my order"}
         </button>
       </div>
-      {busy && <p className="depth-loading">Building your questions…</p>}
     </div>
   );
 }
@@ -479,37 +468,6 @@ function ValuesHierarchyCard({ ranking, onMove, busy, onConfirm }) {
         <button type="button" className="primary-action" onClick={onConfirm} disabled={busy}>
           {busy ? "Saving…" : "This is my hierarchy"}
         </button>
-      </div>
-    </div>
-  );
-}
-
-function JobCharQuestionCard({ q, savedValue, busy, onSubmit, onBack, canGoBack, progress }) {
-  return (
-    <div className="question-card">
-      <div className="question-card-top">
-        {canGoBack && (
-          <button type="button" className="ghost-action back-action" onClick={onBack} disabled={busy}>
-            ← Back
-          </button>
-        )}
-        <p className="question-category">
-          {progress ? `Question ${progress.index + 1} of ${progress.total}` : "Priorities"}
-        </p>
-      </div>
-      <h3>{q.text}</h3>
-      <div className="option-list">
-        {q.options.map((o) => (
-          <button
-            key={o.value}
-            type="button"
-            className={`option-button ${savedValue === o.value ? "selected" : ""}`}
-            onClick={() => onSubmit(o.value)}
-            disabled={busy}
-          >
-            {o.label}
-          </button>
-        ))}
       </div>
     </div>
   );
@@ -605,9 +563,6 @@ function App() {
   const [riasecAnswers, setRiasecAnswers] = useState({});
   const [riasecIndex, setRiasecIndex] = useState(0);
   const [jobCharParams, setJobCharParams] = useState([]);
-  const [jobCharItems, setJobCharItems] = useState([]);
-  const [jobCharAnswers, setJobCharAnswers] = useState({});
-  const [jcIndex, setJcIndex] = useState(0);
   const [rankDraft, setRankDraft] = useState([]);
   // Work-values step: the pending pairwise comparison, the sorted hierarchy
   // once comparisons finish, and the reorderable draft the user can tweak.
@@ -650,7 +605,6 @@ function App() {
     values: false,
     valuesConfirm: false,
     summary: false,
-    jobChar: false,
     cv: false,
     cvIntent: false,
     journey: false,
@@ -680,8 +634,6 @@ function App() {
     setDemoAnswers(data.demographics || {});
     setBigFiveAnswers(data.bigFiveAnswers || {});
     setRiasecAnswers(data.riasecAnswers || {});
-    setJobCharItems(data.jobCharItems || []);
-    setJobCharAnswers(data.jobCharAnswers || {});
     setCareerJourneyAnswers(data.careerJourneyAnswers || {});
     setOutputs(data.outputs || []);
     setAcceptedOutputId(data.acceptedOutputId || null);
@@ -723,7 +675,6 @@ function App() {
         setDemoIndex(firstUnansweredIndex(data.demographicQuestions || [], data.demographics));
         setBigFiveIndex(firstUnansweredIndex(data.bigFiveItems || [], data.bigFiveAnswers));
         setRiasecIndex(firstUnansweredIndex(data.riasecItems || [], data.riasecAnswers));
-        setJcIndex(firstUnansweredIndex(data.jobCharItems || [], data.jobCharAnswers));
         setJourneyIndex(
           firstUnansweredIndex(data.careerJourneyQuestions || [], data.careerJourneyAnswers)
         );
@@ -972,37 +923,19 @@ function App() {
     }
   };
 
-  const handleSubmitRanking = async (depth) => {
+  const handleSubmitRanking = async () => {
     if (!sessionId || rankDraft.length !== 7) return;
     setError("");
     setBusy((p) => ({ ...p, rank: true }));
     try {
-      const data = await submitJobCharRanking({ sessionId, ranking: rankDraft, depth });
+      const data = await submitJobCharRanking({ sessionId, ranking: rankDraft });
       applySessionSnapshot(data);
       setRetryAction(null);
-      setJcIndex(0);
     } catch (e) {
-      setError(e.message || "Could not build the questions.");
-      setRetryAction(() => () => handleSubmitRanking(depth));
+      setError(e.message || "Could not save your ranking.");
+      setRetryAction(() => () => handleSubmitRanking());
     } finally {
       setBusy((p) => ({ ...p, rank: false }));
-    }
-  };
-
-  const handleSubmitJobChar = async (value) => {
-    if (!sessionId) return;
-    const item = jobCharItems[jcIndex];
-    if (!item) return;
-    setError("");
-    setBusy((p) => ({ ...p, jobChar: true }));
-    try {
-      const data = await submitJobCharAnswer({ sessionId, itemId: item.id, value });
-      applySessionSnapshot(data);
-      if (jcIndex < jobCharItems.length - 1) setJcIndex((i) => i + 1);
-    } catch (e) {
-      setError(e.message || "Could not save.");
-    } finally {
-      setBusy((p) => ({ ...p, jobChar: false }));
     }
   };
 
@@ -1296,8 +1229,7 @@ function App() {
       values: false,
       valuesConfirm: false,
       summary: false,
-      jobChar: false,
-      cv: false,
+        cv: false,
       cvIntent: false,
       journey: false,
       enterTree: false,
@@ -1614,25 +1546,13 @@ function App() {
             />
           )}
 
-          {step === "job_characteristics" && !jobCharItems.length && rankDraft.length === 7 && (
+          {step === "job_characteristics" && rankDraft.length === 7 && (
             <RankCard
               params={jobCharParams}
               ranking={rankDraft}
               onMove={(index, delta) => setRankDraft((l) => moveRankItem(l, index, delta))}
               busy={busy.rank}
-              onChooseDepth={handleSubmitRanking}
-            />
-          )}
-
-          {step === "job_characteristics" && jobCharItems[jcIndex] && (
-            <JobCharQuestionCard
-              q={jobCharItems[jcIndex]}
-              savedValue={jobCharAnswers[jobCharItems[jcIndex].id] ?? null}
-              busy={busy.jobChar}
-              onSubmit={handleSubmitJobChar}
-              onBack={() => setJcIndex((i) => Math.max(0, i - 1))}
-              canGoBack={jcIndex > 0}
-              progress={{ index: jcIndex, total: jobCharItems.length }}
+              onConfirm={handleSubmitRanking}
             />
           )}
 

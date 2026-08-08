@@ -153,9 +153,7 @@ cd frontend && npm test -- --run    # vitest over src/lifePath.js (24 tests)
 - `POST /api/values/confirm`
   - body: `{ "sessionId": "...", "order": [6 work-value keys] }` — confirms (or reorders) the hierarchy and advances
 - `POST /api/job-characteristics/rank`
-  - body: `{ "sessionId": "...", "ranking": [7 param ids most→least important], "depth": 5|10 }`
-- `POST /api/job-characteristics/answer`
-  - body: `{ "sessionId": "...", "itemId": "...", "value": <one of the option values> }`
+  - body: `{ "sessionId": "...", "ranking": [7 param ids most→least important] }` — the ranking is the whole step: a fixed rank→target curve derives `jobCharProfile` and advances to `cv`
 - `POST /api/cv/intent`
   - body: `{ "sessionId": "...", "cvIntent": "new|use_skills" }` — the "where should we start from" choice, made on the CV slide
 - `POST /api/cv`

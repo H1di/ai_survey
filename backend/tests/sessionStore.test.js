@@ -11,7 +11,7 @@ test("createSession initializes v2 + output-loop fields; old models gone", () =>
   const s = makeSession(store);
   // Page 1/2 fields intact
   assert.equal(s.dreamAnswer, "build things");
-  assert.equal(s.schemaVersion, 2);
+  assert.equal(s.schemaVersion, 3);
   assert.equal(s.valuesTournament, null);
   assert.equal(s.step, "demographics");
   assert.deepEqual(s.demographics, {});
@@ -26,10 +26,8 @@ test("createSession initializes v2 + output-loop fields; old models gone", () =>
   assert.equal(s.riasecCode, null);
   assert.equal(s.riasecInferred, false);
   assert.equal(s.jobCharRanking, null);
-  assert.equal(s.jobCharDepth, null);
-  assert.deepEqual(s.jobCharItems, []);
-  assert.deepEqual(s.jobCharAnswers, {});
   assert.equal(s.jobCharProfile, null);
+  assert.equal(s.jobCharCurveVersion, null);
   assert.deepEqual(s.careerJourneyAnswers, {});
   assert.equal(s.userValues, null);
   // Output loop
@@ -158,7 +156,8 @@ test("createSession initializes v2 fields and serialization exposes them", () =>
   const trimmed = store.serializeSessionState(session, {}, {}, { includeStatic: false });
   assert.equal(trimmed.careerJourneyQuestions, undefined);
   assert.ok("riasecAnswers" in trimmed, "dynamic riasec state always travels");
-  assert.ok("jobCharItems" in trimmed, "jobChar items travel on every snapshot");
+  assert.ok("jobCharProfile" in trimmed, "jobChar targets travel on every snapshot");
+  assert.equal(trimmed.jobCharItems, undefined, "the tradeoff battery is gone");
   assert.ok("outputs" in trimmed, "outputs travel on every snapshot");
 });
 
@@ -189,11 +188,16 @@ test("v2 mutators: riasec, jobChar, cv, journey", () => {
   assert.equal(s.riasecScores, null);
   assert.equal(s.riasecInferred, false);
 
-  const items = [{ id: "jc_1", param: "social", text: "q", options: [{ value: 80, label: "l" }] }];
-  store.setJobCharRanking(s, ["social"], 5, items);
-  store.recordJobCharAnswer(s, "jc_1", 80);
-  store.setJobCharProfile(s, { social: 80 });
-  assert.equal(s.jobCharProfile.social, 80);
+  store.finalizeJobChar(s, {
+    ranking: ["social"],
+    profile: { social: 90 },
+    curveVersion: 1,
+    nextStep: "cv",
+  });
+  assert.deepEqual(s.jobCharRanking, ["social"]);
+  assert.equal(s.jobCharProfile.social, 90);
+  assert.equal(s.jobCharCurveVersion, 1);
+  assert.equal(s.step, "cv", "the ranking is the whole step");
 
   store.setCvAnalysis(s, "raw cv", { skills: ["a"], domains: [], seniority: "mid" });
   assert.equal(s.cvText, "raw cv");

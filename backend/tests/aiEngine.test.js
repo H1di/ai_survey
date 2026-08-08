@@ -146,7 +146,6 @@ test("normalizeOutputDetailPayload enforces 2-4 valid entries per block", () => 
 
 const {
   normalizeRiasecScoresPayload,
-  normalizeJobCharQuestionsPayload,
   normalizeCvAnalysisPayload,
   normalizePersonaSummaryPayload,
   normalizeWhyThisFitsPayload,
@@ -231,25 +230,6 @@ test("normalizeRiasecScoresPayload clamps and requires all six keys", () => {
   );
 });
 
-test("normalizeJobCharQuestionsPayload validates params, options, and sorts by ranking", () => {
-  const ranking = ["social", "compensation", "work_mode", "job_security", "career_growth", "complexity", "meaning_impact"];
-  const payload = {
-    items: [
-      { param: "compensation", text: "Money?", options: [{ value: 90, label: "Max" }, { value: 40, label: "Med" }, { value: 10, label: "Low" }] },
-      { param: "social", text: "People?", options: [{ value: 80, label: "Lots" }, { value: 20, label: "Few" }, { value: 50, label: "Some" }] },
-    ],
-  };
-  const items = normalizeJobCharQuestionsPayload(payload, { count: 2, ranking });
-  assert.equal(items[0].param, "social", "items re-sorted into ranking order");
-  assert.deepEqual(items.map((i) => i.id), ["jc_1", "jc_2"]);
-
-  assert.throws(() => normalizeJobCharQuestionsPayload({ items: [payload.items[0]] }, { count: 2, ranking }), /Expected 2/);
-  const badParam = { items: [{ ...payload.items[0], param: "salary" }, payload.items[1]] };
-  assert.throws(() => normalizeJobCharQuestionsPayload(badParam, { count: 2, ranking }), /param/);
-  const twoOptions = { items: [{ ...payload.items[0], options: payload.items[0].options.slice(0, 2) }, payload.items[1]] };
-  assert.throws(() => normalizeJobCharQuestionsPayload(twoOptions, { count: 2, ranking }), /3–4 options/);
-});
-
 test("normalizeCvAnalysisPayload trims, caps, and requires at least one skill", () => {
   const parsed = normalizeCvAnalysisPayload({
     roles: Array.from({ length: 10 }, (_, i) => ` role ${i} `),
@@ -272,15 +252,11 @@ test("keyless engine: analyzeCV returns the honest empty signal", async () => {
   assert.deepEqual(analysis, { roles: [], skills: [], domains: [], seniority: "", keywords: [] });
 });
 
-test("keyless engine: inferRiasecProfile derives from Big Five; jobChar questions from the bank", async () => {
+test("keyless engine: inferRiasecProfile derives from Big Five", async () => {
   const scores = await engine.inferRiasecProfile({ session: fakeSession({ riasecScores: null }) });
   for (const key of ["R", "I", "A", "S", "E", "C"]) {
     assert.ok(scores[key] >= 0 && scores[key] <= 100);
   }
-  const ranking = ["social", "compensation", "work_mode", "job_security", "career_growth", "complexity", "meaning_impact"];
-  const questions = await engine.generateJobCharQuestions({ session: fakeSession(), ranking, count: 5 });
-  assert.equal(questions.length, 5);
-  assert.equal(questions[0].param, "social");
 });
 
 // Work-value scoring moved out of aiEngine entirely: profession values now come

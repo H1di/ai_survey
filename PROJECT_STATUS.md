@@ -18,7 +18,7 @@
 - **Демография** — 4 статичных вопроса (sex, age 13–99, country, city) с whitelist-валидацией.
 - **Big Five** — единственный фиксированный инструмент: статичный public-domain Mini-IPIP-20 (`bigFiveItems.js`), сидируется в сессию при создании; без AI-генерации и выбора глубины. Скоринг reverse + нормировка 0–100 + Big Two (Stability/Plasticity).
 - **RIASEC** — фиксированные 12 статичных activity-пунктов (`getStaticRiasecItems`), скоринг 0–100 по 6 типам + топ-3 код; skip-путь с инференсом из Big Five + dream (`riasecInferred`, low-confidence).
-- **Job characteristics** — ранжирование 7 канонических параметров + 5/10 tradeoff-вопросов (AI / статичный банк); профиль 0–100, неспрошенные параметры = 50.
+- **Job characteristics** — один экран: ранжирование 7 канонических параметров; таргеты 0–100 выводит детерминированная кривая ранг→значение (90→25), без вопросов и без AI.
 - **CV** — вставка текста или загрузка `.pdf/.docx/.html/.txt` + `.pptx` при наличии MarkItDown (5 МБ, `cvExtract.js` — MarkItDown-first гибрид с Node-фоллбеками, ошибки чтения → 400) с AI-парсингом в `{roles, skills, domains, seniority, keywords}`; поддерживаемые форматы едут в снапшоте как `cvUploadFormats`; альтернатива — 7 career-journey вопросов.
 
 ### Бэкенд — Life Path Engine (Page 3)
@@ -122,7 +122,8 @@
   `/api/session/big-five-depth`; Big Five всегда статичный Mini-IPIP-20
   (сидируется при создании сессии), RIASEC всегда статичные 12 айтемов;
   удалены `generateBigFiveItems`/`generateRiasecItems`/их нормализаторы и
-  флаг `AI_BIG_FIVE_ITEMS`. jobChar (5|10 + AI-tradeoffs) не тронут.
+  флаг `AI_BIG_FIVE_ITEMS`. jobChar позже тоже свёлся к одному ранжированию
+  (кривая ранг→таргет, без AI и без выбора глубины).
 - **Рейл «Career Discovery Journey»** — display-only: интро-карта после entry
   + сжатая полоса в шапке каждого шага (`JOURNEY_RAIL`/`railIndexForStep` в
   `lifePath.js`); порядок исполнения не менялся.
@@ -190,5 +191,5 @@
 1. **Один процесс (по дизайну).** Map / single-flight lock / rate-limit счётчики привязаны к процессу — горизонтальное масштабирование требует общего стора для сессий/локов/лимитов. Инвариант теперь явно задокументирован (`render.yaml`, `sessionStore.js`) + loud-warn в логе на `WEB_CONCURRENCY>1`. Для одного инстанса не проблема.
 2. ~~AI-генерируемые Big Five пункты психометрически не валидированы~~ — снято 2026-07-13: инструмент теперь всегда статичный Mini-IPIP-20 (и RIASEC всегда статичные 12), AI-генерация айтемов удалена.
 3. **`directionId` на output'е приблизителен** — `refineOutput` наследует id предыдущего output'а, `output/first` присваивает `ranked[0]` независимо от того, куда реально ушла модель. Влияет на work-value фоллбек и на исключение семейств в notSuitable.
-4. **`jobCharItems` сериализуются в каждом снапшоте** (не входят в static-часть) — лишние ~килобайты на каждый ответ. Мелочь.
+4. ~~**`jobCharItems` сериализуются в каждом снапшоте**~~ — снято: tradeoff-батарея удалена, шаг job-characteristics это один экран ранжирования.
 5. **Prompt-injection канал** — `dreamAnswer`, `reason`, journey-ответы попадают в промпты как есть. Риск ограничен (JSON mode + строгий нормализатор, у сессии нет привилегий), но стоит упомянуть инъекцию в system-промпте.

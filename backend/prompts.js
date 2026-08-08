@@ -138,25 +138,6 @@ function buildRiasecInferencePrompt({ bigFiveScores, dreamAnswer }) {
   return { system, user };
 }
 
-function buildJobCharQuestionsPrompt({ ranking, count }) {
-  const catalog = ranking
-    .map((id, i) => `${i + 1}. ${id} — ${JOB_CHAR_LABEL.get(id)}`)
-    .join("\n");
-  const system = [
-    "You generate job-preference questions for a ranked set of career parameters.",
-    "Return valid JSON only.",
-    'JSON schema: {"items":[{"id":"jc_1","param":"compensation|work_mode|job_security|career_growth|complexity|meaning_impact|social","text":"...","options":[{"value":50,"label":"..."}]}]}',
-    `Generate exactly ${count} questions, weighted toward the top-ranked parameters (the most important parameter comes first and gets the most questions).`,
-    "Each question is a realistic tradeoff about ONE parameter; each option encodes a 0–100 target on that parameter (value = the target).",
-    "3–4 options each, labels under 90 characters, concrete situations, no buzzwords.",
-  ].join(" ");
-  const user = [
-    `Ranking (most→least important): ${ranking.join(", ")}`,
-    catalog,
-    `Generate ${count} questions now.`,
-  ].join("\n");
-  return { system, user };
-}
 function buildPersonaSummaryPrompt({ profileDigest }) {
   const system = [
     "You turn assessment scores into a short self-portrait the person reads about themselves.",
@@ -369,7 +350,6 @@ function buildRoadmapPrompt({ profileDigest, direction, profession }) {
 module.exports = {
   buildProfileDigest,
   buildRiasecInferencePrompt,
-  buildJobCharQuestionsPrompt,
   buildCvParsePrompt,
   buildPersonaSummaryPrompt,
   buildOrientedFieldPrompt,
