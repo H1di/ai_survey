@@ -388,17 +388,28 @@ app.post("/api/values/confirm", (req, res) => {
       if (session.userValues) return sendSessionSnapshot(res, session);
       return fail(res, req, 400, "Not currently in the values step.");
     }
-    if (!session.valuesTournament || !finalOrder(session.valuesTournament)) {
+    // First pass: the finished tournament supplies both the guard and the
+    // fallback order. Revisit (rail navigation back to this step): the
+    // tournament is gone — finalizeValues clears it — so the already-confirmed
+    // hierarchy is what authorizes the edit, and the submitted order must stand
+    // on its own because there is nothing to fall back to.
+    const tournamentOrder = session.valuesTournament
+      ? finalOrder(session.valuesTournament)
+      : null;
+    const revisiting = Boolean(session.userValues);
+    if (!tournamentOrder && !revisiting) {
       return fail(res, req, 400, "Finish the comparisons before confirming.");
     }
-    // `order` must be a permutation of the six keys (the user may have reordered
-    // the tournament result in the table); default to the tournament order.
-    const sorted = finalOrder(session.valuesTournament);
-    const requested = Array.isArray(order) ? order : sorted;
+
+    const requested = Array.isArray(order) ? order : tournamentOrder;
     const validPermutation =
+      Array.isArray(requested) &&
       requested.length === WORK_VALUES_ORDER.length &&
       WORK_VALUES_ORDER.every((k) => requested.includes(k));
-    const finalHierarchy = validPermutation ? requested : sorted;
+    if (!validPermutation && !tournamentOrder) {
+      return fail(res, req, 400, "A full ordering of the six values is required.");
+    }
+    const finalHierarchy = validPermutation ? requested : tournamentOrder;
     store.finalizeValues(session, {
       order: finalHierarchy,
       scores: rankToWorkValueScores(finalHierarchy),

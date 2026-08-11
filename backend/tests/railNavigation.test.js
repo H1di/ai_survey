@@ -127,6 +127,41 @@ test("a session stored before furthestStep existed still navigates", async () =>
   assert.equal(data.furthestStep, "riasec", "the fallback reports the current step");
 });
 
+test("values can be re-confirmed after returning to the step", async () => {
+  const { data: seeded } = await seed("job_characteristics");
+  const original = seeded.userValues.order;
+  const reordered = [...original].reverse();
+
+  await post("/api/session/goto", { sessionId: seeded.sessionId, step: "values" });
+  const { status, data } = await post("/api/values/confirm", {
+    sessionId: seeded.sessionId,
+    order: reordered,
+  });
+
+  assert.equal(status, 200);
+  assert.deepEqual(data.userValues.order, reordered, "the edited hierarchy is stored");
+  assert.equal(data.step, "job_characteristics", "confirming advances as on the first pass");
+  // The rank->score curve is re-applied to the new order, so the value now
+  // ranked first carries the highest score. Asserted relatively, not against a
+  // hardcoded number, so a curve change does not break this test spuriously.
+  const scores = data.userValues.scores;
+  assert.equal(scores[reordered[0]], Math.max(...Object.values(scores)));
+  assert.equal(scores[reordered[5]], Math.min(...Object.values(scores)));
+});
+
+test("a revisit confirm with an incomplete ordering is rejected", async () => {
+  const { data: seeded } = await seed("job_characteristics");
+  await post("/api/session/goto", { sessionId: seeded.sessionId, step: "values" });
+
+  const { status } = await post("/api/values/confirm", {
+    sessionId: seeded.sessionId,
+    order: ["achievement", "independence"],
+  });
+
+  // No tournament order to fall back on, so a partial list cannot be accepted.
+  assert.equal(status, 400);
+});
+
 test("re-answering a revisited step advances forward again without lowering the mark", async () => {
   const { data: seeded } = await seed("cv");
   await post("/api/session/goto", { sessionId: seeded.sessionId, step: "big_five" });
