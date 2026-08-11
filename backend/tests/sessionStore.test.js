@@ -389,6 +389,68 @@ test("without redis: persistence hooks are inert no-ops", async () => {
   assert.equal(await store.hydrate(), 0);
 });
 
+test("furthestStep starts at demographics and rises with each advance", () => {
+  const store = new SessionStore();
+  const s = makeSession(store);
+  assert.equal(s.furthestStep, "demographics");
+
+  store.advanceStep(s, "big_five");
+  assert.equal(s.furthestStep, "big_five");
+
+  store.finalizeValues(s, {
+    scores: {}, order: [], curveVersion: 1, nextStep: "job_characteristics",
+  });
+  assert.equal(s.furthestStep, "job_characteristics");
+
+  store.finalizeJobChar(s, { ranking: [], profile: {}, curveVersion: 1, nextStep: "cv" });
+  assert.equal(s.furthestStep, "cv");
+});
+
+test("gotoStep moves the step back without lowering the mark or touching data", () => {
+  const store = new SessionStore();
+  const s = makeSession(store);
+  store.advanceStep(s, "big_five");
+  store.recordBigFiveAnswer(s, "mip_1", 4);
+  store.advanceStep(s, "riasec");
+
+  store.gotoStep(s, "big_five");
+
+  assert.equal(s.step, "big_five");
+  assert.equal(s.furthestStep, "riasec", "the mark never falls");
+  assert.equal(s.bigFiveAnswers.mip_1, 4, "answers survive");
+});
+
+test("advancing to a step behind the mark does not lower it", () => {
+  const store = new SessionStore();
+  const s = makeSession(store);
+  store.advanceStep(s, "cv");
+  store.gotoStep(s, "riasec");
+  store.advanceStep(s, "values");
+
+  assert.equal(s.furthestStep, "cv");
+});
+
+test("gotoStep rejects a step outside STEP_ORDER", () => {
+  const store = new SessionStore();
+  const s = makeSession(store);
+  assert.throws(() => store.gotoStep(s, "nope"), /Unknown session step: nope/);
+});
+
+test("a session without furthestStep (pre-change shape) reads through to step", () => {
+  const store = new SessionStore();
+  const s = makeSession(store);
+  store.advanceStep(s, "riasec");
+  delete s.furthestStep;
+
+  // The fallback must treat the current step as the mark, so a later advance
+  // still raises it rather than starting from undefined.
+  store.advanceStep(s, "values");
+  assert.equal(s.furthestStep, "values");
+
+  const snapshot = store.serializeSessionState(s, null, null, { includeStatic: false });
+  assert.equal(snapshot.furthestStep, "values");
+});
+
 test("STEP_ORDER is the assessment machine in order", () => {
   assert.deepEqual(STEP_ORDER, [
     "demographics",

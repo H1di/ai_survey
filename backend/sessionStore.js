@@ -160,6 +160,10 @@ class SessionStore {
       schemaVersion: SESSION_SCHEMA_VERSION,
       dreamAnswer,
       step: "demographics",
+      // High-water mark: the furthest step ever reached. Rail navigation may
+      // return to anything at or below it, which is what makes the ungated
+      // /api/session/goto safe — it can never skip unanswered work.
+      furthestStep: "demographics",
       demographics: {},
       bigFiveItems: MINI_IPIP_20,
       bigFiveAnswers: {},
@@ -223,9 +227,31 @@ class SessionStore {
     this.touch(session);
   }
 
+  // Read through `furthestStep || step` everywhere: sessions persisted before
+  // this field existed hydrate without it, and that fallback is what lets them
+  // keep working without a schema-version bump. Call this BEFORE assigning the
+  // new step — it compares against the step the session is leaving.
+  _raiseFurthest(session, nextStep) {
+    const current = session.furthestStep || session.step;
+    if (STEP_ORDER.indexOf(nextStep) > STEP_ORDER.indexOf(current)) {
+      session.furthestStep = nextStep;
+    }
+  }
+
   advanceStep(session, nextStep) {
     assertStep(nextStep);
+    this._raiseFurthest(session, nextStep);
     session.step = nextStep;
+    this.touch(session);
+  }
+
+  // Backward/forward move within already-reached steps. Deliberately separate
+  // from advanceStep: that one means "progress", and raises the high-water
+  // mark. Conflating them would let a backward move rewrite the mark and
+  // silently widen what rail navigation allows.
+  gotoStep(session, step) {
+    assertStep(step);
+    session.step = step;
     this.touch(session);
   }
 
@@ -270,6 +296,7 @@ class SessionStore {
   // derived from it, and the step advance — there is nothing to answer after.
   finalizeJobChar(session, { ranking, profile, curveVersion, nextStep }) {
     assertStep(nextStep);
+    this._raiseFurthest(session, nextStep);
     session.jobCharRanking = ranking;
     session.jobCharProfile = profile;
     session.jobCharCurveVersion = curveVersion;
@@ -302,6 +329,7 @@ class SessionStore {
   // tournament on a later hydrate.
   finalizeValues(session, { scores, order, curveVersion, nextStep }) {
     assertStep(nextStep);
+    this._raiseFurthest(session, nextStep);
     session.userValues = {
       scores,
       order,
@@ -371,6 +399,7 @@ class SessionStore {
       sessionId: session.id,
       dreamAnswer: session.dreamAnswer,
       step: session.step,
+      furthestStep: session.furthestStep || session.step,
       ...staticPart,
       demographics: session.demographics,
       bigFiveAnswers: session.bigFiveAnswers,
