@@ -3,10 +3,13 @@ import { AnimatePresence, motion as Motion } from "framer-motion";
 import GraphView from "./components/GraphView";
 import { DetailPanel } from "./components/GraphView/NodeComponent";
 import ProfilePanel, { PersonalityRadarChart, WorkValuesRadar } from "./components/ProfileCharts";
+import DevPanel from "./components/DevPanel";
+import { captureDevToken, isDevMode } from "./devMode";
 import {
   acceptOutput,
   confirmValues,
   continueSummary,
+  devJump,
   fetchFirstOutput,
   fetchSession,
   generateRoadmap,
@@ -38,6 +41,11 @@ import {
   WORK_VALUE_META,
 } from "./lifePath";
 import "./App.css";
+
+// Runs before React mounts: moves ?dev=<token> into sessionStorage and scrubs
+// it from the URL, so the panel's visibility is settled by first render.
+captureDevToken();
+const DEV_MODE = isDevMode();
 import "./components/GraphView/GraphPage.css";
 
 const CV_INTENT_OPTIONS = [
@@ -550,6 +558,7 @@ function App() {
 
   const [sessionId, setSessionId] = useState("");
   const [step, setStep] = useState("entry");
+  const [pathStage, setPathStage] = useState("output");
   const [progress, setProgress] = useState(null);
 
   const [demographicQuestions, setDemographicQuestions] = useState([]);
@@ -612,6 +621,7 @@ function App() {
     accept: false,
     roadmap: false,
     refine: false,
+    dev: false,
   });
 
   const [error, setError] = useState("");
@@ -621,6 +631,7 @@ function App() {
   const applySessionSnapshot = (data) => {
     setSessionId(data.sessionId);
     setStep(data.step);
+    setPathStage(data.pathStage || "output");
     setProgress(data.progress || null);
     // Static question banks only travel on start/resume/riasec-start
     // snapshots; answer responses omit them, so merge instead of replacing.
@@ -660,6 +671,24 @@ function App() {
     if (data.aiEnabled !== undefined) setAiEnabled(Boolean(data.aiEnabled));
   };
 
+  // A full session snapshot arriving from outside the normal answer flow —
+  // page reload, or a dev stage jump. Beyond the shared state, this repositions
+  // the local question indexes and picks the top-level stage. Both callers must
+  // go through here: a second place that knows about indexes would drift.
+  const hydrateFromSnapshot = (data) => {
+    applySessionSnapshot(data);
+    setDreamAnswer(data.dreamAnswer || "");
+    setDemoIndex(firstUnansweredIndex(data.demographicQuestions || [], data.demographics));
+    setBigFiveIndex(firstUnansweredIndex(data.bigFiveItems || [], data.bigFiveAnswers));
+    setRiasecIndex(firstUnansweredIndex(data.riasecItems || [], data.riasecAnswers));
+    setJourneyIndex(
+      firstUnansweredIndex(data.careerJourneyQuestions || [], data.careerJourneyAnswers)
+    );
+    if (Object.keys(data.careerJourneyAnswers || {}).length) setCvMode("journey");
+    const inTree = data.step === "tree" && (data.outputs || []).length > 0;
+    setStage(inTree ? "tree" : "survey");
+  };
+
   // Resume a stored session after reload; a dead/unknown id falls back to entry.
   useEffect(() => {
     const storedId = localStorage.getItem(SESSION_STORAGE_KEY);
@@ -670,17 +699,7 @@ function App() {
       try {
         const data = await fetchSession(storedId);
         if (cancelled) return;
-        applySessionSnapshot(data);
-        setDreamAnswer(data.dreamAnswer || "");
-        setDemoIndex(firstUnansweredIndex(data.demographicQuestions || [], data.demographics));
-        setBigFiveIndex(firstUnansweredIndex(data.bigFiveItems || [], data.bigFiveAnswers));
-        setRiasecIndex(firstUnansweredIndex(data.riasecItems || [], data.riasecAnswers));
-        setJourneyIndex(
-          firstUnansweredIndex(data.careerJourneyQuestions || [], data.careerJourneyAnswers)
-        );
-        if (Object.keys(data.careerJourneyAnswers || {}).length) setCvMode("journey");
-        const inTree = data.step === "tree" && (data.outputs || []).length > 0;
-        setStage(inTree ? "tree" : "survey");
+        hydrateFromSnapshot(data);
       } catch {
         if (!cancelled) localStorage.removeItem(SESSION_STORAGE_KEY);
       } finally {
@@ -901,7 +920,6 @@ function App() {
       const data = await confirmValues({ sessionId, order: valuesRankDraft });
       applySessionSnapshot(data);
       setValuesRankDraft([]);
-      setJcIndex(0);
     } catch (e) {
       setError(e.message || "Could not save your hierarchy.");
     } finally {
@@ -1115,6 +1133,40 @@ function App() {
     await handleGenerateRoadmap(outputId);
   };
 
+  // Dev stage jump. The composite targets cannot call handleEnterLifePath /
+  // handleAcceptOutput: those read sessionId and latestOutput from React state,
+  // which has not re-rendered yet inside this same async function. So chain the
+  // api wrappers on ids taken straight from each response and hydrate once at
+  // the end.
+  const handleDevJump = async (target) => {
+    const step = target === "tree+output" || target === "detail" ? "tree" : target;
+    setError("");
+    setBusy((p) => ({ ...p, dev: true }));
+    try {
+      let data = await devJump({ sessionId: sessionId || undefined, step });
+      const jumpedSessionId = data.sessionId;
+      localStorage.setItem(SESSION_STORAGE_KEY, jumpedSessionId);
+
+      if (target === "tree+output" || target === "detail") {
+        data = await fetchFirstOutput({ sessionId: jumpedSessionId });
+      }
+      if (target === "detail") {
+        const outputId = data.outputs[data.outputs.length - 1].id;
+        data = await acceptOutput({ sessionId: jumpedSessionId, outputId });
+        // The real Yes-branch always builds the roadmap right after accepting;
+        // stopping short would leave a state no user ever sees.
+        data = await generateRoadmap({ sessionId: jumpedSessionId, outputId });
+      }
+
+      hydrateFromSnapshot(data);
+      setRetryAction(null);
+    } catch (e) {
+      setError(e.message || "Dev jump failed.");
+    } finally {
+      setBusy((p) => ({ ...p, dev: false }));
+    }
+  };
+
   const toggleRefineParam = (paramId) => {
     setRefineChecks((checks) => {
       const next = { ...checks };
@@ -1177,10 +1229,10 @@ function App() {
     localStorage.removeItem(SESSION_STORAGE_KEY);
     setRestoring(false);
     setStage("entry");
-    setEntryChoice("");
     setDreamAnswer("");
     setSessionId("");
     setStep("entry");
+    setPathStage("output");
     setProgress(null);
     setDemographicQuestions([]);
     setDemoAnswers({});
@@ -1193,9 +1245,6 @@ function App() {
     setRiasecAnswers({});
     setRiasecIndex(0);
     setJobCharParams([]);
-    setJobCharItems([]);
-    setJobCharAnswers({});
-    setJcIndex(0);
     setRankDraft([]);
     setValuesComparison(null);
     setValuesRanking(null);
@@ -1811,6 +1860,16 @@ function App() {
             </div>
           )}
         </div>
+      )}
+
+      {DEV_MODE && (
+        <DevPanel
+          step={step}
+          pathStage={pathStage}
+          sessionId={sessionId}
+          busy={busy.dev}
+          onJump={handleDevJump}
+        />
       )}
     </main>
   );

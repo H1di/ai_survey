@@ -100,6 +100,18 @@ Single-page app, no router: `frontend/src/App.jsx` holds a `stage` machine (`ent
 
 The graph is rebuilt declaratively on each render by `buildLifePathGraph` in `App.jsx` from session data — do not mutate nodes/edges imperatively.
 
+Snapshots arriving outside the answer flow (page reload, dev stage jump) go through `hydrateFromSnapshot` — it wraps `applySessionSnapshot` and additionally repositions the four local question indexes and picks the top-level stage. Both callers must use it; a second place that knows about indexes would drift.
+
+### Dev tools
+
+A stage switcher for manual testing, off unless `DEV_TOOLS_TOKEN` is set in `backend/.env`.
+
+- Unset (the normal state, including production): the dev router is never registered and `/api/dev/jump` 404s like any unknown path.
+- Set: `POST /api/dev/jump` `{sessionId?, step}` with an `X-Dev-Token` header seeds the session forward to `step` with the fixed persona in `backend/devSeed.js` (`DEV_PROFILE` — Investigative-Artistic, O 94 / C 75 / E 44 / A 75 / N 25, RIASEC `IAE`) and returns the usual snapshot. Already-answered steps are preserved; a target behind the current step gets a fresh session carrying the dream answer over; an expired/unknown `sessionId` seeds a fresh session rather than 404ing. A wrong token falls through to Express's default 404 — byte-for-byte what an unmounted route returns, never a 403.
+- Frontend: open `?dev=<token>` once — the token moves to `sessionStorage`, the URL is scrubbed, and a `DevPanel` pill appears with all eight steps plus the composite `tree + 1st output` and `detail (accepted)` targets (those chain the real `/api/output/first`, `/api/output/accept`, and `/api/roadmap/generate`, because the App handlers read React state that has not re-rendered mid-jump).
+- `backend/devSeed.js` closes each step through the same store mutators, validators, and scoring functions as the real routes. Two tests guard the drift: seeding to `tree` must survive a real `/api/output/first`, and the filler map must cover exactly `STEP_ORDER` minus `tree`. A new step in the machine without a filler fails the suite.
+- `STEP_ORDER` (exported from `sessionStore.js`) is the canonical machine order; `advanceStep`, `finalizeValues`, and `finalizeJobChar` throw on a step outside it.
+
 ### Contracts to keep in sync
 
 - Answer payloads: demographics `questionId/value`, Big Five `itemId/value`, RIASEC `itemId/value 1-5`, jobChar `ranking` (a permutation of the 7 param ids), journey `questionId/value`.
@@ -115,4 +127,4 @@ The graph is rebuilt declaratively on each render by `buildLifePathGraph` in `Ap
 
 ## Testing
 
-`backend/tests/` uses `node:test` (160+ tests; route tests boot the app with `app.listen(0)` and hit it with `fetch` — **no supertest**): route guards and step ordering, RIASEC/jobChar scoring, the values tournament (720-permutation optimality) + work-values derivations/fit properties, CV extraction + the CV single-flight lock, the error-handling/request-id contract, the full output loop (first → refine → notSuitable → accept → roadmap), AI payload normalizers, session serialization + Redis migration. Run with `cd backend && npm test`. Frontend: Vitest over `frontend/src/lifePath.js` (output-chain graph builder, dock state machine, rank-list helper, work-values + archetype) — `cd frontend && npm test -- --run`.
+`backend/tests/` uses `node:test` (180+ tests; route tests boot the app with `app.listen(0)` and hit it with `fetch` — **no supertest**): route guards and step ordering, RIASEC/jobChar scoring, the values tournament (720-permutation optimality) + work-values derivations/fit properties, CV extraction + the CV single-flight lock, the error-handling/request-id contract, the full output loop (first → refine → notSuitable → accept → roadmap), AI payload normalizers, session serialization + Redis migration, and the dev seeder + its gate. Env read at module load must be set before `require("../server")` — `node --test` gives each file its own process, which is why the dev gate needs both `devJump.test.js` (token set) and `devJumpDisabled.test.js` (token unset). Run with `cd backend && npm test`. Frontend: Vitest over `frontend/src/lifePath.js` (output-chain graph builder, dock state machine, rank-list helper, work-values + archetype) and `frontend/src/devMode.js` (dev token capture) — `cd frontend && npm test -- --run`.

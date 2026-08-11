@@ -40,11 +40,12 @@ const {
   buildProgress,
   summarizeAnswersForClient,
 } = require("./questionEngine");
-const { SessionStore } = require("./sessionStore");
+const { SessionStore, STEP_ORDER } = require("./sessionStore");
+const { DEV_PROFILE, seedTo } = require("./devSeed");
 const { createRedisClient } = require("./redisClient");
 const { getOccupation, getRelated, JOB_ZONE_LABELS, ONET_ATTRIBUTION } = require("./onet");
 const { createOnetApi } = require("./services/onetApi");
-const { randomUUID } = require("node:crypto");
+const { randomUUID, createHash, timingSafeEqual } = require("node:crypto");
 const { logError, resolveStatus } = require("./logger");
 
 // Tests set their own env (and force fallback by blanking the key) — skip
@@ -559,6 +560,67 @@ app.post("/api/summary/continue", (req, res) => {
     return sendError(res, req, error, "Something went wrong.");
   }
 });
+
+// --- Dev tools -------------------------------------------------------------
+// Stage switcher for manual testing: seeds a session forward to any step so a
+// late screen is reachable without answering the whole assessment.
+//
+// Gated twice. Without DEV_TOOLS_TOKEN the route is never registered, so the
+// production deploy does not carry it unless it is deliberately switched on. A
+// wrong token falls through to the default 404 rather than answering 403 — a
+// 403 would confirm the route is there.
+const DEV_TOOLS_TOKEN = process.env.DEV_TOOLS_TOKEN;
+
+function devTokenMatches(provided) {
+  if (typeof provided !== "string" || !provided) return false;
+  // Hash both sides first: equal-length buffers, so neither the token's length
+  // nor its prefix leaks through comparison timing.
+  const a = createHash("sha256").update(provided).digest();
+  const b = createHash("sha256").update(DEV_TOOLS_TOKEN).digest();
+  return timingSafeEqual(a, b);
+}
+
+if (DEV_TOOLS_TOKEN) {
+  app.post("/api/dev/jump", async (req, res, next) => {
+    // next() falls through to Express's default 404, so a wrong token produces
+    // byte-for-byte the same response as a path that was never mounted. A
+    // distinct JSON error here would confirm the route exists.
+    if (!devTokenMatches(req.get("x-dev-token"))) return next();
+
+    const { sessionId, step } = req.body || {};
+    if (!STEP_ORDER.includes(step)) {
+      return fail(res, req, 400, "Unknown step.");
+    }
+
+    // An expired or unknown id must not 404: the point of the tool is to land
+    // on a working screen, so fall through to a fresh session instead.
+    const existing = sessionId ? store.get(sessionId) : null;
+    const behind = existing && STEP_ORDER.indexOf(step) < STEP_ORDER.indexOf(existing.step);
+    const session =
+      existing && !behind
+        ? existing
+        : store.createSession({
+            dreamAnswer: existing ? existing.dreamAnswer : DEV_PROFILE.dreamAnswer,
+          });
+
+    const lockKey = `${session.id}:dev`;
+    if (!acquireLock(lockKey)) {
+      return fail(res, req, 409, "Another change to this path is still processing.");
+    }
+    try {
+      await seedTo(session, step, { store, aiEngine });
+      return sendSessionSnapshot(res, session, { includeStatic: true });
+    } catch (error) {
+      return sendError(res, req, error, "Could not seed the session.");
+    } finally {
+      releaseLock(lockKey);
+    }
+  });
+
+  console.warn(
+    "[dev-tools] DEV_TOOLS_TOKEN is set — POST /api/dev/jump is live. Unset it to remove the route."
+  );
+}
 
 function requireCompletedAssessment(session) {
   if (session.step !== "tree") {

@@ -20,6 +20,27 @@ const { MINI_IPIP_20 } = require("./bigFiveItems");
 // parked mid-battery has nowhere to land on the ranking-only step.
 const SESSION_SCHEMA_VERSION = 3;
 
+// The assessment machine, in order. Exported so anything that walks the machine
+// (the dev seeder) shares one definition with the code that advances it, and so
+// a typo'd step name fails loudly instead of wedging a session on a step no
+// route can service.
+const STEP_ORDER = Object.freeze([
+  "demographics",
+  "big_five",
+  "riasec",
+  "values",
+  "job_characteristics",
+  "cv",
+  "summary",
+  "tree",
+]);
+
+function assertStep(nextStep) {
+  if (!STEP_ORDER.includes(nextStep)) {
+    throw new Error(`Unknown session step: ${nextStep}`);
+  }
+}
+
 // A persisted session is compatible only if it carries the current schema
 // version and, when it already has values, a 6-key work-values vector (not the
 // old 10-key Schwartz one).
@@ -203,6 +224,7 @@ class SessionStore {
   }
 
   advanceStep(session, nextStep) {
+    assertStep(nextStep);
     session.step = nextStep;
     this.touch(session);
   }
@@ -247,6 +269,7 @@ class SessionStore {
   // The whole job-characteristics step in one write: the ranking, the targets
   // derived from it, and the step advance — there is nothing to answer after.
   finalizeJobChar(session, { ranking, profile, curveVersion, nextStep }) {
+    assertStep(nextStep);
     session.jobCharRanking = ranking;
     session.jobCharProfile = profile;
     session.jobCharCurveVersion = curveVersion;
@@ -278,6 +301,7 @@ class SessionStore {
   // fire-and-forget Redis writes that could land out of order and resurrect the
   // tournament on a later hydrate.
   finalizeValues(session, { scores, order, curveVersion, nextStep }) {
+    assertStep(nextStep);
     session.userValues = {
       scores,
       order,
@@ -389,4 +413,5 @@ class SessionStore {
 
 module.exports = {
   SessionStore,
+  STEP_ORDER,
 };

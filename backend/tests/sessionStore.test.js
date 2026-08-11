@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { SessionStore } = require("../sessionStore");
+const { SessionStore, STEP_ORDER } = require("../sessionStore");
 
 function makeSession(store) {
   return store.createSession({ dreamAnswer: "build things" });
@@ -387,4 +387,43 @@ test("without redis: persistence hooks are inert no-ops", async () => {
   const s = makeSession(store);
   store.touch(s);
   assert.equal(await store.hydrate(), 0);
+});
+
+test("STEP_ORDER is the assessment machine in order", () => {
+  assert.deepEqual(STEP_ORDER, [
+    "demographics",
+    "big_five",
+    "riasec",
+    "values",
+    "job_characteristics",
+    "cv",
+    "summary",
+    "tree",
+  ]);
+});
+
+test("step writes reject a step outside STEP_ORDER", () => {
+  const store = new SessionStore();
+  const s = makeSession(store);
+
+  assert.throws(() => store.advanceStep(s, "big_fvie"), /Unknown session step: big_fvie/);
+  assert.throws(
+    () => store.finalizeValues(s, { scores: {}, order: [], curveVersion: 1, nextStep: "nope" }),
+    /Unknown session step: nope/
+  );
+  assert.throws(
+    () => store.finalizeJobChar(s, { ranking: [], profile: {}, curveVersion: 1, nextStep: "nope" }),
+    /Unknown session step: nope/
+  );
+  // A rejected write must not have moved the session.
+  assert.equal(s.step, "demographics");
+});
+
+test("every real transition is accepted", () => {
+  const store = new SessionStore();
+  const s = makeSession(store);
+  for (const step of STEP_ORDER) {
+    store.advanceStep(s, step);
+    assert.equal(s.step, step);
+  }
 });

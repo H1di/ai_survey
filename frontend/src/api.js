@@ -1,3 +1,5 @@
+import { getDevToken } from "./devMode";
+
 const REQUEST_TIMEOUT_MS = 45_000;
 
 async function request(path, options = {}) {
@@ -132,4 +134,14 @@ export function refineOutput(payload) {
 
 export function acceptOutput(payload) {
   return request("/api/output/accept", { method: "POST", body: JSON.stringify(payload) });
+}
+
+// Dev stage switcher. The only request that carries the dev token; without one
+// the backend answers 404, same as when the route is not mounted at all.
+export function devJump(payload) {
+  return request("/api/dev/jump", {
+    method: "POST",
+    headers: { "X-Dev-Token": getDevToken() || "" },
+    body: JSON.stringify(payload),
+  });
 }
