@@ -3,10 +3,13 @@ import { AnimatePresence, motion as Motion } from "framer-motion";
 import GraphView from "./components/GraphView";
 import { DetailPanel } from "./components/GraphView/NodeComponent";
 import ProfilePanel, { PersonalityRadarChart, WorkValuesRadar } from "./components/ProfileCharts";
+import DevPanel from "./components/DevPanel";
+import { captureDevToken, isDevMode } from "./devMode";
 import {
   acceptOutput,
   confirmValues,
   continueSummary,
+  devJump,
   fetchFirstOutput,
   fetchSession,
   generateRoadmap,
@@ -38,6 +41,11 @@ import {
   WORK_VALUE_META,
 } from "./lifePath";
 import "./App.css";
+
+// Runs before React mounts: moves ?dev=<token> into sessionStorage and scrubs
+// it from the URL, so the panel's visibility is settled by first render.
+captureDevToken();
+const DEV_MODE = isDevMode();
 import "./components/GraphView/GraphPage.css";
 
 const CV_INTENT_OPTIONS = [
@@ -550,6 +558,7 @@ function App() {
 
   const [sessionId, setSessionId] = useState("");
   const [step, setStep] = useState("entry");
+  const [pathStage, setPathStage] = useState("output");
   const [progress, setProgress] = useState(null);
 
   const [demographicQuestions, setDemographicQuestions] = useState([]);
@@ -612,6 +621,7 @@ function App() {
     accept: false,
     roadmap: false,
     refine: false,
+    dev: false,
   });
 
   const [error, setError] = useState("");
@@ -621,6 +631,7 @@ function App() {
   const applySessionSnapshot = (data) => {
     setSessionId(data.sessionId);
     setStep(data.step);
+    setPathStage(data.pathStage || "output");
     setProgress(data.progress || null);
     // Static question banks only travel on start/resume/riasec-start
     // snapshots; answer responses omit them, so merge instead of replacing.
@@ -1121,6 +1132,40 @@ function App() {
     setBusy((p) => ({ ...p, accept: false }));
     // Yes-branch: the roadmap builds right after the advice blocks land.
     await handleGenerateRoadmap(outputId);
+  };
+
+  // Dev stage jump. The composite targets cannot call handleEnterLifePath /
+  // handleAcceptOutput: those read sessionId and latestOutput from React state,
+  // which has not re-rendered yet inside this same async function. So chain the
+  // api wrappers on ids taken straight from each response and hydrate once at
+  // the end.
+  const handleDevJump = async (target) => {
+    const step = target === "tree+output" || target === "detail" ? "tree" : target;
+    setError("");
+    setBusy((p) => ({ ...p, dev: true }));
+    try {
+      let data = await devJump({ sessionId: sessionId || undefined, step });
+      const jumpedSessionId = data.sessionId;
+      localStorage.setItem(SESSION_STORAGE_KEY, jumpedSessionId);
+
+      if (target === "tree+output" || target === "detail") {
+        data = await fetchFirstOutput({ sessionId: jumpedSessionId });
+      }
+      if (target === "detail") {
+        const outputId = data.outputs[data.outputs.length - 1].id;
+        data = await acceptOutput({ sessionId: jumpedSessionId, outputId });
+        // The real Yes-branch always builds the roadmap right after accepting;
+        // stopping short would leave a state no user ever sees.
+        data = await generateRoadmap({ sessionId: jumpedSessionId, outputId });
+      }
+
+      hydrateFromSnapshot(data);
+      setRetryAction(null);
+    } catch (e) {
+      setError(e.message || "Dev jump failed.");
+    } finally {
+      setBusy((p) => ({ ...p, dev: false }));
+    }
   };
 
   const toggleRefineParam = (paramId) => {
@@ -1819,6 +1864,16 @@ function App() {
             </div>
           )}
         </div>
+      )}
+
+      {DEV_MODE && (
+        <DevPanel
+          step={step}
+          pathStage={pathStage}
+          sessionId={sessionId}
+          busy={busy.dev}
+          onJump={handleDevJump}
+        />
       )}
     </main>
   );
