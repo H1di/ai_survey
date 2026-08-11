@@ -660,6 +660,24 @@ function App() {
     if (data.aiEnabled !== undefined) setAiEnabled(Boolean(data.aiEnabled));
   };
 
+  // A full session snapshot arriving from outside the normal answer flow —
+  // page reload, or a dev stage jump. Beyond the shared state, this repositions
+  // the local question indexes and picks the top-level stage. Both callers must
+  // go through here: a second place that knows about indexes would drift.
+  const hydrateFromSnapshot = (data) => {
+    applySessionSnapshot(data);
+    setDreamAnswer(data.dreamAnswer || "");
+    setDemoIndex(firstUnansweredIndex(data.demographicQuestions || [], data.demographics));
+    setBigFiveIndex(firstUnansweredIndex(data.bigFiveItems || [], data.bigFiveAnswers));
+    setRiasecIndex(firstUnansweredIndex(data.riasecItems || [], data.riasecAnswers));
+    setJourneyIndex(
+      firstUnansweredIndex(data.careerJourneyQuestions || [], data.careerJourneyAnswers)
+    );
+    if (Object.keys(data.careerJourneyAnswers || {}).length) setCvMode("journey");
+    const inTree = data.step === "tree" && (data.outputs || []).length > 0;
+    setStage(inTree ? "tree" : "survey");
+  };
+
   // Resume a stored session after reload; a dead/unknown id falls back to entry.
   useEffect(() => {
     const storedId = localStorage.getItem(SESSION_STORAGE_KEY);
@@ -670,17 +688,7 @@ function App() {
       try {
         const data = await fetchSession(storedId);
         if (cancelled) return;
-        applySessionSnapshot(data);
-        setDreamAnswer(data.dreamAnswer || "");
-        setDemoIndex(firstUnansweredIndex(data.demographicQuestions || [], data.demographics));
-        setBigFiveIndex(firstUnansweredIndex(data.bigFiveItems || [], data.bigFiveAnswers));
-        setRiasecIndex(firstUnansweredIndex(data.riasecItems || [], data.riasecAnswers));
-        setJourneyIndex(
-          firstUnansweredIndex(data.careerJourneyQuestions || [], data.careerJourneyAnswers)
-        );
-        if (Object.keys(data.careerJourneyAnswers || {}).length) setCvMode("journey");
-        const inTree = data.step === "tree" && (data.outputs || []).length > 0;
-        setStage(inTree ? "tree" : "survey");
+        hydrateFromSnapshot(data);
       } catch {
         if (!cancelled) localStorage.removeItem(SESSION_STORAGE_KEY);
       } finally {
