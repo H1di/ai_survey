@@ -561,6 +561,30 @@ app.post("/api/summary/continue", (req, res) => {
   }
 });
 
+// Rail navigation: move between steps the user has already reached. Ungated on
+// purpose — the furthestStep check means it can never skip unanswered work, so
+// it exposes nothing a user could not reach by answering. It writes only
+// session.step: answers, scores, and outputs are left exactly as they are.
+app.post("/api/session/goto", (req, res) => {
+  try {
+    const { sessionId, step } = req.body || {};
+    const session = store.require(sessionId);
+
+    if (!STEP_ORDER.includes(step)) {
+      return fail(res, req, 400, "Unknown step.");
+    }
+    const furthest = session.furthestStep || session.step;
+    if (STEP_ORDER.indexOf(step) > STEP_ORDER.indexOf(furthest)) {
+      return fail(res, req, 400, "You haven't reached that step yet.");
+    }
+
+    store.gotoStep(session, step);
+    return sendSessionSnapshot(res, session, { includeStatic: true });
+  } catch (error) {
+    return sendError(res, req, error, "Something went wrong.");
+  }
+});
+
 // --- Dev tools -------------------------------------------------------------
 // Stage switcher for manual testing: seeds a session forward to any step so a
 // late screen is reachable without answering the whole assessment.
