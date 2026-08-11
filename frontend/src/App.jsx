@@ -649,12 +649,17 @@ function App() {
     setOutputs(data.outputs || []);
     setAcceptedOutputId(data.acceptedOutputId || null);
     setRoadmaps(data.roadmaps || {});
-    // Seed the reorderable ranking with the canonical order when the
-    // job-characteristics step opens (before any ranking is submitted).
-    if (data.step === "job_characteristics" && !data.jobCharRanking) {
-      const paramsSource = data.jobCharParams || jobCharParams;
-      if (paramsSource.length === 7) {
-        setRankDraft((draft) => (draft.length === 7 ? draft : paramsSource.map((p) => p.id)));
+    // Seed the reorderable ranking. First entry: the canonical parameter order.
+    // Revisit (rail navigation back): the stored ranking — without this the
+    // draft stays empty and RankCard, which requires 7 entries, renders nothing.
+    if (data.step === "job_characteristics") {
+      if (data.jobCharRanking && data.jobCharRanking.length === 7) {
+        setRankDraft(data.jobCharRanking);
+      } else {
+        const paramsSource = data.jobCharParams || jobCharParams;
+        if (paramsSource.length === 7) {
+          setRankDraft((draft) => (draft.length === 7 ? draft : paramsSource.map((p) => p.id)));
+        }
       }
     }
     setProfile({
@@ -668,6 +673,18 @@ function App() {
     });
     setValuesComparison(data.valuesComparison || null);
     setValuesRanking(data.valuesRanking || null);
+    // Revisiting a confirmed values step: finalizeValues cleared the tournament
+    // and the auto-start effect is blocked by userValues, so there is nothing to
+    // render unless the confirmed hierarchy is put back into the draft.
+    if (
+      data.step === "values" &&
+      !data.valuesComparison &&
+      data.userValues &&
+      data.userValues.order &&
+      data.userValues.order.length === 6
+    ) {
+      setValuesRankDraft(data.userValues.order);
+    }
     if (data.aiEnabled !== undefined) setAiEnabled(Boolean(data.aiEnabled));
   };
 
@@ -1586,7 +1603,7 @@ function App() {
             />
           )}
 
-          {step === "values" && !valuesComparison && valuesRankDraft.length === 6 && !profile?.userValues && (
+          {step === "values" && !valuesComparison && valuesRankDraft.length === 6 && (
             <ValuesHierarchyCard
               ranking={valuesRankDraft}
               onMove={(index, delta) => setValuesRankDraft((l) => moveRankItem(l, index, delta))}
