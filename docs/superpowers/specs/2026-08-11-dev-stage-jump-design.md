@@ -193,8 +193,13 @@ and `detail (accepted)` — and a status line showing the current `step`, `pathS
 eight characters of `sessionId`.
 
 Props `{ step, pathStage, sessionId, busy, onJump }`; no session state of its own. All execution
-lives in `App.handleDevJump`, which reuses the existing output-generation and accept handlers for
-the composite targets rather than issuing its own requests.
+lives in `App.handleDevJump`.
+
+The composite targets cannot delegate to the existing `handleEnterLifePath` / `handleAcceptOutput`
+handlers: those read `sessionId` and `latestOutput` from React state, which has not re-rendered yet
+inside the same async jump. `handleDevJump` therefore calls the `api.js` wrappers directly, chaining
+ids from each response, and hydrates once at the end. The `detail` target also generates the roadmap
+— the real Yes-branch always does, so stopping short would produce a state no user ever sees.
 
 Styling is deliberately utilitarian — monospace, dark plate, none of the product's premium
 treatment. The panel must never read as part of the application.
