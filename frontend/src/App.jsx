@@ -920,7 +920,6 @@ function App() {
       const data = await confirmValues({ sessionId, order: valuesRankDraft });
       applySessionSnapshot(data);
       setValuesRankDraft([]);
-      setJcIndex(0);
     } catch (e) {
       setError(e.message || "Could not save your hierarchy.");
     } finally {
@@ -1230,10 +1229,10 @@ function App() {
     localStorage.removeItem(SESSION_STORAGE_KEY);
     setRestoring(false);
     setStage("entry");
-    setEntryChoice("");
     setDreamAnswer("");
     setSessionId("");
     setStep("entry");
+    setPathStage("output");
     setProgress(null);
     setDemographicQuestions([]);
     setDemoAnswers({});
@@ -1246,9 +1245,6 @@ function App() {
     setRiasecAnswers({});
     setRiasecIndex(0);
     setJobCharParams([]);
-    setJobCharItems([]);
-    setJobCharAnswers({});
-    setJcIndex(0);
     setRankDraft([]);
     setValuesComparison(null);
     setValuesRanking(null);
