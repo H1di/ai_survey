@@ -645,6 +645,29 @@
 .journey-rail-step.done { color: #666; }
 .journey-rail-step.active { color: #863bff; font-weight: 600; }
 
+/* The rail label as a control. Inherits the li's colour states so `done` and
+   `active` styling keeps working; only the affordance is added. */
+.journey-rail-jump {
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+.journey-rail-jump:hover:not(:disabled) {
+  color: #863bff;
+}
+
+.journey-rail-jump:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 @media (max-width: 600px) {
   .journey-rail-step { font-size: 11px; }
 }

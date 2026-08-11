@@ -15,6 +15,7 @@ import {
   generateRoadmap,
   postCvIntent,
   refineOutput,
+  sessionGoto,
   skipRiasec,
   startRiasec,
   startSession,
@@ -36,6 +37,7 @@ import {
   selectDockCard,
   JOURNEY_RAIL,
   railIndexForStep,
+  railStepReachable,
   whyThisFitsSections,
   onetSection,
   WORK_VALUE_META,
@@ -95,19 +97,34 @@ function JourneyRailCard({ onBegin }) {
   );
 }
 
-function JourneyRailStrip({ step }) {
+function JourneyRailStrip({ step, furthestStep, busy, onNavigate }) {
   const active = railIndexForStep(step);
   if (active === -1) return null;
   return (
     <ol className="journey-rail-strip" aria-label="Career Discovery Journey progress">
-      {JOURNEY_RAIL.map((r, index) => (
-        <li
-          key={r.step}
-          className={`journey-rail-step ${index === active ? "active" : ""} ${index < active ? "done" : ""}`}
-        >
-          {r.label}
-        </li>
-      ))}
+      {JOURNEY_RAIL.map((r, index) => {
+        // The active step is never a link — it is where you already are.
+        const clickable = index !== active && railStepReachable(r.step, furthestStep);
+        return (
+          <li
+            key={r.step}
+            className={`journey-rail-step ${index === active ? "active" : ""} ${index < active ? "done" : ""}`}
+          >
+            {clickable ? (
+              <button
+                type="button"
+                className="journey-rail-jump"
+                disabled={busy}
+                onClick={() => onNavigate(r.step)}
+              >
+                {r.label}
+              </button>
+            ) : (
+              r.label
+            )}
+          </li>
+        );
+      })}
     </ol>
   );
 }
@@ -559,6 +576,7 @@ function App() {
   const [sessionId, setSessionId] = useState("");
   const [step, setStep] = useState("entry");
   const [pathStage, setPathStage] = useState("output");
+  const [furthestStep, setFurthestStep] = useState("demographics");
   const [progress, setProgress] = useState(null);
 
   const [demographicQuestions, setDemographicQuestions] = useState([]);
@@ -622,6 +640,7 @@ function App() {
     roadmap: false,
     refine: false,
     dev: false,
+    goto: false,
   });
 
   const [error, setError] = useState("");
@@ -632,6 +651,7 @@ function App() {
     setSessionId(data.sessionId);
     setStep(data.step);
     setPathStage(data.pathStage || "output");
+    setFurthestStep(data.furthestStep || data.step);
     setProgress(data.progress || null);
     // Static question banks only travel on start/resume/riasec-start
     // snapshots; answer responses omit them, so merge instead of replacing.
@@ -649,12 +669,17 @@ function App() {
     setOutputs(data.outputs || []);
     setAcceptedOutputId(data.acceptedOutputId || null);
     setRoadmaps(data.roadmaps || {});
-    // Seed the reorderable ranking with the canonical order when the
-    // job-characteristics step opens (before any ranking is submitted).
-    if (data.step === "job_characteristics" && !data.jobCharRanking) {
-      const paramsSource = data.jobCharParams || jobCharParams;
-      if (paramsSource.length === 7) {
-        setRankDraft((draft) => (draft.length === 7 ? draft : paramsSource.map((p) => p.id)));
+    // Seed the reorderable ranking. First entry: the canonical parameter order.
+    // Revisit (rail navigation back): the stored ranking — without this the
+    // draft stays empty and RankCard, which requires 7 entries, renders nothing.
+    if (data.step === "job_characteristics") {
+      if (data.jobCharRanking && data.jobCharRanking.length === 7) {
+        setRankDraft(data.jobCharRanking);
+      } else {
+        const paramsSource = data.jobCharParams || jobCharParams;
+        if (paramsSource.length === 7) {
+          setRankDraft((draft) => (draft.length === 7 ? draft : paramsSource.map((p) => p.id)));
+        }
       }
     }
     setProfile({
@@ -668,6 +693,18 @@ function App() {
     });
     setValuesComparison(data.valuesComparison || null);
     setValuesRanking(data.valuesRanking || null);
+    // Revisiting a confirmed values step: finalizeValues cleared the tournament
+    // and the auto-start effect is blocked by userValues, so there is nothing to
+    // render unless the confirmed hierarchy is put back into the draft.
+    if (
+      data.step === "values" &&
+      !data.valuesComparison &&
+      data.userValues &&
+      data.userValues.order &&
+      data.userValues.order.length === 6
+    ) {
+      setValuesRankDraft(data.userValues.order);
+    }
     if (data.aiEnabled !== undefined) setAiEnabled(Boolean(data.aiEnabled));
   };
 
@@ -1133,6 +1170,24 @@ function App() {
     await handleGenerateRoadmap(outputId);
   };
 
+  // Rail navigation between steps already reached. The backend refuses anything
+  // past furthestStep, so this cannot skip unanswered work; it only moves the
+  // step, which is why the full snapshot can be applied wholesale.
+  const handleRailNavigate = async (targetStep) => {
+    if (!sessionId || targetStep === step) return;
+    setError("");
+    setBusy((p) => ({ ...p, goto: true }));
+    try {
+      const data = await sessionGoto({ sessionId, step: targetStep });
+      hydrateFromSnapshot(data);
+      setRetryAction(null);
+    } catch (e) {
+      setError(e.message || "Could not switch steps.");
+    } finally {
+      setBusy((p) => ({ ...p, goto: false }));
+    }
+  };
+
   // Dev stage jump. The composite targets cannot call handleEnterLifePath /
   // handleAcceptOutput: those read sessionId and latestOutput from React state,
   // which has not re-rendered yet inside this same async function. So chain the
@@ -1233,6 +1288,7 @@ function App() {
     setSessionId("");
     setStep("entry");
     setPathStage("output");
+    setFurthestStep("demographics");
     setProgress(null);
     setDemographicQuestions([]);
     setDemoAnswers({});
@@ -1499,7 +1555,12 @@ function App() {
           <header className="screen-header">
             <h2>{stepHeading(step)}</h2>
             <p>{stepProgressText(step, progress)}</p>
-            <JourneyRailStrip step={step} />
+            <JourneyRailStrip
+              step={step}
+              furthestStep={furthestStep}
+              busy={busy.goto}
+              onNavigate={handleRailNavigate}
+            />
           </header>
 
           {step !== "tree" && (() => {
@@ -1586,7 +1647,7 @@ function App() {
             />
           )}
 
-          {step === "values" && !valuesComparison && valuesRankDraft.length === 6 && !profile?.userValues && (
+          {step === "values" && !valuesComparison && valuesRankDraft.length === 6 && (
             <ValuesHierarchyCard
               ranking={valuesRankDraft}
               onMove={(index, delta) => setValuesRankDraft((l) => moveRankItem(l, index, delta))}

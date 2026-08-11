@@ -47,6 +47,10 @@ export function startSession(payload) {
   });
 }
 
+export function sessionGoto(payload) {
+  return request("/api/session/goto", { method: "POST", body: JSON.stringify(payload) });
+}
+
 export function submitDemographics(payload) {
   return request("/api/session/demographics", {
     method: "POST",

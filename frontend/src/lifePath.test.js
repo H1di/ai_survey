@@ -8,6 +8,8 @@ import {
   ADVICE_BLOCKS,
   JOURNEY_RAIL,
   railIndexForStep,
+  railStepReachable,
+  RAIL_NAVIGATION,
   bigFiveTakeaways,
   whyThisFitsSections,
   onetSection,
@@ -362,5 +364,33 @@ describe("moveRankItem", () => {
     expect(moveRankItem(list, 2, 1)).toBe(list);
     moveRankItem(list, 1, 1);
     expect(list).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("railStepReachable", () => {
+  it("is on by default — the flag is the removal switch", () => {
+    expect(RAIL_NAVIGATION).toBe(true);
+  });
+
+  it("allows steps at or before the furthest reached", () => {
+    expect(railStepReachable("demographics", "values")).toBe(true);
+    expect(railStepReachable("riasec", "values")).toBe(true);
+    expect(railStepReachable("values", "values")).toBe(true);
+  });
+
+  it("refuses steps past the furthest reached", () => {
+    expect(railStepReachable("cv", "values")).toBe(false);
+    expect(railStepReachable("summary", "values")).toBe(false);
+  });
+
+  it("treats tree as past the end of the rail", () => {
+    expect(railStepReachable("summary", "tree")).toBe(true);
+    expect(railStepReachable("demographics", "tree")).toBe(true);
+  });
+
+  it("refuses steps that are not on the rail at all", () => {
+    expect(railStepReachable("tree", "tree")).toBe(false);
+    expect(railStepReachable("entry", "values")).toBe(false);
+    expect(railStepReachable("summary", "entry")).toBe(false);
   });
 });
