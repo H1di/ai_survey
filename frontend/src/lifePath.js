@@ -211,6 +211,21 @@ export function railIndexForStep(step) {
   return JOURNEY_RAIL.findIndex((r) => r.step === step);
 }
 
+// Master switch for rail navigation. Set to false to restore the display-only
+// rail: every entry goes inert and nothing else needs editing.
+export const RAIL_NAVIGATION = true;
+
+// A rail entry is clickable when the user has already reached it. `tree` sits
+// past the end of the rail, so reaching it makes every rail step reachable.
+export function railStepReachable(step, furthestStep) {
+  if (!RAIL_NAVIGATION) return false;
+  const target = railIndexForStep(step);
+  if (target === -1) return false;
+  if (furthestStep === "tree") return true;
+  const furthest = railIndexForStep(furthestStep);
+  return furthest !== -1 && target <= furthest;
+}
+
 // The six Minnesota / O*NET work values, in the backend WORK_VALUES_ORDER. The
 // blurbs are the concrete MIQ-style needs shown in the pairwise tournament and
 // the hierarchy table.
