@@ -111,9 +111,15 @@ removal procedure.
 
 ### Rail components
 
-`JourneyRailStrip` and `JourneyRailCard` take an `onNavigate` prop. A reachable entry renders as a
-`<button>` carrying the existing `journey-rail-step` classes plus `reachable`; an unreachable one
-keeps its current markup. The active step is not clickable — it is where you already are.
+Only `JourneyRailStrip` takes an `onNavigate` prop. `JourneyRailCard` is shown once, immediately
+after `handleStartSession` sets `showRail`, and only while `step === "demographics"` — at which point
+`furthestStep` is also `demographics`, so no entry on it can ever be both reachable and inactive.
+Wiring it would be dead code.
+
+A reachable entry renders its label as a `<button class="journey-rail-jump">` inside the existing
+`<li class="journey-rail-step">`, so the current colour states (`done`, `active`) keep working
+untouched. An unreachable entry keeps its plain-text markup. The active step is never clickable — it
+is where you already are.
 
 `App.handleRailNavigate(step)` calls `sessionGoto`, applies the result through `hydrateFromSnapshot`,
 and reuses the existing error banner. A new `busy.goto` flag disables the rail during the request.
@@ -125,12 +131,15 @@ Without these, navigating back lands on blank screens — both are required, not
 - **`job_characteristics`**: `applySessionSnapshot` seeds `rankDraft` only when `jobCharRanking` is
   absent (`App.jsx:654`), so a revisit leaves the draft empty and the card renders nothing
   (`rankDraft.length === 7` is false). Seed the draft from `data.jobCharRanking` when it exists.
-- **`values`**: the tournament auto-start effect is blocked by `!(profile?.userValues)`
-  (`App.jsx:723`), so a revisit starts nothing and both `valuesComparison` and `valuesRanking` are
-  null — an empty screen. On revisit, prefill `valuesRankDraft` from `userValues.order` and render the
-  hierarchy table directly. The tournament is not re-run: the user's confirmed order is better data
-  than a second pass of the same comparisons, and re-answering 10 comparisons to change one rank
-  would be hostile.
+- **`values`**: two separate blocks suppress the screen on a revisit. The tournament auto-start effect
+  is blocked by `!(profile?.userValues)` (`App.jsx:723`), so nothing starts and both
+  `valuesComparison` and `valuesRanking` stay null; and the hierarchy card itself is rendered only
+  when `!profile?.userValues` (`App.jsx:1589`), so filling the draft alone would still show nothing.
+  Fix both: prefill `valuesRankDraft` from `userValues.order` on revisit, and drop the
+  `!profile?.userValues` condition from the card — `step === "values"` is the authoritative gate, and
+  step and profile arrive in the same snapshot, so the card cannot flash after a confirm. The
+  tournament is not re-run: the user's confirmed order is better data than a second pass of the same
+  comparisons, and re-answering 10 comparisons to change one rank would be hostile.
 
 ## Revisit semantics
 
