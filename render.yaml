@@ -1,16 +1,24 @@
 # Render Blueprint — деплоит только backend/ как Node Web Service (free plan).
 # Документация: https://render.com/docs/blueprint-spec
 #
-# ВАЖНО: имя сервиса определяет публичный URL: https://<name>.onrender.com
-# Если "ai-survey-backend" уже занято на Render, смени name здесь И
-# destination в frontend/vercel.json на новое значение.
+# ВАЖНО: имя сервиса ≠ его публичный URL. Render выдаёт URL один раз, при
+# создании сервиса: если <name> уже занято кем-то на Render, к хосту молча
+# добавляется случайный суффикс. Живой сервис называется "ai-survey-backend",
+# а отвечает на https://ai-survey-backend-3g62.onrender.com — суффикс "-3g62"
+# именно оттуда. Переименование сервиса здесь URL НЕ поменяет: Blueprint sync
+# создаст ВТОРОЙ сервис. Так уже случалось — 2026-07-12 name подогнали под URL,
+# и Blueprint поднял пустой дубль на …-3g62-za09 (без OPENAI_API_KEY и Redis,
+# потому что оба помечены sync: false).
 
 services:
-  # Name must match the live service — its public URL is https://<name>.onrender.com
-  # (currently https://ai-survey-backend-3g62.onrender.com). Changing the name
-  # here would make a Blueprint sync create a SECOND service, not update this one.
+  # name — это идентичность сервиса внутри Blueprint, а не его адрес (см. шапку).
+  # Должно совпадать с именем живого сервиса на Render — "ai-survey-backend".
+  # Публичный URL живого сервиса — https://ai-survey-backend-3g62.onrender.com,
+  # он же прописан в frontend/vercel.json (rewrites → destination) и в CORS_ORIGIN
+  # на стороне фронта. Менять name нельзя: sync не переименует сервис, а создаст
+  # новый, пустой.
   - type: web
-    name: ai-survey-backend-3g62
+    name: ai-survey-backend
     runtime: node
     # SINGLE-INSTANCE INVARIANT — do not scale to >1 instance. Sessions live in
     # an in-memory Map (Redis is only a durability mirror, re-read on boot), and
