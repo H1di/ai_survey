@@ -735,7 +735,10 @@ export const BRANCH_PRESETS = {
 };
 
 // Ceiling on live tips: the branch rate compounds, and an uncapped run melts
-// a laptop fan within a minute.
+// a laptop fan within a minute. The design artifact gates on its per-frame
+// accumulator, which does not actually bound anything across frames; this
+// engine gates on the frame's input population instead. Below the ceiling the
+// two are identical, so the animation looks the same.
 export const MAX_TIPS = 260;
 
 export function seedTips(opt, W, H, rng = Math.random) {
@@ -795,7 +798,11 @@ export function tickTips(tips, opt, W, H, rng = Math.random) {
 
     if (t.life > 0 && t.y > -20 && t.x > -20 && t.x < W + 20 && t.w > 0.4) {
       next.push(t);
-      if (t.depth < opt.maxDepth && next.length < MAX_TIPS && rng() < opt.branchRate) {
+      // Gate on the frame's INPUT size, not on `next`: `next` resets every
+      // frame, so gating on it lets each frame add another MAX_TIPS children
+      // and the population grows without bound (measured: 7224 tips over 200
+      // frames of always-branch, against a 520 ceiling).
+      if (t.depth < opt.maxDepth && tips.length < MAX_TIPS && rng() < opt.branchRate) {
         const dir = rng() < 0.5 ? 1 : -1;
         next.push({
           x: t.x,
