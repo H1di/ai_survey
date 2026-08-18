@@ -4993,5 +4993,10 @@ The work is done when all of the following hold:
   ```bash
   cd frontend && grep -rn "#[0-9a-fA-F]\{3,6\}\b" src --include=*.css | grep -v "theme/tokens.css"
   ```
+- No stylesheet still references the deleted light palette. Task 1 removed the `--color-*` custom properties while five stylesheets still consumed them; every one of those consumers is migrated by Tasks 11, 13 and 14, and this grep is what proves it:
+  ```bash
+  cd frontend && grep -rn -- "--color-" src
+  ```
+  Expected: no output. A hit means a stylesheet is resolving colours to nothing.
 - The O*NET badge and the exact licence sentence render on the entry screen and in the details panel.
 - A full keyless run and a full keyed run both reach an accepted output with a roadmap.
