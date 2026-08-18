@@ -197,12 +197,12 @@ export function selectDockCard({ stage, outputs = [], acceptedOutputId }) {
 // Display-only Career Discovery Journey rail. Labels are copy, not state:
 // the backend step machine stays the source of truth for execution order.
 export const JOURNEY_RAIL = [
-  { step: "demographics", label: "About you", time: "~1 min" },
-  { step: "big_five", label: "Step 1 — How you think", time: "2–3 min" },
-  { step: "riasec", label: "Step 2 — What truly interests you", time: "2 min" },
-  { step: "values", label: "Step 3 — Your values", time: "1–2 min" },
-  { step: "cv", label: "Step 4 — Your skills & experience", time: "1–2 min" },
-  { step: "summary", label: "Who you are", time: "~1 min" },
+  { step: "demographics", label: "Demographics", time: "~1 min" },
+  { step: "big_five", label: "Big Five", time: "2–3 min" },
+  { step: "riasec", label: "Interests", time: "2 min" },
+  { step: "values", label: "Values", time: "1–2 min" },
+  { step: "cv", label: "Experience", time: "1–2 min" },
+  { step: "summary", label: "Summary", time: "~1 min" },
 ];
 
 export function railIndexForStep(step) {

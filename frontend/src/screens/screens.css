@@ -1,0 +1,48 @@
+.step-rail {
+  list-style: none;
+  margin: 0 0 36px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.step-rail-item,
+.step-rail-item > button {
+  padding: 8px 16px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--gold-20);
+  background: var(--pill-idle);
+  color: var(--text-60);
+  font: 600 12px/1 var(--font-display);
+  letter-spacing: 0.01em;
+  transition: color var(--t-fast) ease, border-color var(--t-fast) ease;
+}
+
+/* The button carries its own pill, so the wrapping li must not double it. */
+.step-rail-item:has(> button) {
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.step-rail-item > button:hover:enabled {
+  border-color: var(--gold-50);
+  color: var(--text);
+}
+
+.step-rail-item > button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.step-rail-item--active {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--ink-on-gold);
+}
+
+.step-rail-item--inert:not(.step-rail-item--active):not(.step-rail-item--done) {
+  opacity: 0.45;
+}
