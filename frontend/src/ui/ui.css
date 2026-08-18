@@ -26,3 +26,81 @@
 .wordmark--screen .wordmark-text {
   color: var(--gold-60);
 }
+
+.screen {
+  position: relative;
+  min-height: 100vh;
+  padding: 84px 48px 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--ink-screen);
+}
+
+.screen--glow-corners {
+  background: var(--glow-corners), var(--ink-screen);
+}
+
+.screen--glow-center {
+  background: var(--glow-center), var(--ink-screen);
+  justify-content: center;
+}
+
+.screen > .wordmark {
+  position: absolute;
+  top: 24px;
+  left: 32px;
+}
+
+.screen--center {
+  text-align: center;
+}
+
+.screen--left {
+  text-align: left;
+}
+
+.eyebrow {
+  margin: 0 0 18px;
+  font: 500 10px/1 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold-70);
+}
+
+.screen-title {
+  margin: 0 0 8px;
+  font: 900 40px/1.1 var(--font-display);
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.screen-sub {
+  margin: 0 0 30px;
+  max-width: 600px;
+  font: 400 14px/1.6 var(--font-body);
+  color: var(--text-72);
+}
+
+.screen-body {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* The Back control the mockup omits but the product needs. */
+.screen-back {
+  position: absolute;
+  top: 56px;
+  left: 32px;
+  font: 400 11px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-40);
+  transition: color var(--t-fast) ease;
+}
+
+.screen-back:hover:enabled {
+  color: var(--gold);
+}
