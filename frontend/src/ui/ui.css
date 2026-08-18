@@ -1,0 +1,28 @@
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.wordmark-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 14px var(--gold);
+  flex-shrink: 0;
+}
+
+.wordmark-text {
+  font: 500 13px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.wordmark--hero .wordmark-text {
+  color: var(--bone);
+}
+
+.wordmark--screen .wordmark-text {
+  color: var(--gold-60);
+}
