@@ -2,12 +2,10 @@
 
 Two-part web app. **Part one** is a psychological assessment
 (demographics → Big Five/OCEAN → RIASEC interests → an adaptive work-values
-tournament → ranked 7-parameter job-characteristic targets → CV or
-career-journey signal). **Part two** is the **Life Path Engine**: the assessment
-profile feeds AI prompts that produce an Oriented Field + a concrete job (the
-"1st Output"), explained through the 7 parameters and scored on the six
-Minnesota / O\*NET Work Values with a fit against your confirmed values
-hierarchy. The user iterates it through a Yes/No loop; accepting an output
+tournament → CV or career-journey signal). **Part two** is the **Life Path
+Engine**: the assessment profile feeds AI prompts that produce an Oriented Field
++ a concrete job (the "1st Output"), scored on the six Minnesota / O\*NET Work
+Values with a fit against your confirmed values hierarchy. The user iterates it through a Yes/No loop; accepting an output
 reveals four advice blocks plus a step-by-step roadmap — all rendered as an
 interactive React Flow graph.
 
@@ -25,8 +23,8 @@ status and backlog see [`PROJECT_STATUS.md`](./PROJECT_STATUS.md).
 1. **Entry** — one open question: what you would do if you knew you would
    definitely succeed (`dreamAnswer`, required, capped at 500 chars).
 2. **Assessment** — a server-driven `step` machine
-   (`demographics → big_five → riasec → values → job_characteristics → cv →
-   summary → tree`), presented as one "Career Discovery Journey" rail:
+   (`demographics → big_five → riasec → values → cv → summary → tree`),
+   presented as one "Career Discovery Journey" rail:
    - **Demographics** — sex, age, country, city.
    - **Big Five** — the fixed public-domain Mini-IPIP-20, Likert 1–5; scored to
      OCEAN 0–100 + Stability/Plasticity.
@@ -35,9 +33,6 @@ status and backlog see [`PROJECT_STATUS.md`](./PROJECT_STATUS.md).
    - **Values** — an adaptive pairwise tournament (Ford–Johnson merge-insertion,
      ≤10 comparisons) that ranks the six work values, then a reorderable
      hierarchy you confirm.
-   - **Job characteristics** — rank the 7 parameters (compensation, work mode,
-     job security, career growth, complexity, meaning/impact, social), then
-     answer 5 or 10 trade-off questions that set 0–100 targets per parameter.
    - **Experience** — paste/upload a CV (`.pdf/.docx/.html/.txt`, plus `.pptx`
      with MarkItDown; max 5 MB) or answer 7 career-journey questions.
    - **Summary** — a "who you are" conclusion: a deterministic named archetype,
@@ -46,8 +41,8 @@ status and backlog see [`PROJECT_STATUS.md`](./PROJECT_STATUS.md).
    O\*NET occupations), scored on the six work values with a fit against your
    confirmed hierarchy, plus a structured "Why this fits" block that traces every
    bullet to your scores, ranks, and answers. Say **Yes** to accept (unlocks four
-   advice blocks + a roadmap) or **No** to tune specific parameters or regenerate
-   from a genuinely different field family. Everything renders as a graph you can
+   advice blocks + a roadmap) or **No** to regenerate from a genuinely
+   different field family. Everything renders as a graph you can
    explore node by node, with a profile panel that includes per-axis takeaways
    and a "Who you are" summary.
 
@@ -152,8 +147,6 @@ cd frontend && npm test -- --run    # vitest over src/lifePath.js (24 tests)
   - body: `{ "sessionId": "...", "comparisonId": "...", "winner": "<one of the pair>" }` — a stale/duplicate comparisonId is a no-op
 - `POST /api/values/confirm`
   - body: `{ "sessionId": "...", "order": [6 work-value keys] }` — confirms (or reorders) the hierarchy and advances
-- `POST /api/job-characteristics/rank`
-  - body: `{ "sessionId": "...", "ranking": [7 param ids most→least important] }` — the ranking is the whole step: a fixed rank→target curve derives `jobCharProfile` and advances to `cv`
 - `POST /api/cv/intent`
   - body: `{ "sessionId": "...", "cvIntent": "new|use_skills" }` — the "where should we start from" choice, made on the CV slide
 - `POST /api/cv`
@@ -167,8 +160,7 @@ cd frontend && npm test -- --run    # vitest over src/lifePath.js (24 tests)
 - `POST /api/output/first`
   - body: `{ "sessionId": "..." }` — generates the Oriented Field + 1st Output (idempotent), work-values-scored with a fit against your confirmed values hierarchy
 - `POST /api/output/refine`
-  - body: `{ "sessionId": "...", "outputId": "...", "changes": [{ "param": "<one of the 7>", "reason": "..." }] }` — shifts the named parameters while holding the rest
-  - or: `{ "sessionId": "...", "outputId": "...", "notSuitable": true }` — regenerates from a genuinely different field family
+  - body: `{ "sessionId": "...", "outputId": "..." }` — regenerates from a genuinely different field family (every family already shown is excluded)
 - `POST /api/output/accept`
   - body: `{ "sessionId": "...", "outputId": "..." }` — accepts the output and generates the four advice blocks (AI recommendations, events, universities, courses)
 - `POST /api/roadmap/generate`

@@ -110,36 +110,11 @@ const WORK_VALUES_DIRECTION_PROTOTYPES = {
 // Neutral base for unknown/absent directions (overall mean, never flat).
 const GENERIC_PROTOTYPE = P(58, 61, 47, 61, 51, 54);
 
-// How each of the user's 7 job-characteristic targets nudges a work value,
-// following the MIQ need groupings (Compensation/Security -> Working
-// Conditions & Support; Advancement/Recognition -> Recognition; Ability
-// Utilization -> Achievement; Autonomy/Creativity -> Independence; Co-workers/
-// Social Service -> Relationships).
-const JOB_CHAR_VALUE_INFLUENCE = {
-  compensation: [["working_conditions", 0.3], ["achievement", 0.15]],
-  job_security: [["working_conditions", 0.25], ["support", 0.2]],
-  meaning_impact: [["relationships", 0.3]],
-  complexity: [["achievement", 0.25], ["independence", 0.2]],
-  work_mode: [["independence", 0.2], ["working_conditions", 0.1]],
-  social: [["relationships", 0.25]],
-  career_growth: [["recognition", 0.25], ["achievement", 0.15]],
-};
-
-const clamp100 = (n) => Math.max(0, Math.min(100, Math.round(n)));
-
-// Fallback profession profile: the direction prototype pulled toward the user's
-// stated targets (the fallback job is generated to match them).
-function buildFallbackProfessionValues(directionId, jobCharProfile = {}) {
+// Fallback profession profile for the ~40 SOCs without measured O*NET work
+// values (and any keyless job): the direction prototype, unmodified.
+function buildFallbackProfessionValues(directionId) {
   const proto = WORK_VALUES_DIRECTION_PROTOTYPES[directionId] || GENERIC_PROTOTYPE;
-  const scores = { ...proto };
-  for (const [param, influences] of Object.entries(JOB_CHAR_VALUE_INFLUENCE)) {
-    const target = jobCharProfile[param];
-    if (typeof target !== "number") continue;
-    for (const [valueKey, weight] of influences) {
-      scores[valueKey] = clamp100(scores[valueKey] * (1 - weight) + target * weight);
-    }
-  }
-  return scores;
+  return { ...proto };
 }
 
 module.exports = {

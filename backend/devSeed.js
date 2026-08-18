@@ -13,14 +13,11 @@ const {
   validateDemographicAnswer,
   validateBigFiveAnswer,
   validateRiasecAnswer,
-  validateJobCharRanking,
   validateCareerJourneyAnswer,
   computeBigFiveScores,
   deriveBigFiveTraits,
   computeRiasecScores,
   deriveRiasecCode,
-  rankToJobCharTargets,
-  JOB_CHAR_CURVE_VERSION,
 } = require("./questionEngine");
 const { rankToWorkValueScores, WORK_VALUE_CURVE_VERSION } = require("./workValues");
 
@@ -52,15 +49,6 @@ const DEV_PROFILE = Object.freeze({
     "relationships",
     "recognition",
     "support",
-  ],
-  jobCharRanking: [
-    "complexity",
-    "meaning_impact",
-    "career_growth",
-    "work_mode",
-    "compensation",
-    "job_security",
-    "social",
   ],
   careerJourney: {
     cj_education: "BSc in physics, finished",
@@ -115,16 +103,6 @@ const FILLERS = {
       scores: rankToWorkValueScores(order),
       order,
       curveVersion: WORK_VALUE_CURVE_VERSION,
-      nextStep: "job_characteristics",
-    });
-  },
-
-  job_characteristics(session, { store }) {
-    const ranking = validateJobCharRanking(DEV_PROFILE.jobCharRanking);
-    store.finalizeJobChar(session, {
-      ranking,
-      profile: rankToJobCharTargets(ranking),
-      curveVersion: JOB_CHAR_CURVE_VERSION,
       nextStep: "cv",
     });
   },

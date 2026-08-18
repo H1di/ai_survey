@@ -25,6 +25,7 @@ test("direction-era and branch templates are removed, Page 2 templates kept", ()
   assert.equal(prompts.buildDirectionRefinePrompt, undefined);
   assert.equal(prompts.buildNarrowingQuestionsPrompt, undefined);
   assert.equal(prompts.buildProfessionsPrompt, undefined);
+  assert.equal(prompts.buildRefinementPrompt, undefined);
   assert.equal(prompts.buildAnswersDigest, undefined);
   assert.equal(typeof prompts.buildProfileDigest, "function");
   assert.equal(prompts.buildBigFiveItemsPrompt, undefined);
@@ -33,7 +34,7 @@ test("direction-era and branch templates are removed, Page 2 templates kept", ()
 
 // --- output loop (Phase 3) ---
 
-test("oriented field prompt: schema, 7-parameter fit, hint and exclusions", () => {
+test("oriented field prompt: schema, hint and exclusions", () => {
   const { system, user } = prompts.buildOrientedFieldPrompt({
     profileDigest: PROFILE,
     directionHint: [
@@ -43,24 +44,9 @@ test("oriented field prompt: schema, 7-parameter fit, hint and exclusions", () =
     excludeFields: ["Programming & Technology"],
   });
   assert.match(system, /"orientedField"/);
-  assert.match(system, /"parameterFit"/);
-  assert.match(system, /"meaning_impact"/);
-  assert.match(system, /EACH of the 7 parameters/);
   assert.match(system, /Science & Research, Design & Creative Industries/);
   assert.match(system, /rejected these field families.*Programming & Technology/);
   assert.match(user, /build things/);
-});
-
-test("refinement prompt embeds previous output, changes, and changeSummary", () => {
-  const { system, user } = prompts.buildRefinementPrompt({
-    profileDigest: PROFILE,
-    previousOutput: { orientedField: "Design", jobTitle: "UX Researcher", thesis: "t" },
-    changes: [{ param: "compensation", reason: "need more upside" }],
-  });
-  assert.match(system, /"changeSummary"/);
-  assert.match(system, /keeps everything else the same/);
-  assert.match(user, /UX Researcher/);
-  assert.match(user, /compensation: need more upside/);
 });
 
 test("output detail prompt demands the four advice blocks", () => {
@@ -86,8 +72,6 @@ const DIGEST_FIXTURE = {
   riasecScores: { R: 30, I: 60, A: 85, S: 70, E: 40, C: 35 },
   riasecCode: "ASI",
   riasecInferred: false,
-  jobCharRanking: ["meaning_impact", "work_mode", "compensation", "social", "complexity", "career_growth", "job_security"],
-  jobCharProfile: { compensation: 45, work_mode: 90, job_security: 50, career_growth: 50, complexity: 60, meaning_impact: 95, social: 65 },
   userValues: {
     order: ["relationships", "independence", "achievement", "recognition", "support", "working_conditions"],
     scores: { relationships: 100, independence: 84, achievement: 68, recognition: 52, support: 36, working_conditions: 20 },
@@ -97,14 +81,13 @@ const DIGEST_FIXTURE = {
   careerJourneyAnswers: {},
 };
 
-test("profile digest carries city, RIASEC, ranked jobChar targets, work values, CV signal", () => {
+test("profile digest carries city, RIASEC, work values, CV signal", () => {
   const digest = prompts.buildProfileDigest(DIGEST_FIXTURE);
   assert.ok(!/Why they are here/.test(digest), "why-here line is gone");
   assert.ok(!/Entry intent/.test(digest), "entryChoice line is gone");
   assert.match(digest, /City: Kraków/);
   assert.match(digest, /code ASI \(measured\)/);
-  assert.match(digest, /1\. Meaning \/ Impact: 95\/100/);
-  assert.match(digest, /7\. Job Security: 50\/100/);
+  assert.ok(!/Job-characteristic targets/.test(digest), "the 7-parameter block is gone");
   assert.match(digest, /Work values \(Minnesota, ranked/);
   assert.match(digest, /1\. Relationships: 100\/100/);
   assert.match(digest, /skills \[pastry, team leadership\]/);

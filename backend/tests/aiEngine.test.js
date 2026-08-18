@@ -2,7 +2,6 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createAiEngine } = require("../aiEngine");
 const { DIRECTION_IDS } = require("../directions");
-const { JOB_CHAR_PARAM_IDS } = require("../questionPool");
 
 // No apiKey -> client is null -> every call takes the deterministic fallback.
 const engine = createAiEngine({ apiKey: undefined, model: "test" });
@@ -17,8 +16,6 @@ function fakeSession(overrides = {}) {
     riasecScores: { R: 30, I: 80, A: 55, S: 40, E: 35, C: 45 },
     riasecCode: "IAC",
     riasecInferred: false,
-    jobCharRanking: [...JOB_CHAR_PARAM_IDS],
-    jobCharProfile: { compensation: 60, work_mode: 80, job_security: 40, career_growth: 55, complexity: 85, meaning_impact: 70, social: 30 },
     userValues: {
       order: ["achievement", "independence", "recognition", "relationships", "support", "working_conditions"],
       scores: { achievement: 100, independence: 84, recognition: 68, relationships: 52, support: 36, working_conditions: 20 },
@@ -35,14 +32,12 @@ function fakeSession(overrides = {}) {
 
 // --- output loop (Phase 3) ---
 
-test("keyless first output: grounded in the top-ranked direction with full parameterFit", async () => {
+test("keyless first output: grounded in the top-ranked direction", async () => {
   const output = await engine.generateFirstOutput({ session: fakeSession() });
   assert.ok(DIRECTION_IDS.includes(output.directionId));
   assert.ok(output.orientedField && output.jobTitle && output.thesis);
   assert.ok(output.whyFit && output.firstMilestone && output.constraintsNote);
-  for (const param of JOB_CHAR_PARAM_IDS) {
-    assert.ok(output.parameterFit[param], `parameterFit missing ${param}`);
-  }
+  assert.equal(output.parameterFit, undefined, "no 7-parameter fit block remains");
   // High-Investigative profile should not land in a Social/Enterprising family
   assert.ok(["science", "tech", "finance", "design"].includes(output.directionId), output.directionId);
 });
@@ -55,20 +50,6 @@ test("keyless first output honors excluded direction ids (notSuitable path)", as
     excludeDirectionIds: [first.directionId],
   });
   assert.notEqual(second.directionId, first.directionId, "excluded family must not repeat");
-});
-
-test("keyless refineOutput: same family next seed, changed params rewritten, changeSummary present", async () => {
-  const session = fakeSession();
-  const first = await engine.generateFirstOutput({ session });
-  session.outputs = [first];
-  const refined = await engine.refineOutput({
-    session,
-    previousOutput: first,
-    changes: [{ param: "compensation", reason: "need more upside" }],
-  });
-  assert.notEqual(refined.jobTitle, first.jobTitle, "must move to a different seed");
-  assert.match(refined.parameterFit.compensation, /need more upside/);
-  assert.ok(refined.changeSummary);
 });
 
 test("keyless output detail: four blocks with 2+ entries, localized", async () => {
@@ -107,25 +88,19 @@ function goodOutputPayload() {
     orientedField: "Healthcare",
     jobTitle: "Hospice Nurse",
     thesis: "Care work.",
-    parameterFit: Object.fromEntries(JOB_CHAR_PARAM_IDS.map((p) => [p, `${p} line`])),
     whyFit: "Fits.",
     firstMilestone: "Shadow a nurse.",
     constraintsNote: "Licensing required.",
   };
 }
 
-test("normalizeOutputPayload requires every field and all 7 fit lines", () => {
+test("normalizeOutputPayload requires every field", () => {
   const output = normalizeOutputPayload(goodOutputPayload());
   assert.equal(output.jobTitle, "Hospice Nurse");
-  assert.equal(output.changeSummary, undefined, "absent changeSummary stays absent");
-
-  const withSummary = normalizeOutputPayload({ ...goodOutputPayload(), changeSummary: "Moved pay up." });
-  assert.equal(withSummary.changeSummary, "Moved pay up.");
+  assert.equal(output.parameterFit, undefined, "the fit block is no longer normalized");
 
   assert.throws(() => normalizeOutputPayload({ ...goodOutputPayload(), jobTitle: " " }), /jobTitle/);
-  const missingFit = goodOutputPayload();
-  delete missingFit.parameterFit.social;
-  assert.throws(() => normalizeOutputPayload(missingFit), /social/);
+  assert.throws(() => normalizeOutputPayload({ ...goodOutputPayload(), whyFit: "" }), /whyFit/);
 });
 
 test("normalizeOutputDetailPayload enforces 2-4 valid entries per block", () => {
@@ -162,7 +137,7 @@ test("keyless whyThisFits: fixed counts, every bullet traces to profile signal",
   assert.ok(why.skillsToDevelop.length >= 3 && why.skillsToDevelop.length <= 4);
   // Traceability: the bullets quote the signal they rest on.
   assert.match(why.interests[0].point, /IAC/);
-  assert.match(why.values[0].point, /Compensation/);
+  assert.match(why.values[0].point, /Achievement/);
   assert.match(why.personality[0].point, /\/100/);
 });
 

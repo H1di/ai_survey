@@ -7,7 +7,6 @@ const { SessionStore } = require("../sessionStore");
 const { createAiEngine } = require("../aiEngine");
 const { DEV_PROFILE, seedTo } = require("../devSeed");
 const { WORK_VALUES_ORDER } = require("../workValues");
-const { JOB_CHAR_PARAM_IDS } = require("../questionPool");
 
 const aiEngine = createAiEngine({ apiKey: undefined, model: "test" });
 
@@ -22,7 +21,6 @@ test("DEV_PROFILE answers every item of every instrument", () => {
   assert.equal(Object.keys(DEV_PROFILE.riasec).length, 12);
   assert.equal(Object.keys(DEV_PROFILE.careerJourney).length, 7);
   assert.deepEqual([...DEV_PROFILE.valuesOrder].sort(), [...WORK_VALUES_ORDER].sort());
-  assert.deepEqual([...DEV_PROFILE.jobCharRanking].sort(), [...JOB_CHAR_PARAM_IDS].sort());
 });
 
 test("the fixed profile scores to the documented persona", async () => {
@@ -40,18 +38,15 @@ test("seeding to tree leaves everything the output engine needs", async () => {
 
   assert.equal(session.step, "tree");
   assert.ok(session.riasecScores, "riasecScores");
-  assert.ok(session.jobCharProfile, "jobCharProfile");
   assert.equal(session.userValues.source, "tournament");
   assert.equal(session.userValues.confidence, "explicit");
   assert.equal(session.valuesTournament, null, "finished tournament must be cleared");
   assert.ok(session.personaSummary, "personaSummary");
-  for (const param of JOB_CHAR_PARAM_IDS) {
-    assert.equal(typeof session.jobCharProfile[param], "number", param);
-  }
+  assert.equal(session.userValues.order.length, 6, "confirmed work-values hierarchy");
 });
 
 test("seeding stops exactly at the requested step", async () => {
-  for (const target of ["big_five", "riasec", "values", "job_characteristics", "cv", "summary"]) {
+  for (const target of ["big_five", "riasec", "values", "cv", "summary"]) {
     const { store, session } = freshSession();
     await seedTo(session, target, { store, aiEngine });
     assert.equal(session.step, target, `target ${target}`);

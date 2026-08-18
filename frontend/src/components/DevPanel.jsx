@@ -8,7 +8,6 @@ const TARGETS = [
   { id: "big_five", label: "big_five" },
   { id: "riasec", label: "riasec" },
   { id: "values", label: "values" },
-  { id: "job_characteristics", label: "job_characteristics" },
   { id: "cv", label: "cv" },
   { id: "summary", label: "summary" },
   { id: "tree", label: "tree (empty)" },

@@ -56,7 +56,6 @@ test("a back-and-forward round trip leaves every answer untouched", async () => 
     bigFiveScores: seeded.bigFiveScores,
     riasecScores: seeded.riasecScores,
     userValues: seeded.userValues,
-    jobCharProfile: seeded.jobCharProfile,
   };
 
   await post("/api/session/goto", { sessionId: seeded.sessionId, step: "big_five" });
@@ -67,7 +66,6 @@ test("a back-and-forward round trip leaves every answer untouched", async () => 
   assert.deepEqual(data.bigFiveScores, before.bigFiveScores);
   assert.deepEqual(data.riasecScores, before.riasecScores);
   assert.deepEqual(data.userValues, before.userValues);
-  assert.deepEqual(data.jobCharProfile, before.jobCharProfile);
 });
 
 test("goto refuses to skip past the furthest step reached", async () => {
@@ -128,7 +126,7 @@ test("a session stored before furthestStep existed still navigates", async () =>
 });
 
 test("values can be re-confirmed after returning to the step", async () => {
-  const { data: seeded } = await seed("job_characteristics");
+  const { data: seeded } = await seed("cv");
   const original = seeded.userValues.order;
   const reordered = [...original].reverse();
 
@@ -140,7 +138,7 @@ test("values can be re-confirmed after returning to the step", async () => {
 
   assert.equal(status, 200);
   assert.deepEqual(data.userValues.order, reordered, "the edited hierarchy is stored");
-  assert.equal(data.step, "job_characteristics", "confirming advances as on the first pass");
+  assert.equal(data.step, "cv", "confirming advances as on the first pass");
   // The rank->score curve is re-applied to the new order, so the value now
   // ranked first carries the highest score. Asserted relatively, not against a
   // hardcoded number, so a curve change does not break this test spuriously.
@@ -150,7 +148,7 @@ test("values can be re-confirmed after returning to the step", async () => {
 });
 
 test("a revisit confirm with an incomplete ordering is rejected", async () => {
-  const { data: seeded } = await seed("job_characteristics");
+  const { data: seeded } = await seed("cv");
   await post("/api/session/goto", { sessionId: seeded.sessionId, step: "values" });
 
   const { status } = await post("/api/values/confirm", {

@@ -1,7 +1,6 @@
 const {
   DEMOGRAPHIC_QUESTIONS,
   DEMOGRAPHIC_BY_ID,
-  JOB_CHAR_PARAM_IDS,
   CAREER_JOURNEY_QUESTIONS,
   CAREER_JOURNEY_BY_ID,
 } = require("./questionPool");
@@ -57,35 +56,6 @@ function validateBigFiveAnswer(session, itemId, value) {
     throw httpErr(400, "Big Five answer must be an integer 1–5.");
   }
   return n;
-}
-
-function validateJobCharRanking(ranking) {
-  const ok =
-    Array.isArray(ranking) &&
-    ranking.length === JOB_CHAR_PARAM_IDS.length &&
-    new Set(ranking).size === ranking.length &&
-    ranking.every((id) => JOB_CHAR_PARAM_IDS.includes(id));
-  if (!ok) throw httpErr(400, "ranking must order all 7 job-characteristic parameters.");
-  return ranking;
-}
-
-// The 7 job-characteristic targets come straight from the user's ranking —
-// the step asks for an order, not a battery of tradeoff questions. A fixed
-// linear curve turns rank 1..7 into a 0-100 target (90 down to 25), the same
-// shape as rankToWorkValueScores for the work values. Bump the version when
-// the curve moves so stored profiles stay interpretable.
-const JOB_CHAR_CURVE_VERSION = 1;
-const JOB_CHAR_TOP_TARGET = 90;
-const JOB_CHAR_BOTTOM_TARGET = 25;
-
-function rankToJobCharTargets(ranking) {
-  const span = JOB_CHAR_TOP_TARGET - JOB_CHAR_BOTTOM_TARGET;
-  const lastRank = ranking.length - 1;
-  const profile = {};
-  ranking.forEach((param, index) => {
-    profile[param] = Math.round(JOB_CHAR_TOP_TARGET - (span * index) / lastRank);
-  });
-  return profile;
 }
 
 function validateCareerJourneyAnswer(questionId, value) {
@@ -225,7 +195,6 @@ function buildProgress(session) {
       total: (session.riasecItems || []).length,
       inferred: session.riasecInferred,
     },
-    jobChar: { ranked: Boolean(session.jobCharRanking) },
     journey: {
       answered: Object.keys(session.careerJourneyAnswers || {}).length,
       total: CAREER_JOURNEY_QUESTIONS.length,
@@ -254,10 +223,6 @@ function summarizeAnswersForClient(session) {
       code: session.riasecCode,
       inferred: session.riasecInferred,
     },
-    jobChar: {
-      ranking: session.jobCharRanking,
-      profile: session.jobCharProfile,
-    },
   };
 }
 
@@ -269,9 +234,6 @@ module.exports = {
   deriveRiasecCode,
   validateDemographicAnswer,
   validateBigFiveAnswer,
-  validateJobCharRanking,
-  rankToJobCharTargets,
-  JOB_CHAR_CURVE_VERSION,
   validateCareerJourneyAnswer,
   computeBigFiveScores,
   deriveBigFiveTraits,
