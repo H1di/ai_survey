@@ -1357,7 +1357,7 @@ import BranchCanvas from "../ui/BranchCanvas";
 import OnetAttribution from "./OnetAttribution";
 import "./screens.css";
 
-const REPO_URL = "https://github.com/h1di/ai_survey_2";
+const REPO_URL = "https://github.com/H1di/ai_survey";
 
 // The first screen: the branch grows behind the question that starts
 // everything. Line breaks follow the design exactly.
