@@ -80,7 +80,7 @@ function JourneyRailCard({ onBegin }) {
   return (
     <div className="question-card journey-rail-card">
       <h3>Career Discovery Journey</h3>
-      <p className="entry-prompt">Five short steps. Each one feeds the final picture.</p>
+      <p className="entry-prompt">Four short steps. Each one feeds the final picture.</p>
       <ol className="journey-rail-list">
         {JOURNEY_RAIL.map((r) => (
           <li key={r.step}>
