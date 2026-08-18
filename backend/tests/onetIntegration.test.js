@@ -2,13 +2,11 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   buildOrientedFieldPrompt,
-  buildRefinementPrompt,
   buildWhyThisFitsPrompt,
 } = require("../prompts");
 const { createAiEngine, resolveShortlistSoc } = require("../aiEngine");
 const { getOccupation } = require("../onet");
 const { getDirection } = require("../directions");
-const { JOB_CHAR_PARAM_IDS } = require("../questionPool");
 
 const engine = createAiEngine({ apiKey: undefined, model: "test" });
 
@@ -22,11 +20,6 @@ function fakeSession(overrides = {}) {
     riasecScores: { R: 25, I: 55, A: 30, S: 90, E: 45, C: 35 },
     riasecCode: "SIE",
     riasecInferred: false,
-    jobCharRanking: [...JOB_CHAR_PARAM_IDS],
-    jobCharProfile: {
-      compensation: 55, work_mode: 40, job_security: 70, career_growth: 60,
-      complexity: 50, meaning_impact: 90, social: 85,
-    },
     cvAnalysis: null,
     cvText: null,
     careerJourneyAnswers: {},
@@ -50,22 +43,6 @@ test("oriented-field prompt lists the occupation shortlist and demands a socCode
   assert.match(system, /FROM THIS LIST/i);
   assert.match(user, /\[29-1141\.00\] Registered Nurses — Assess patient health problems and needs\./);
   assert.match(user, /\[21-1093\.00\] Social and Human Service Assistants/);
-});
-
-test("refinement prompt carries the shortlist too", () => {
-  const { system, user } = buildRefinementPrompt({
-    profileDigest: "digest",
-    previousOutput: { orientedField: "Healthcare", jobTitle: "Registered Nurse", thesis: "t" },
-    changes: [{ param: "work_mode", reason: "more remote" }],
-    occupationShortlist: SHORTLIST,
-  });
-  assert.match(system, /"socCode"/);
-  assert.match(user, /\[21-1093\.00\] Social and Human Service Assistants/);
-  // Without this instruction the model degenerates parameterFit to bare
-  // numbers on refine (observed live) — the oriented-field prompt always had
-  // it, the refinement prompt must too.
-  assert.match(system, /parameterFit explains the job/);
-  assert.match(system, /full sentence/);
 });
 
 test("whyThisFits prompt grounds skills in O*NET when provided", () => {
@@ -100,22 +77,7 @@ test("keyless first output is a real snapshot occupation with a socCode", async 
   assert.ok(output.whyFit.length > 0);
 });
 
-test("keyless refine moves to a different occupation and never repeats a SOC", async () => {
-  const session = fakeSession();
-  const first = await engine.generateFirstOutput({ session });
-  session.outputs = [first];
-
-  const refined = await engine.refineOutput({
-    session,
-    previousOutput: first,
-    changes: [{ param: "work_mode", reason: "want more remote work" }],
-  });
-  assert.ok(refined.socCode);
-  assert.notEqual(refined.socCode, first.socCode);
-  assert.equal(getOccupation(refined.socCode).title, refined.jobTitle);
-});
-
-test("keyless notSuitable excludes whole direction families", async () => {
+test("refine excludes whole direction families and never repeats a SOC", async () => {
   const session = fakeSession();
   const first = await engine.generateFirstOutput({ session });
   session.outputs = [first];

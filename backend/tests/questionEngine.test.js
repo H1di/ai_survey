@@ -6,13 +6,10 @@ const {
   validateRiasecAnswer,
   computeRiasecScores,
   deriveRiasecCode,
-  validateJobCharRanking,
-  rankToJobCharTargets,
   validateCareerJourneyAnswer,
 } = require("../questionEngine");
 const {
   DEMOGRAPHIC_QUESTIONS,
-  JOB_CHAR_PARAM_IDS,
   CAREER_JOURNEY_QUESTIONS,
 } = require("../questionPool");
 const { getStaticRiasecItems } = require("../riasecItems");
@@ -47,40 +44,6 @@ test("deriveRiasecCode returns top-3 with stable R,I,A,S,E,C tie-break", () => {
   assert.equal(deriveRiasecCode({ R: 10, I: 90, A: 80, S: 70, E: 10, C: 10 }), "IAS");
   // full tie -> catalog order
   assert.equal(deriveRiasecCode({ R: 50, I: 50, A: 50, S: 50, E: 50, C: 50 }), "RIA");
-});
-
-test("validateJobCharRanking accepts only a permutation of all 7 params", () => {
-  const ok = [...JOB_CHAR_PARAM_IDS].reverse();
-  assert.deepEqual(validateJobCharRanking(ok), ok);
-  assert.throws(() => validateJobCharRanking(JOB_CHAR_PARAM_IDS.slice(0, 6)), /all 7/);
-  assert.throws(() => validateJobCharRanking([...JOB_CHAR_PARAM_IDS.slice(0, 6), "salary"]), /all 7/);
-  assert.throws(
-    () => validateJobCharRanking([JOB_CHAR_PARAM_IDS[0], ...JOB_CHAR_PARAM_IDS.slice(0, 6)]),
-    /all 7/
-  );
-});
-
-test("rankToJobCharTargets: strictly descending 0-100 targets in ranking order", () => {
-  const ranking = [...JOB_CHAR_PARAM_IDS];
-  const profile = rankToJobCharTargets(ranking);
-
-  assert.deepEqual(Object.keys(profile).sort(), [...ranking].sort(), "every param gets a target");
-  const targets = ranking.map((p) => profile[p]);
-  assert.equal(targets[0], 90, "top rank sits at the high anchor");
-  assert.equal(targets[targets.length - 1], 25, "last rank sits at the low anchor");
-  for (const t of targets) {
-    assert.ok(Number.isInteger(t) && t >= 0 && t <= 100, "targets are integers inside 0-100");
-  }
-  for (let i = 1; i < targets.length; i += 1) {
-    assert.ok(targets[i] < targets[i - 1], "each rank scores below the one above it");
-  }
-});
-
-test("rankToJobCharTargets follows the order, not the param identity", () => {
-  const reversed = [...JOB_CHAR_PARAM_IDS].reverse();
-  const profile = rankToJobCharTargets(reversed);
-  assert.equal(profile[reversed[0]], 90);
-  assert.equal(profile[JOB_CHAR_PARAM_IDS[0]], 25, "a param ranked last lands on the low anchor");
 });
 
 test("career journey: 7 questions; answers trimmed and capped at 400 chars", () => {

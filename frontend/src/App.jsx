@@ -23,7 +23,6 @@ import {
   submitBigFiveAnswer,
   submitDemographics,
   submitCvText,
-  submitJobCharRanking,
   submitJourneyAnswer,
   submitRiasecAnswer,
   submitValuesAnswer,
@@ -145,9 +144,8 @@ function stepProgressText(step, progress) {
 }
 
 // One journey, one bar. Unknown-yet block sizes assume the short variants so
-// the bar can only get more accurate, never jump backwards. The ranking step
-// counts as one "question"; the CV block counts as the 7 journey questions
-// until a CV text makes them moot.
+// the bar can only get more accurate, never jump backwards. The CV block
+// counts as the 7 journey questions until a CV text makes them moot.
 function overallProgress(progress) {
   if (!progress) return null;
   const bigFiveTotal = progress.bigFive.total || 20;
@@ -155,13 +153,12 @@ function overallProgress(progress) {
   const valuesTotal = progress.values?.total || 10;
   const journeyTotal = progress.journey.active ? progress.journey.total : 0;
   const total =
-    progress.demographics.total + bigFiveTotal + riasecTotal + valuesTotal + 1 + journeyTotal;
+    progress.demographics.total + bigFiveTotal + riasecTotal + valuesTotal + journeyTotal;
   const answered =
     progress.demographics.answered +
     progress.bigFive.answered +
     progress.riasec.answered +
     (progress.values?.confirmed ? valuesTotal : progress.values?.answered || 0) +
-    (progress.jobChar.ranked ? 1 : 0) +
     (progress.journey.active ? progress.journey.answered : 0);
   if (!total) return null;
   return { answered, total, percent: Math.min(100, Math.round((answered / total) * 100)) };
@@ -370,52 +367,6 @@ function CvCard({ mode, setMode, cvDraft, setCvDraft, busy, intent, intentBusy, 
   );
 }
 
-function RankCard({ params, ranking, onMove, busy, onConfirm }) {
-  const byId = new Map(params.map((p) => [p.id, p]));
-  return (
-    <div className="question-card">
-      <p className="question-category">Rank what matters</p>
-      <h3>Order these from most to least important in your next job.</h3>
-      <ol className="rank-list">
-        {ranking.map((id, index) => (
-          <li key={id} className="rank-row">
-            <span className="rank-pos">{index + 1}</span>
-            <span className="rank-label">
-              {byId.get(id)?.label}
-              <span className="rank-meaning">{byId.get(id)?.meaning}</span>
-            </span>
-            <span className="rank-controls">
-              <button
-                type="button"
-                className="ghost-action"
-                onClick={() => onMove(index, -1)}
-                disabled={busy || index === 0}
-                aria-label={`Move ${byId.get(id)?.label} up`}
-              >
-                ↑
-              </button>
-              <button
-                type="button"
-                className="ghost-action"
-                onClick={() => onMove(index, 1)}
-                disabled={busy || index === ranking.length - 1}
-                aria-label={`Move ${byId.get(id)?.label} down`}
-              >
-                ↓
-              </button>
-            </span>
-          </li>
-        ))}
-      </ol>
-      <div className="question-actions single">
-        <button type="button" className="primary-action" onClick={onConfirm} disabled={busy}>
-          {busy ? "Saving…" : "This is my order"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // The adaptive pairwise-comparison card: pick the more important of two values.
 function ValuesComparisonCard({ comparison, busy, onChoose, progress }) {
   const a = WORK_VALUE_META[comparison.a] || { label: comparison.a, blurb: "" };
@@ -589,8 +540,6 @@ function App() {
   const [riasecItems, setRiasecItems] = useState([]);
   const [riasecAnswers, setRiasecAnswers] = useState({});
   const [riasecIndex, setRiasecIndex] = useState(0);
-  const [jobCharParams, setJobCharParams] = useState([]);
-  const [rankDraft, setRankDraft] = useState([]);
   // Work-values step: the pending pairwise comparison, the sorted hierarchy
   // once comparisons finish, and the reorderable draft the user can tweak.
   const [valuesComparison, setValuesComparison] = useState(null);
@@ -609,8 +558,6 @@ function App() {
   const [roadmaps, setRoadmaps] = useState({});
 
   // Refine panel view state: checked params map to their brief reasons.
-  const [refineMode, setRefineMode] = useState(false);
-  const [refineChecks, setRefineChecks] = useState({});
 
   const [stageDetail, setStageDetail] = useState(null);
   const [infoView, setInfoView] = useState(null);
@@ -628,7 +575,6 @@ function App() {
     riasecStart: false,
     riasec: false,
     riasecSkip: false,
-    rank: false,
     values: false,
     valuesConfirm: false,
     summary: false,
@@ -658,7 +604,6 @@ function App() {
     if (data.demographicQuestions) setDemographicQuestions(data.demographicQuestions);
     if (data.bigFiveItems) setBigFiveItems(data.bigFiveItems);
     if (data.riasecItems) setRiasecItems(data.riasecItems);
-    if (data.jobCharParams) setJobCharParams(data.jobCharParams);
     if (data.careerJourneyQuestions) setCareerJourneyQuestions(data.careerJourneyQuestions);
     if (data.cvUploadFormats) setCvUploadFormats(data.cvUploadFormats);
     setCvIntent(data.cvIntent || "");
@@ -669,19 +614,6 @@ function App() {
     setOutputs(data.outputs || []);
     setAcceptedOutputId(data.acceptedOutputId || null);
     setRoadmaps(data.roadmaps || {});
-    // Seed the reorderable ranking. First entry: the canonical parameter order.
-    // Revisit (rail navigation back): the stored ranking — without this the
-    // draft stays empty and RankCard, which requires 7 entries, renders nothing.
-    if (data.step === "job_characteristics") {
-      if (data.jobCharRanking && data.jobCharRanking.length === 7) {
-        setRankDraft(data.jobCharRanking);
-      } else {
-        const paramsSource = data.jobCharParams || jobCharParams;
-        if (paramsSource.length === 7) {
-          setRankDraft((draft) => (draft.length === 7 ? draft : paramsSource.map((p) => p.id)));
-        }
-      }
-    }
     setProfile({
       bigFiveScores: data.bigFiveScores || null,
       derivedTraits: data.derivedTraits || null,
@@ -978,22 +910,6 @@ function App() {
     }
   };
 
-  const handleSubmitRanking = async () => {
-    if (!sessionId || rankDraft.length !== 7) return;
-    setError("");
-    setBusy((p) => ({ ...p, rank: true }));
-    try {
-      const data = await submitJobCharRanking({ sessionId, ranking: rankDraft });
-      applySessionSnapshot(data);
-      setRetryAction(null);
-    } catch (e) {
-      setError(e.message || "Could not save your ranking.");
-      setRetryAction(() => () => handleSubmitRanking());
-    } finally {
-      setBusy((p) => ({ ...p, rank: false }));
-    }
-  };
-
   const handleSelectCvIntent = async (value) => {
     if (!sessionId) return;
     setError("");
@@ -1102,11 +1018,6 @@ function App() {
       description: output.thesis,
       sections: [
         ...whyThisFitsSections(output),
-        {
-          heading: "Through your 7 priorities",
-          items: jobCharParams.map((p) => output.parameterFit?.[p.id]).filter(Boolean),
-        },
-        output.changeSummary ? { heading: "What changed", text: output.changeSummary } : null,
         onetSection(output),
         { heading: "First milestone", text: output.firstMilestone },
         output.valuesFit
@@ -1222,42 +1133,6 @@ function App() {
     }
   };
 
-  const toggleRefineParam = (paramId) => {
-    setRefineChecks((checks) => {
-      const next = { ...checks };
-      if (paramId in next) delete next[paramId];
-      else next[paramId] = "";
-      return next;
-    });
-  };
-
-  const closeRefine = () => {
-    setRefineMode(false);
-    setRefineChecks({});
-  };
-
-  const handleRefineSubmit = async () => {
-    if (!sessionId || !latestOutput) return;
-    const changes = Object.entries(refineChecks).map(([param, reason]) => ({
-      param,
-      reason: reason.trim(),
-    }));
-    if (!changes.length) return;
-    setError("");
-    setBusy((p) => ({ ...p, refine: true }));
-    try {
-      const data = await refineOutput({ sessionId, outputId: latestOutput.id, changes });
-      applySessionSnapshot(data);
-      setRetryAction(null);
-      closeRefine();
-    } catch (e) {
-      setError(e.message || "Could not regenerate the output.");
-      setRetryAction(() => handleRefineSubmit);
-    } finally {
-      setBusy((p) => ({ ...p, refine: false }));
-    }
-  };
-
   const handleNotSuitable = async () => {
     if (!sessionId || !latestOutput) return;
     setError("");
@@ -1266,7 +1141,6 @@ function App() {
       const data = await refineOutput({ sessionId, outputId: latestOutput.id, notSuitable: true });
       applySessionSnapshot(data);
       setRetryAction(null);
-      closeRefine();
     } catch (e) {
       setError(e.message || "Could not regenerate the output.");
       setRetryAction(() => handleNotSuitable);
@@ -1330,8 +1204,7 @@ function App() {
       riasecStart: false,
       riasec: false,
       riasecSkip: false,
-      rank: false,
-      values: false,
+        values: false,
       valuesConfirm: false,
       summary: false,
         cv: false,
@@ -1361,7 +1234,7 @@ function App() {
   const treeHint = !outputs.length
     ? "Generating your first path…"
     : !acceptedOutputId
-      ? "Review the suggestion — accept it or tune what doesn't fit"
+      ? "Review the suggestion — accept it or ask for a different direction"
       : roadmapVisible
         ? "Your roadmap — click any step for details"
         : "Accepted — building your next steps";
@@ -1382,7 +1255,7 @@ function App() {
     focusNodeIds = [latestOutput.parentId || "me", latestOutput.id];
   }
 
-  const dockCardKind = selectDockCard({ stage, outputs, acceptedOutputId, refineMode });
+  const dockCardKind = selectDockCard({ stage, outputs, acceptedOutputId });
 
   let dockCard = null;
   if (dockCardKind === "output-review" && latestOutput) {
@@ -1412,9 +1285,6 @@ function App() {
                 .join(" · ")}
             </p>
           )}
-          {latestOutput.changeSummary && (
-            <p className="dock-subtext dock-change-summary">{latestOutput.changeSummary}</p>
-          )}
           <div className="question-actions">
             <button
               type="button"
@@ -1427,10 +1297,10 @@ function App() {
             <button
               type="button"
               className="ghost-action"
-              onClick={() => setRefineMode(true)}
+              onClick={handleNotSuitable}
               disabled={busy.accept || busy.refine}
             >
-              No — adjust
+              {busy.refine ? "Finding another…" : "Not for me"}
             </button>
             <button
               type="button"
@@ -1438,69 +1308,6 @@ function App() {
               onClick={() => handleOutputOpen(latestOutput)}
             >
               Details
-            </button>
-          </div>
-        </div>
-      ),
-    };
-  } else if (dockCardKind === "refine" && latestOutput) {
-    const checkedCount = Object.keys(refineChecks).length;
-    dockCard = {
-      key: "refine",
-      content: (
-        <div className="question-card dock-card">
-          <p className="question-category">What doesn't fit?</p>
-          <h3>Tick what to change about “{latestOutput.jobTitle}”</h3>
-          <div className="refine-params">
-            {jobCharParams.map((p) => {
-              const checked = p.id in refineChecks;
-              return (
-                <div key={p.id} className={`refine-param ${checked ? "checked" : ""}`}>
-                  <label className="refine-param-label">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleRefineParam(p.id)}
-                      disabled={busy.refine}
-                    />
-                    <span>{p.label}</span>
-                  </label>
-                  {checked && (
-                    <input
-                      type="text"
-                      className="refine-reason"
-                      placeholder="Briefly — what should change?"
-                      value={refineChecks[p.id]}
-                      maxLength={200}
-                      onChange={(e) =>
-                        setRefineChecks((c) => ({ ...c, [p.id]: e.target.value }))
-                      }
-                      disabled={busy.refine}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <div className="question-actions">
-            <button
-              type="button"
-              className="primary-action"
-              onClick={handleRefineSubmit}
-              disabled={busy.refine || checkedCount === 0}
-            >
-              {busy.refine ? "Regenerating…" : "Regenerate with these changes"}
-            </button>
-            <button
-              type="button"
-              className="ghost-action"
-              onClick={handleNotSuitable}
-              disabled={busy.refine}
-            >
-              It doesn't fit me overall
-            </button>
-            <button type="button" className="ghost-action" onClick={closeRefine} disabled={busy.refine}>
-              Back
             </button>
           </div>
         </div>
@@ -1653,16 +1460,6 @@ function App() {
               onMove={(index, delta) => setValuesRankDraft((l) => moveRankItem(l, index, delta))}
               busy={busy.valuesConfirm}
               onConfirm={handleValuesConfirm}
-            />
-          )}
-
-          {step === "job_characteristics" && rankDraft.length === 7 && (
-            <RankCard
-              params={jobCharParams}
-              ranking={rankDraft}
-              onMove={(index, delta) => setRankDraft((l) => moveRankItem(l, index, delta))}
-              busy={busy.rank}
-              onConfirm={handleSubmitRanking}
             />
           )}
 

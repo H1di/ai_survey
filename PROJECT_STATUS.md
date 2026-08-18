@@ -11,7 +11,7 @@
 ## Готово
 
 ### Бэкенд — опросник (Pages 1–2)
-- **Session state machine** — `entry → demographics → big_five → riasec → values → job_characteristics → cv → summary → tree` (`backend/server.js`, guard на каждом роуте). Во фронтенде поверх шагов лежит display-only рейл «Career Discovery Journey» (интро-карта + полоса в шапке).
+- **Session state machine** — `entry → demographics → big_five → riasec → values → cv → summary → tree` (`backend/server.js`, guard на каждом роуте). Во фронтенде поверх шагов лежит display-only рейл «Career Discovery Journey» (интро-карта + полоса в шапке).
 - **Entry** — один обязательный свободный вопрос: `dreamAnswer`, trim + кап 500 → `POST /api/session/start`. Выбор `cvIntent` (new|use_skills) делается позже, на CV-слайде (`POST /api/cv/intent`, guard на `cv`-шаге, перевыбор разрешён; пути paste/upload/journey заблокированы до выбора).
 - **Values** — явный адаптивный парный турнир над 6 work values (Ford–Johnson, ≤10 сравнений, `valuesTournament.js`) → переупорядочиваемая иерархия + confirm; `userValues` из турнира (`source:"tournament"`, `confidence:"explicit"`).
 - **Summary** — экран-заключение между `cv` и `tree`: детерминированный архетип + Big Five радар + AI-persona + work-values радар; `POST /api/summary/continue` → `tree`.

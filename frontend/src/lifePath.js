@@ -36,7 +36,7 @@ export function firstUnansweredIndex(questions, answers) {
   return index === -1 ? Math.max(0, questions.length - 1) : index;
 }
 
-// Reorder helper for the job-characteristics ranking list. Pure: returns the
+// Reorder helper for the work-values hierarchy list. Pure: returns the
 // input list unchanged when the move would fall off either end.
 export function moveRankItem(list, index, delta) {
   const target = index + delta;
@@ -183,15 +183,14 @@ export function buildLifePathGraph({
   return { nodes, edges };
 }
 
-// Which dock card the tree shows for a given session shape. Returns one of:
-// "output-review" | "refine" | null. Mirrors the render order in App.jsx —
-// once an output is accepted, the graph nodes carry the story and the dock
-// stays empty.
-export function selectDockCard({ stage, outputs = [], acceptedOutputId, refineMode }) {
+// Which dock card the tree shows for a given session shape. Returns
+// "output-review" or null. Mirrors the render order in App.jsx — once an
+// output is accepted, the graph nodes carry the story and the dock stays
+// empty.
+export function selectDockCard({ stage, outputs = [], acceptedOutputId }) {
   if (stage !== "tree") return null;
   if (!outputs.length) return null;
   if (acceptedOutputId) return null;
-  if (refineMode) return "refine";
   return "output-review";
 }
 
@@ -202,8 +201,7 @@ export const JOURNEY_RAIL = [
   { step: "big_five", label: "Step 1 — How you think", time: "2–3 min" },
   { step: "riasec", label: "Step 2 — What truly interests you", time: "2 min" },
   { step: "values", label: "Step 3 — Your values", time: "1–2 min" },
-  { step: "job_characteristics", label: "Step 4 — What motivates you", time: "~1 min" },
-  { step: "cv", label: "Step 5 — Your skills & experience", time: "1–2 min" },
+  { step: "cv", label: "Step 4 — Your skills & experience", time: "1–2 min" },
   { step: "summary", label: "Who you are", time: "~1 min" },
 ];
 

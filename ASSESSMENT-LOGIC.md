@@ -42,8 +42,7 @@ stateDiagram-v2
     demographics --> big_five
     big_five --> riasec
     riasec --> values
-    values --> job_characteristics
-    job_characteristics --> cv
+    values --> cv
     cv --> summary
     summary --> tree
     tree --> [*]: Page 3 (pathStage: output -> detail)
@@ -288,7 +287,7 @@ curveVersion = 1
 
 `finalizeValues` **атомарно** пишет `session.userValues =
 { scores, order, source:"tournament", confidence:"explicit", curveVersion }` и
-одновременно **очищает турнир**, затем переводит шаг в `job_characteristics`.
+одновременно **очищает турнир**, затем переводит шаг в `cv`.
 `confirm` идемпотентен: повторный сабмит после перехода просто вернёт снапшот.
 
 > **Честное ограничение.** Порядковый инструмент не измеряет *магнитуды* —
@@ -297,37 +296,7 @@ curveVersion = 1
 
 ---
 
-## 6. Job characteristics — 7 параметров работы
-
-**Параметры (кросс-слойный контракт):** `questionPool.js:JOB_CHAR_PARAMS` —
-`compensation, work_mode, job_security, career_growth, complexity, meaning_impact,
-social`. Эти ключи используются дословно в промптах, скоринге, сессии и панели
-рефайна.
-
-**Поток:** пользователь упорядочивает 7 параметров («Order these from most to
-least important in your next job») → `POST /api/job-characteristics/rank
-{ranking[7]}` → фиксированная кривая ранг→таргет даёт профиль → шаг закрыт.
-Никаких tradeoff-вопросов и выбора глубины: шаг — один экран ранжирования, роут
-синхронный и не тратит AI.
-
-### 6.1 Профиль из ранжирования
-
-**Источник:** `questionEngine.js:rankToJobCharTargets` (`JOB_CHAR_CURVE_VERSION`).
-Линейная кривая от верхнего якоря к нижнему по позиции в ранжировании:
-
-```
-profile[ranking[i]] = round( 90 − (90 − 25) · i / 6 )
-→ 90, 79, 68, 58, 47, 36, 25
-```
-
-Ранг — это и есть измерение: важное получает высокий таргет, неважное садится к
-низу шкалы. Результат — `jobCharProfile` (7 чисел 0–100), позже влияет на
-work-value фоллбеки профессий (см. §9.3). `store.finalizeJobChar` пишет ranking +
-profile + `curveVersion` и переводит шаг в `cv` одной записью.
-
----
-
-## 7. CV / карьерный путь
+## 6. CV / карьерный путь
 
 **Источник:** `cvExtract.js`, `server.js` (роуты `cv/intent`, `cv`, `cv/journey`).
 
@@ -349,7 +318,7 @@ require-then-lock) — двойной сабмит не удвоит AI-расх
 
 ---
 
-## 8. Summary — портрет
+## 7. Summary — портрет
 
 **Источник:** `frontend/src/lifePath.js:deriveArchetype`,
 `aiEngine.js:generatePersonaSummary`; роут `summary/continue`.
@@ -370,12 +339,12 @@ require-then-lock) — двойной сабмит не удвоит AI-расх
 
 ---
 
-## 9. Page 3 — заземление и скоринг профессий
+## 8. Page 3 — заземление и скоринг профессий
 
 После `tree` идёт `pathStage: output → detail`. Здесь «вопросов» уже нет — есть
 **алгоритм подбора профессии** и Yes/No-цикл уточнения. Разберём алгоритм.
 
-### 9.1 Конвейер первого output'а
+### 8.1 Конвейер первого output'а
 
 **Роут:** `POST /api/output/first`. **Источники:** `riasec.js:rankDirections`,
 `onet.js:rankOccupations`, `aiEngine.js:resolveShortlistSoc`,
@@ -409,15 +378,15 @@ flowchart TD
 **Keyless-фоллбек:** без AI-ключа берётся лучшая по корреляции неиспользованная
 профессия напрямую (legacy `professionSeeds` — только если снапшот отсутствует).
 
-### 9.2 Скоринг output'а (`buildScoredOutput`)
+### 8.2 Скоринг output'а (`buildScoredOutput`)
 
 Единственное место агрегации work-value оценок. Для выбранной профессии:
 
 - **`resolveProfessionWorkValues`** — измеренные O*NET work-values выбранного SOC
   (для ~40 из 923 профессий без них и любого keyless-джоба — прототип направления,
-  см. §9.3).
+  см. §8.3).
 - **`deriveTopValues`** — топ-3 ценности профессии.
-- **`valuesFit`** — соответствие иерархии пользователя (см. §9.4).
+- **`valuesFit`** — соответствие иерархии пользователя (см. §8.4).
 - **`onet`-блок** — job zone, skills, tech, related + живые US-зарплата/прогноз,
   если задан `ONET_API_KEY` (иначе снапшот). AI ценности **не скорит** — только
   бэкенд.
@@ -428,24 +397,16 @@ flowchart TD
 профессии (`onetSkills`). UI рендерит именно его (`whyThisFitsSections`), а не
 legacy free-text `whyFit`.
 
-### 9.3 Фоллбек work-values профессии
+### 8.3 Фоллбек work-values профессии
 
 **Источник:** `workValues.js:buildFallbackProfessionValues`,
-`WORK_VALUES_DIRECTION_PROTOTYPES`, `JOB_CHAR_VALUE_INFLUENCE`.
+`WORK_VALUES_DIRECTION_PROTOTYPES`.
 
 Когда измеренных O*NET-ценностей нет: берётся **прототип направления** (средний
-измеренный профиль профессий этой семьи — данные, не догадка) и подтягивается к
-целям пользователя из `jobCharProfile` по группировкам MIQ:
-
-```
-score[value] = clamp100( proto[value]·(1−w) + target·w )
-```
-
-Например `compensation` тянет `working_conditions` (w=0.3) и `achievement`
-(w=0.15); `career_growth` → `recognition` (0.25) + `achievement` (0.15) и т.д.
+измеренный профиль профессий этой семьи — данные, не догадка) без модификаций.
 Неизвестное направление → нейтральный `GENERIC_PROTOTYPE`.
 
-### 9.4 Математика `valuesFit`
+### 8.4 Математика `valuesFit`
 
 **Источник:** `workValues.js:valuesFit`. Соответствие между 6-вектором
 ценностей пользователя и профессии — **центрированный косинус**:
@@ -462,16 +423,14 @@ valuesFit = { overall: round(cosFit) }
 имеет → 0. Поле одно — `overall`: у шести MWV-шкал нет осей/плоскостей, которые
 имело бы смысл смешивать.
 
-### 9.5 Цикл уточнения (Yes/No)
+### 8.5 Цикл уточнения (Yes/No)
 
 **Роуты:** `output/refine`, `output/accept`, `roadmap/generate`. **Источник:**
 `server.js`.
 
-- **`refine {outputId, changes:[{param, reason}]}`** (1–7 из 7 канонических
-  параметров) — сдвигает названные параметры, удерживая остальные; shortlist
-  остаётся в семье предыдущего output'а **минус уже показанные SOC**.
-- **XOR `refine {outputId, notSuitable:true}`** — регенерация из *другой* семьи:
-  исключаются все уже показанные `directionId`. (Оба поля сразу → 400.)
+- **`refine {outputId}`** — регенерация из *другой* семьи: исключаются все уже
+  показанные `directionId`. Пер-параметрической подстройки нет: «No» всегда
+  означает «не этот вариант».
 - Каждая регенерация добавляет parent-linked `output_N` (со своими `whyThisFits`
   и `onet`) в `session.outputs` и пишет `refinementHistory`.
 - **`accept`** (accept-once) — помечает output принятым, `pathStage="detail"`,
@@ -485,7 +444,7 @@ valuesFit = { overall: round(cosFit) }
 
 ---
 
-## 10. Приложение — шпаргалка алгоритмов
+## 9. Приложение — шпаргалка алгоритмов
 
 | Блок | Вход | Алгоритм / формула | Выход | Источник |
 |---|---|---|---|---|
@@ -493,15 +452,12 @@ valuesFit = { overall: round(cosFit) }
 | RIASEC | Likert 1–5 ×12 | `((mean−1)/4)·100`; топ-3 → код | `riasecScores`, `riasecCode` | `questionEngine.js`, `riasecItems.js` |
 | RIASEC-skip | `bigFiveScores` | линейные эвристики | `riasecInferred` | `riasec.js:inferRiasecScores` |
 | Values | ≤10 попарных | Ford–Johnson merge-insertion → кривая `[100…20]` | `userValues` | `valuesTournament.js`, `workValues.js` |
-| Job char | ранг 7 | кривая ранг→таргет `[90…25]` | `jobCharProfile` | `questionEngine.js`, `questionPool.js` |
 | Направления | `riasecScores` | взвеш. dot-product → топ-5 | direction-семьи | `riasec.js:rankDirections` |
 | Профессии | `riasecScores` + семьи | **Pearson** по O*NET → shortlist 15 | shortlist | `onet.js:rankOccupations` |
 | Fit ценностей | `userValues` + проф. | центрированный косинус → `{overall}` | `valuesFit` | `workValues.js:valuesFit` |
 
 **Канонические ключи (кросс-слойные контракты):**
 
-- 7 job-char параметров: `compensation, work_mode, job_security, career_growth,
-  complexity, meaning_impact, social`.
 - 6 work-values: `achievement, independence, recognition, relationships, support,
   working_conditions`.
 - 5 черт Big Five: `O, C, E, A, N`. 6 типов RIASEC: `R, I, A, S, E, C`.

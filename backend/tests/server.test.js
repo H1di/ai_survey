@@ -31,17 +31,7 @@ async function post(path, body) {
   return { status: res.status, data };
 }
 
-const RANKING = [
-  "compensation",
-  "work_mode",
-  "job_security",
-  "career_growth",
-  "complexity",
-  "meaning_impact",
-  "social",
-];
-
-// Fast-forwards Page 1 + Page 2 up to the job-characteristics step.
+// Fast-forwards Page 1 + Page 2 up to the CV step.
 // Static question banks arrive on start / GET / riasec-start snapshots
 // only — answer responses are trimmed, so iterate over the captured lists.
 // Drives the adaptive tournament to completion (always picking `a`) and
@@ -56,11 +46,11 @@ async function walkThroughValues(sessionId) {
     ({ data } = await post("/api/values/answer", { sessionId, comparisonId, winner: a }));
   }
   ({ data } = await post("/api/values/confirm", { sessionId }));
-  assert.equal(data.step, "job_characteristics");
+  assert.equal(data.step, "cv");
   return data;
 }
 
-async function walkToJobChar() {
+async function walkToCv() {
   let { data } = await post("/api/session/start", {
     dreamAnswer: "build useful things",
   });
@@ -94,14 +84,6 @@ async function walkToJobChar() {
   return { sessionId, data, careerJourneyQuestions };
 }
 
-async function walkToCv() {
-  const walked = await walkToJobChar();
-  const { sessionId, careerJourneyQuestions } = walked;
-  const { data } = await post("/api/job-characteristics/rank", { sessionId, ranking: RANKING });
-  assert.equal(data.step, "cv");
-  return { sessionId, data, careerJourneyQuestions };
-}
-
 async function completeAssessment() {
   const walked = await walkToCv();
   const { sessionId, careerJourneyQuestions } = walked;
@@ -127,12 +109,10 @@ test("answer snapshots omit static question banks; start/GET include them", asyn
   const sessionId = data.sessionId;
   assert.ok(data.demographicQuestions, "start carries question banks");
   assert.ok(data.careerJourneyQuestions);
-  assert.ok(data.jobCharParams);
 
   ({ data } = await post("/api/session/demographics", { sessionId, questionId: "sex", value: "male" }));
   assert.equal(data.demographicQuestions, undefined, "answer response is trimmed");
   assert.equal(data.careerJourneyQuestions, undefined);
-  assert.equal(data.jobCharParams, undefined);
   assert.ok(data.demographics, "dynamic state still present");
 
   const res = await fetch(`${base}/api/session/${sessionId}`);
@@ -169,7 +149,7 @@ test("depth era is gone: fixed instrument, no depth route, no depth fields", asy
   assert.equal("depth" in a.data.summary.bigFive, false, "depth gone from summary");
 });
 
-test("step guards: riasec/jobchar/cv routes reject out-of-order calls", async () => {
+test("step guards: riasec/values/cv routes reject out-of-order calls", async () => {
   const { data: start } = await post("/api/session/start", { dreamAnswer: "x" });
   const sessionId = start.sessionId;
   for (const [path, body] of [
@@ -177,7 +157,6 @@ test("step guards: riasec/jobchar/cv routes reject out-of-order calls", async ()
     ["/api/riasec/skip", { sessionId }],
     ["/api/values/start", { sessionId }],
     ["/api/values/confirm", { sessionId, order: [] }],
-    ["/api/job-characteristics/rank", { sessionId, ranking: RANKING }],
     ["/api/cv", { sessionId, cvText: "hi" }],
     ["/api/cv/journey", { sessionId, questionId: "cj_education", value: "x" }],
     ["/api/summary/continue", { sessionId }],
@@ -204,31 +183,6 @@ test("riasec skip infers a low-confidence profile and advances", async () => {
   assert.equal(data.step, "values");
   assert.equal(data.riasecInferred, true);
   assert.equal(data.riasecCode.length, 3);
-});
-
-test("job-characteristics/rank validates the permutation and rejects a re-rank", async () => {
-  const { sessionId } = await walkToJobChar();
-  let res = await post("/api/job-characteristics/rank", { sessionId, ranking: ["compensation"] });
-  assert.equal(res.status, 400, "ranking must cover all 7 params");
-  res = await post("/api/job-characteristics/rank", { sessionId, ranking: [...RANKING.slice(1), RANKING[0]] });
-  assert.equal(res.status, 200);
-  assert.equal(res.data.step, "cv", "submitting the ranking completes the step");
-  res = await post("/api/job-characteristics/rank", { sessionId, ranking: RANKING });
-  assert.equal(res.status, 400, "the step is closed — no re-ranking");
-});
-
-test("the ranking alone derives the 0-100 targets, top-ranked first", async () => {
-  const { sessionId } = await walkToJobChar();
-  const { data } = await post("/api/job-characteristics/rank", { sessionId, ranking: RANKING });
-
-  assert.deepEqual(data.jobCharRanking, RANKING);
-  const targets = RANKING.map((param) => data.jobCharProfile[param]);
-  assert.equal(targets.length, 7);
-  for (const t of targets) assert.ok(t >= 0 && t <= 100, "targets stay in 0-100");
-  for (let i = 1; i < targets.length; i += 1) {
-    assert.ok(targets[i] < targets[i - 1], "each rank scores below the one above it");
-  }
-  assert.equal(data.jobCharItems, undefined, "no tradeoff battery travels any more");
 });
 
 test("cv with pasted text stores analysis and reaches the summary step", async () => {
@@ -306,7 +260,7 @@ test("snapshots advertise cv upload formats (no pptx without markitdown)", async
   assert.ok(!data.cvUploadFormats.includes(".pptx"));
 });
 
-test("full output loop: first -> refine param -> notSuitable -> accept -> detail -> roadmap", async () => {
+test("full output loop: first -> refine -> refine -> accept -> detail -> roadmap", async () => {
   const { sessionId } = await completeAssessment();
 
   // 1st Output (idempotent)
@@ -318,9 +272,7 @@ test("full output loop: first -> refine param -> notSuitable -> accept -> detail
   assert.equal(first.id, "output_1");
   assert.equal(first.parentId, null);
   assert.ok(first.orientedField && first.jobTitle && first.thesis);
-  for (const param of RANKING) {
-    assert.ok(first.parameterFit[param], `parameterFit missing ${param}`);
-  }
+  assert.equal(first.parameterFit, undefined, "no 7-parameter fit block remains");
   // Work-values layer: 6 measured/prototype scores, top-3, fit vs userValues
   assert.equal(Object.keys(first.workValues).length, 6);
   assert.equal(first.topValues.length, 3);
@@ -337,22 +289,21 @@ test("full output loop: first -> refine param -> notSuitable -> accept -> detail
   ({ data } = await post("/api/output/first", { sessionId }));
   assert.equal(data.outputs.length, 1, "idempotent");
 
-  // No -> change one parameter
+  // No -> a genuinely different field family
   ({ status, data } = await post("/api/output/refine", {
     sessionId,
     outputId: "output_1",
-    changes: [{ param: "compensation", reason: "need more upside" }],
+    notSuitable: true,
   }));
   assert.equal(status, 200);
   assert.equal(data.outputs.length, 2);
   assert.equal(data.outputs[1].parentId, "output_1");
-  assert.ok(data.outputs[1].changeSummary, "refinement carries a changeSummary");
-  assert.ok(data.outputs[1].whyThisFits, "refined output carries whyThisFits");
+  assert.ok(data.outputs[1].whyThisFits, "regenerated output carries whyThisFits");
   assert.equal(Object.keys(data.outputs[1].workValues).length, 6, "re-scored on work values");
   assert.equal(data.refinementHistory.length, 1);
-  assert.equal(data.refinementHistory[0].changedParams[0].param, "compensation");
+  assert.equal(data.refinementHistory[0].notSuitable, true);
 
-  // No -> not suitable overall: a genuinely different field family
+  // No again: another family, still never repeating one
   ({ status, data } = await post("/api/output/refine", {
     sessionId,
     outputId: "output_2",
@@ -361,7 +312,7 @@ test("full output loop: first -> refine param -> notSuitable -> accept -> detail
   assert.equal(status, 200);
   assert.equal(data.outputs.length, 3);
   const families = data.outputs.map((o) => o.directionId);
-  assert.notEqual(families[2], families[0], "notSuitable must leave the rejected family");
+  assert.notEqual(families[2], families[0], "each refine must leave the rejected family");
   assert.equal(data.refinementHistory[1].notSuitable, true);
   assert.ok(data.outputs[2].whyThisFits, "notSuitable regeneration carries whyThisFits");
 
@@ -384,7 +335,7 @@ test("full output loop: first -> refine param -> notSuitable -> accept -> detail
   assert.equal(data.roadmaps.output_3.stages[0].title, firstStageTitle, "cached");
 });
 
-test("output guards: ordering, XOR body, accept-once, roadmap gating", async () => {
+test("output guards: ordering, unknown output, accept-once, roadmap gating", async () => {
   const { data: start } = await post("/api/session/start", { dreamAnswer: "x" });
   // outputs require a completed assessment
   let res = await post("/api/output/first", { sessionId: start.sessionId });
@@ -395,22 +346,6 @@ test("output guards: ordering, XOR body, accept-once, roadmap gating", async () 
 
   // refine: unknown output
   res = await post("/api/output/refine", { sessionId, outputId: "output_99", notSuitable: true });
-  assert.equal(res.status, 400);
-  // refine: neither notSuitable nor changes
-  res = await post("/api/output/refine", { sessionId, outputId: "output_1" });
-  assert.equal(res.status, 400);
-  // refine: both notSuitable and changes
-  res = await post("/api/output/refine", {
-    sessionId, outputId: "output_1", notSuitable: true, changes: [{ param: "social", reason: "" }],
-  });
-  assert.equal(res.status, 400);
-  // refine: invalid param / duplicate params
-  res = await post("/api/output/refine", { sessionId, outputId: "output_1", changes: [{ param: "salary" }] });
-  assert.equal(res.status, 400);
-  res = await post("/api/output/refine", {
-    sessionId, outputId: "output_1",
-    changes: [{ param: "social", reason: "a" }, { param: "social", reason: "b" }],
-  });
   assert.equal(res.status, 400);
 
   // roadmap before accept
@@ -469,7 +404,6 @@ test("GET /api/session/:id returns enough state to resume after a reload", async
   assert.ok(snapshot.demographicQuestions.length === 4, "question list present incl. city");
   assert.equal(snapshot.demographics.sex, "female", "saved answers present");
   assert.ok(Array.isArray(snapshot.careerJourneyQuestions) && snapshot.careerJourneyQuestions.length === 7);
-  assert.equal(snapshot.jobCharParams.length, 7);
 
   const unknown = await fetch(`${base}/api/session/does-not-exist`);
   assert.equal(unknown.status, 404);

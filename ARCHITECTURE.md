@@ -31,7 +31,7 @@
   применяет его целиком в `applySessionSnapshot`. Локальный стейт фронтенда —
   только view-state (индексы вопросов, busy-флаги, открытые панели).
 - **Статичные банки вопросов** (`demographicQuestions`, `bigFiveItems`,
-  `riasecItems`, `jobCharParams`, `careerJourneyQuestions`) едут только в
+  `riasecItems`, `careerJourneyQuestions`) едут только в
   снапшотах `start` / `GET session` / `riasec/start` (`includeStatic`);
   ответные снапшоты несут только динамику — фронтенд мёржит, а не заменяет.
 - **AI никогда не отдаёт агрегаты и не скорит ценности.** Модель возвращает
@@ -51,8 +51,8 @@
 | `logger.js` | Бездеп-логгер ошибок: `logError` — одна JSON-строка на ≥500 (route-шаблон / UUID-редакция, чтобы id сессии не утёк), `resolveStatus` (clamp 400..599) | (req, err) → лог |
 | `sessionStore.js` | In-memory `Map` сессий (авторитетный process-local набор — **один инстанс**); TTL 24 ч, sweep раз в час (unref'd); все мутаторы (`advanceStep`, `appendOutput`, `acceptOutput`, `finalizeValues`…); `serializeSessionState`; `schemaVersion` + миграция несовместимых сессий на `hydrate()`. Опциональный write-through + `hydrate()` в Redis, если передан клиент | session-объект ↔ снапшот |
 | `redisClient.js` | Фабрика Upstash-клиента: возвращает `null` без `UPSTASH_REDIS_REST_URL`/`_TOKEN` (→ чистый in-memory), иначе REST-клиент для durable сессий | env → Redis-клиент \| null |
-| `questionEngine.js` | Валидация каждого типа ответа (whitelist, диапазоны) и весь скоринг: Big Five (reverse `6−raw`, нормировка `((mean−1)/4)·100`), Big Two (Stability/Plasticity), RIASEC 0–100 + топ-3 код, jobChar-таргеты из ранжирования (`rankToJobCharTargets`, кривая 90→25), прогресс | (session, answer) → normalized value / scores; бросает `{statusCode}`-ошибки |
-| `questionPool.js` | Статика: 4 демо-вопроса, `JOB_CHAR_PARAMS` (7 канонических параметров — кросс-слойный контракт), 7 career-journey вопросов | константы |
+| `questionEngine.js` | Валидация каждого типа ответа (whitelist, диапазоны) и весь скоринг: Big Five (reverse `6−raw`, нормировка `((mean−1)/4)·100`), Big Two (Stability/Plasticity), RIASEC 0–100 + топ-3 код, прогресс | (session, answer) → normalized value / scores; бросает `{statusCode}`-ошибки |
+| `questionPool.js` | Статика: 4 демо-вопроса, 7 career-journey вопросов | константы |
 | `bigFiveItems.js` | Public-domain Mini-IPIP-20 — единственный фиксированный инструмент Big Five, сидируется в сессию при создании | `MINI_IPIP_20` |
 | `riasecItems.js` | Статичный фиксированный инструмент RIASEC (12 айтемов, interleaved) | `getStaticRiasecItems()` |
 | `cvExtract.js` | Файл → текст: MarkItDown-first гибрид (pdf/docx/pptx/html/txt); фоллбеки pdf-parse / mammoth / tag-strip / utf8, `.pptx` без MarkItDown → 400; `getCvUploadExtensions()` для снапшота; любая ошибка чтения → 400 | multer file → string |
@@ -61,7 +61,7 @@
 | `prompts.js` | Билдеры промптов; `BASE_SYSTEM` (анти-tech-bias, «dream — не фильтр домена»); `buildProfileDigest` — единый текстовый дайджест профиля, попадает в каждый content-промпт | параметры → `{system, user}` |
 | `directions.js` | Каталог 15 field-families (алфавитный намеренно — никакой домен не первый в детерминированных обходах): label, examples, 3 `professionSeeds`, id для work-value прототипов | `getDirection(id)`, `DIRECTION_IDS` |
 | `riasec.js` | Holland-веса каждого направления; `rankDirections(scores, {excludeIds})` — взвешенный dot-product; `inferRiasecScores(bigFive)` — эвристика на мета-аналитических связях для skip-пути | RIASEC-вектор → ранжированный каталог |
-| `workValues.js` | Чистый модуль шести Minnesota / O*NET work values: `WORK_VALUES_ORDER` (6 ключей), `rankToWorkValueScores` (rank→интенсивность + `curveVersion`), `deriveTopValues`, `valuesFit` (centered cosine → одно `{overall}` 0–100), прототипы направлений + `buildFallbackProfessionValues` (модуляция jobChar-таргетами) | вектора 0–100 → агрегаты |
+| `workValues.js` | Чистый модуль шести Minnesota / O*NET work values: `WORK_VALUES_ORDER` (6 ключей), `rankToWorkValueScores` (rank→интенсивность + `curveVersion`), `deriveTopValues`, `valuesFit` (centered cosine → одно `{overall}` 0–100), прототипы направлений + `buildFallbackProfessionValues` (прототип направления как есть) | вектора 0–100 → агрегаты |
 | `valuesTournament.js` | Чистый Ford–Johnson merge-insertion движок: реплей решённых сравнений (resumable, иммунен к stale/двойным ответам), ≤10 сравнений для 6 items, доказано на всех 720 перестановках | (items, decided) → следующее сравнение \| финальный порядок |
 
 ## 3. Структура вопросов
@@ -80,9 +80,7 @@
    навигация по уже отвеченным вопросам внутри блока (перезапись ответа).
 2. Адаптивность достигается не ветвлением, а:
    - адаптивным попарным турниром work-values (Ford–Johnson, ≤10 сравнений);
-     Big Five, RIASEC и jobChar — фиксированные инструменты без AI-генерации;
-   - персональным ранжированием 7 jobChar-параметров, из которого
-     детерминированная кривая выводит таргеты;
+     Big Five и RIASEC — фиксированные инструменты без AI-генерации;
    - опциональными путями: RIASEC-skip (инференс), CV-текст vs 7
      journey-вопросов.
 3. На Page 3 «ветвление» — это цепочка output'ов: каждый refine/notSuitable
@@ -104,10 +102,9 @@
 | CV intent | `{sessionId, cvIntent: "new"\|"use_skills"}` — выбирается на CV-слайде, перевыбор разрешён |
 | CV | JSON `{sessionId, cvText}` **или** multipart `sessionId` + `file` |
 | Journey | `{sessionId, questionId: "cj_…", value: string ≤400}` |
-| Refine | `{sessionId, outputId, changes: [{param, reason ≤200}]}` **XOR** `{sessionId, outputId, notSuitable: true}` |
+| Refine | `{sessionId, outputId}` — регенерация из другого семейства направлений |
 
 Канонические ключи (контракт между промптами, скорингом, сессией и UI):
-- 7 jobChar-параметров: `compensation, work_mode, job_security, career_growth, complexity, meaning_impact, social`;
 - 6 work-values: `achievement, independence, recognition, relationships, support, working_conditions`.
 
 ### 4.2 JSON-схемы AI-ответов (все вызовы — JSON mode; нормализатор бросает → фоллбек)
@@ -119,14 +116,14 @@
 | CV parse (t=0.2) | `{skills:[], domains:[], seniority}` | ≥1 skill, лимиты 12/6, обрезка строк |
 | Persona summary (t=0.6) | `{summary}` | непусто, 3–5 предложений, кап 700 симв. |
 | Why this fits (t=0.6) | `{personality:[{point}×2], interests:[{point}], values:[{point}], currentSkills:[{point}×2–3], skillsToDevelop:[string×3–4]}` | жёсткие счётчики на блок, обрезка перебора, кап 220/80 симв.; `values`-буллет таргетит топ work-value |
-| Oriented Field / 1st Output (t=0.8) | `{orientedField, jobTitle, thesis, parameterFit:{7 ключей}, whyFit, firstMilestone, constraintsNote}` | все 6 текстов непустые, все 7 parameterFit-строк непустые |
+| Oriented Field / 1st Output (t=0.8) | `{orientedField, jobTitle, socCode, thesis, whyFit, firstMilestone, constraintsNote}` | все тексты непустые; `socCode` обязан быть из шортлиста |
 | Refinement (t=0.8) | та же схема + `changeSummary` | как output; changeSummary дефолтится |
 | Output detail (t=0.7) | `{aiRecommendations:[{title,detail}], events:[{name,why}], universities:[{name,program}], courses:[{name,provider,why}]}` | каждый блок ≥2 валидных записей, обрезка до 4 |
 | Roadmap (t=0.7) | `{stages:[{title, description, timeframe, milestone}]}` | ≥4 стадий (обрезка до 8), title+description обязательны |
 
 Каждый content-промпт получает `buildProfileDigest`: dream (с пометкой «не
 фильтр домена»), демография, OCEAN 0–100, Big Two, RIASEC-вектор + код (+флаг
-inferred), подтверждённая иерархия work-values, ранжированные jobChar-таргеты,
+inferred), подтверждённая иерархия work-values,
 CV-сигнал (парсинг / сырой фрагмент ≤300 симв. / journey-ответы) и intent
 (use_skills/new), когда тот уже выбран.
 
@@ -135,7 +132,7 @@ CV-сигнал (парсинг / сырой фрагмент ≤300 симв. /
 `serializeSessionState` возвращает: идентичность (`sessionId`, `dreamAnswer`,
 `step`, `pathStage`), статичные банки (только с `includeStatic`), все ответы и
 скоры (`demographics`, `bigFiveAnswers/Scores`, `derivedTraits`,
-`personaSummary`, `cvIntent`, `riasec*`, `jobChar*`, `careerJourneyAnswers`,
+`personaSummary`, `cvIntent`, `riasec*`, `careerJourneyAnswers`,
 `cvAnalysis`, `cvProvided`), `userValues` (иерархия из турнира) +
 `valuesComparison`/`valuesRanking` (текущий пейринг / финальный порядок, оба
 null после confirm), `progress`, `summary`, output-цепочку (`outputs[]` с
@@ -185,13 +182,13 @@ flowchart TD
         APPLY["applySessionSnapshot<br/>(снапшот = источник правды)"]
         BUILD["buildLifePathGraph (lifePath.js)<br/>nodes + edges декларативно"]
         FLOW["GraphView — React Flow<br/>me / output / advice / roadmap<br/>+ CameraDirector fitView"]
-        PANELS["Панели: профиль (Big Five радар,<br/>RIASEC, work-values радар), детали, refine-dock"]
+        PANELS["Панели: профиль (Big Five радар,<br/>RIASEC, work-values радар), детали, output-dock"]
     end
 
     subgraph Backend["backend (Express :3001)"]
         GUARD["server.js: rate limit → CORS →<br/>step-guard шага сессии"]
         VALIDATE["questionEngine: валидация ответа<br/>(whitelist / диапазон / опция)"]
-        SCORE["Скоринг при закрытии блока:<br/>Big Five → OCEAN + Big Two<br/>RIASEC → 0–100 + код<br/>jobChar → кривая ранг→таргет"]
+        SCORE["Скоринг при закрытии блока:<br/>Big Five → OCEAN + Big Two<br/>RIASEC → 0–100 + код<br/>work values → кривая ранг→интенсивность"]
         STORE[("sessionStore<br/>in-memory Map, TTL 24 ч")]
         SNAP["serializeSessionState<br/>(+ static-банки только на start/resume)"]
     end
@@ -288,11 +285,9 @@ output-цепочка и work-values слой расширяемы и хорош
   AI-ответов (актуально для Big Five items — самый строгий валидатор).
 - **Фоллбеки неотличимы для аналитики** — флага «этот артефакт из фоллбека»
   в сессии нет (кроме глобального `aiEnabled`), измерить их долю нельзя.
-- **`refineOutput` наследует `directionId` предыдущего output'а**, даже если
-  AI фактически сменил область; `output/first` присваивает
-  `directionId = ranked[0]` независимо от того, куда реально ушла модель.
-  Влияет на work-value фоллбек и на исключение семейств в notSuitable —
-  неточность, о которой стоит помнить.
+- **`output/first` присваивает `directionId = ranked[0]`** независимо от того,
+  куда реально ушла модель. Влияет на work-value фоллбек и на исключение
+  семейств при refine — неточность, о которой стоит помнить.
 
 ### 7.4 Статус приоритетных фиксов
 

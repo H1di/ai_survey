@@ -9,7 +9,6 @@ const { getStaticRiasecItems } = require("./riasecItems");
 const {
   DEMOGRAPHIC_QUESTIONS,
   CAREER_JOURNEY_QUESTIONS,
-  JOB_CHAR_PARAM_IDS,
 } = require("./questionPool");
 const {
   deriveTopValues,
@@ -31,9 +30,6 @@ const {
   validateRiasecAnswer,
   computeRiasecScores,
   deriveRiasecCode,
-  validateJobCharRanking,
-  rankToJobCharTargets,
-  JOB_CHAR_CURVE_VERSION,
   validateCareerJourneyAnswer,
   computeBigFiveScores,
   deriveBigFiveTraits,
@@ -414,29 +410,6 @@ app.post("/api/values/confirm", (req, res) => {
       order: finalHierarchy,
       scores: rankToWorkValueScores(finalHierarchy),
       curveVersion: WORK_VALUE_CURVE_VERSION,
-      nextStep: "job_characteristics",
-    });
-    return sendSessionSnapshot(res, session);
-  } catch (error) {
-    return sendError(res, req, error, "Something went wrong.");
-  }
-});
-
-// The whole job-characteristics step: the user orders the 7 parameters and a
-// fixed rank->target curve turns that order into the 0-100 profile. No AI, no
-// follow-up questions — submitting the ranking completes the step.
-app.post("/api/job-characteristics/rank", (req, res) => {
-  try {
-    const { sessionId, ranking } = req.body || {};
-    const session = store.require(sessionId);
-    if (session.step !== "job_characteristics") {
-      return fail(res, req, 400, "Not currently in the job-characteristics step.");
-    }
-    const validRanking = validateJobCharRanking(ranking);
-    store.finalizeJobChar(session, {
-      ranking: validRanking,
-      profile: rankToJobCharTargets(validRanking),
-      curveVersion: JOB_CHAR_CURVE_VERSION,
       nextStep: "cv",
     });
     return sendSessionSnapshot(res, session);
@@ -688,10 +661,10 @@ function buildOnetBlock(socCode, extras) {
 // A profession's work-value profile: measured O*NET snapshot values for the
 // chosen SOC win; the per-direction prototype fills the 40 occupations without
 // them (and any keyless fallback job). The AI never scores values.
-function resolveProfessionWorkValues({ socCode, directionId, jobCharProfile }) {
+function resolveProfessionWorkValues({ socCode, directionId }) {
   const occ = socCode ? getOccupation(socCode) : null;
   if (occ?.workValues) return occ.workValues;
-  return buildFallbackProfessionValues(directionId, jobCharProfile);
+  return buildFallbackProfessionValues(directionId);
 }
 
 // The single place output value aggregates are computed: resolve the
@@ -702,7 +675,6 @@ async function buildScoredOutput(session, rawOutput) {
   const workValues = resolveProfessionWorkValues({
     socCode: rawOutput.socCode,
     directionId: rawOutput.directionId,
-    jobCharProfile: session.jobCharProfile,
   });
   return {
     ...rawOutput,
@@ -715,24 +687,6 @@ async function buildScoredOutput(session, rawOutput) {
     accepted: null,
     detail: null,
   };
-}
-
-function validateRefineChanges(changes) {
-  if (!Array.isArray(changes) || changes.length < 1 || changes.length > JOB_CHAR_PARAM_IDS.length) {
-    return null;
-  }
-  const seen = new Set();
-  const normalized = [];
-  for (const change of changes) {
-    const param = change?.param;
-    if (!JOB_CHAR_PARAM_IDS.includes(param) || seen.has(param)) return null;
-    seen.add(param);
-    normalized.push({
-      param,
-      reason: typeof change.reason === "string" ? change.reason.trim().slice(0, 200) : "",
-    });
-  }
-  return normalized;
 }
 
 app.post("/api/output/first", async (req, res) => {
@@ -761,7 +715,7 @@ app.post("/api/output/first", async (req, res) => {
 });
 
 app.post("/api/output/refine", async (req, res) => {
-  const { sessionId, outputId, notSuitable, changes } = req.body || {};
+  const { sessionId, outputId } = req.body || {};
   const lockKey = `${sessionId}:output`;
   if (!acquireLock(lockKey)) {
     return fail(res, req, 409, "Another change to this path is still processing.");
@@ -778,29 +732,16 @@ app.post("/api/output/refine", async (req, res) => {
       return fail(res, req, 400, "Unknown output.");
     }
 
-    if (notSuitable && changes !== undefined) {
-      return fail(res, req, 400, "Provide either notSuitable: true or parameter changes — not both.");
-    }
-    const normalizedChanges = notSuitable ? null : validateRefineChanges(changes);
-    if (!notSuitable && !normalizedChanges) {
-      return fail(res, req, 400, "Provide either notSuitable: true or 1-7 valid parameter changes.");
-    }
-
-    let raw;
-    if (notSuitable) {
-      // A genuinely different field family: exclude every family already shown.
-      const used = session.outputs.map((o) => o.directionId).filter(Boolean);
-      raw = await aiEngine.generateFirstOutput({ session, excludeDirectionIds: used });
-    } else {
-      raw = await aiEngine.refineOutput({ session, previousOutput: previous, changes: normalizedChanges });
-    }
+    // Refining means "this one is not for me": regenerate from a genuinely
+    // different field family, excluding every family already shown.
+    const used = session.outputs.map((o) => o.directionId).filter(Boolean);
+    const raw = await aiEngine.generateFirstOutput({ session, excludeDirectionIds: used });
     const scored = await buildScoredOutput(session, raw);
     scored.whyThisFits = await aiEngine.generateWhyThisFits({ session, output: scored });
     const appended = store.appendOutput(session, scored);
     store.recordRefinement(session, {
       fromOutputId: outputId,
-      notSuitable: Boolean(notSuitable),
-      changedParams: normalizedChanges || [],
+      notSuitable: true,
       toOutputId: appended.id,
     });
 

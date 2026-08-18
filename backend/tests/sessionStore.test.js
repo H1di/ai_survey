@@ -11,7 +11,7 @@ test("createSession initializes v2 + output-loop fields; old models gone", () =>
   const s = makeSession(store);
   // Page 1/2 fields intact
   assert.equal(s.dreamAnswer, "build things");
-  assert.equal(s.schemaVersion, 3);
+  assert.equal(s.schemaVersion, 4);
   assert.equal(s.valuesTournament, null);
   assert.equal(s.step, "demographics");
   assert.deepEqual(s.demographics, {});
@@ -25,9 +25,6 @@ test("createSession initializes v2 + output-loop fields; old models gone", () =>
   assert.equal(s.riasecScores, null);
   assert.equal(s.riasecCode, null);
   assert.equal(s.riasecInferred, false);
-  assert.equal(s.jobCharRanking, null);
-  assert.equal(s.jobCharProfile, null);
-  assert.equal(s.jobCharCurveVersion, null);
   assert.deepEqual(s.careerJourneyAnswers, {});
   assert.equal(s.userValues, null);
   // Output loop
@@ -149,15 +146,13 @@ test("createSession initializes v2 fields and serialization exposes them", () =>
 
   const snap = store.serializeSessionState(session, {}, {}, { includeStatic: true });
   assert.ok(Array.isArray(snap.careerJourneyQuestions) && snap.careerJourneyQuestions.length === 7);
-  assert.equal(snap.jobCharParams.length, 7);
   assert.equal(snap.valuesQuestions, undefined, "values bank is gone");
   assert.equal(snap.cvProvided, false);
 
   const trimmed = store.serializeSessionState(session, {}, {}, { includeStatic: false });
   assert.equal(trimmed.careerJourneyQuestions, undefined);
   assert.ok("riasecAnswers" in trimmed, "dynamic riasec state always travels");
-  assert.ok("jobCharProfile" in trimmed, "jobChar targets travel on every snapshot");
-  assert.equal(trimmed.jobCharItems, undefined, "the tradeoff battery is gone");
+  assert.equal(trimmed.jobCharProfile, undefined, "the job-characteristics step is gone");
   assert.ok("outputs" in trimmed, "outputs travel on every snapshot");
 });
 
@@ -169,7 +164,7 @@ test("riasec items serialize without the scoring type", () => {
   assert.deepEqual(snap.riasecItems, [{ id: "ri_1", text: "Fixing things" }]);
 });
 
-test("v2 mutators: riasec, jobChar, cv, journey", () => {
+test("v2 mutators: riasec, cv, journey", () => {
   const store = new SessionStore();
   const s = makeSession(store);
 
@@ -188,17 +183,6 @@ test("v2 mutators: riasec, jobChar, cv, journey", () => {
   assert.equal(s.riasecScores, null);
   assert.equal(s.riasecInferred, false);
 
-  store.finalizeJobChar(s, {
-    ranking: ["social"],
-    profile: { social: 90 },
-    curveVersion: 1,
-    nextStep: "cv",
-  });
-  assert.deepEqual(s.jobCharRanking, ["social"]);
-  assert.equal(s.jobCharProfile.social, 90);
-  assert.equal(s.jobCharCurveVersion, 1);
-  assert.equal(s.step, "cv", "the ranking is the whole step");
-
   store.setCvAnalysis(s, "raw cv", { skills: ["a"], domains: [], seniority: "mid" });
   assert.equal(s.cvText, "raw cv");
   store.recordCareerJourneyAnswer(s, "cj_education", "BSc");
@@ -216,7 +200,7 @@ test("finalizeValues stores the hierarchy, clears the tournament, and advances",
 
   const order = ["achievement", "independence", "recognition", "relationships", "support", "working_conditions"];
   const scores = { achievement: 100, independence: 84, recognition: 68, relationships: 52, support: 36, working_conditions: 20 };
-  store.finalizeValues(s, { order, scores, curveVersion: 1, nextStep: "job_characteristics" });
+  store.finalizeValues(s, { order, scores, curveVersion: 1, nextStep: "cv" });
 
   assert.deepEqual(s.userValues, {
     scores,
@@ -226,7 +210,7 @@ test("finalizeValues stores the hierarchy, clears the tournament, and advances",
     curveVersion: 1,
   });
   assert.equal(s.valuesTournament, null, "finished tournament is dropped");
-  assert.equal(s.step, "job_characteristics", "step advanced");
+  assert.equal(s.step, "cv", "step advanced");
 
   const trimmed = store.serializeSessionState(s, {}, {}, { includeStatic: false });
   assert.deepEqual(trimmed.userValues.scores, scores, "userValues travels in the dynamic part");
@@ -344,7 +328,7 @@ test("with redis: finalizeValues persists exactly ONE write with the tournament 
     order: [...WORK_VALUES_ORDER],
     scores,
     curveVersion: 1,
-    nextStep: "job_characteristics",
+    nextStep: "cv",
   });
 
   // A separate clear-tournament mutator would be a second fire-and-forget write
@@ -352,7 +336,7 @@ test("with redis: finalizeValues persists exactly ONE write with the tournament 
   assert.equal(sets, 1, "confirm persists exactly one whole-session write");
   const persisted = JSON.parse(redis.store.get(`session:${s.id}`));
   assert.equal(persisted.valuesTournament, null, "persisted snapshot has no tournament");
-  assert.equal(persisted.step, "job_characteristics");
+  assert.equal(persisted.step, "cv");
   assert.deepEqual(persisted.userValues.scores, scores);
 });
 
@@ -398,11 +382,8 @@ test("furthestStep starts at demographics and rises with each advance", () => {
   assert.equal(s.furthestStep, "big_five");
 
   store.finalizeValues(s, {
-    scores: {}, order: [], curveVersion: 1, nextStep: "job_characteristics",
+    scores: {}, order: [], curveVersion: 1, nextStep: "cv",
   });
-  assert.equal(s.furthestStep, "job_characteristics");
-
-  store.finalizeJobChar(s, { ranking: [], profile: {}, curveVersion: 1, nextStep: "cv" });
   assert.equal(s.furthestStep, "cv");
 });
 
@@ -457,7 +438,6 @@ test("STEP_ORDER is the assessment machine in order", () => {
     "big_five",
     "riasec",
     "values",
-    "job_characteristics",
     "cv",
     "summary",
     "tree",
@@ -471,10 +451,6 @@ test("step writes reject a step outside STEP_ORDER", () => {
   assert.throws(() => store.advanceStep(s, "big_fvie"), /Unknown session step: big_fvie/);
   assert.throws(
     () => store.finalizeValues(s, { scores: {}, order: [], curveVersion: 1, nextStep: "nope" }),
-    /Unknown session step: nope/
-  );
-  assert.throws(
-    () => store.finalizeJobChar(s, { ranking: [], profile: {}, curveVersion: 1, nextStep: "nope" }),
     /Unknown session step: nope/
   );
   // A rejected write must not have moved the session.

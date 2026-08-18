@@ -6,7 +6,6 @@ const {
   buildCvParsePrompt,
   buildPersonaSummaryPrompt,
   buildOrientedFieldPrompt,
-  buildRefinementPrompt,
   buildWhyThisFitsPrompt,
   buildOutputDetailPrompt,
 } = require("./prompts");
@@ -14,7 +13,6 @@ const {
   WORK_VALUES_META,
   buildFallbackProfessionValues,
 } = require("./workValues");
-const { JOB_CHAR_PARAMS, JOB_CHAR_PARAM_IDS } = require("./questionPool");
 const { DIRECTIONS, getDirection } = require("./directions");
 const { rankDirections, inferRiasecScores } = require("./riasec");
 const { rankOccupations, getOccupation } = require("./onet");
@@ -98,8 +96,6 @@ function buildSessionDigest(session) {
     riasecScores: session.riasecScores,
     riasecCode: session.riasecCode,
     riasecInferred: session.riasecInferred,
-    jobCharRanking: session.jobCharRanking,
-    jobCharProfile: session.jobCharProfile,
     userValues: session.userValues,
     cvAnalysis: session.cvAnalysis,
     cvText: session.cvText,
@@ -111,24 +107,6 @@ function buildSessionDigest(session) {
 // Deterministic fallbacks (used when there is no API key or the AI call fails)
 // ---------------------------------------------------------------------------
 
-function qualitativeBand(target) {
-  if (target >= 75) return "a defining feature of the role";
-  if (target >= 50) return "solidly present without dominating";
-  if (target >= 25) return "present, but in moderation";
-  return "a minor factor by design";
-}
-
-// Deterministic parameterFit: one honest line per parameter, anchored to the
-// user's 0-100 target (neutral 50 when a parameter was never asked).
-function fallbackParameterFit(jobCharProfile) {
-  const fit = {};
-  for (const param of JOB_CHAR_PARAMS) {
-    const target = jobCharProfile?.[param.id] ?? 50;
-    fit[param.id] = `${param.label}: you target ${target}/100 — in this role it is ${qualitativeBand(target)}.`;
-  }
-  return fit;
-}
-
 // Shared shape for every snapshot-grounded fallback output.
 function occupationOutput(session, pick) {
   const direction = getDirection(pick.directionId) || DIRECTIONS[0];
@@ -138,7 +116,6 @@ function occupationOutput(session, pick) {
     orientedField: direction.label,
     jobTitle: pick.title,
     thesis: pick.blurb,
-    parameterFit: fallbackParameterFit(session.jobCharProfile),
     whyFit: `Your interest profile (${session.riasecCode || "balanced"}) correlates with the measured interests of working ${pick.title} (O*NET ${pick.soc}) — the strongest real-occupation match in the ${direction.label} family.`,
     firstMilestone: `Spend two weeks talking to people doing this work and shadow one full day of a real ${pick.title.toLowerCase()} shift.`,
     constraintsNote:
@@ -174,58 +151,10 @@ function fallbackFirstOutputFromSeeds(session, excludeDirectionIds = []) {
     orientedField: direction.label,
     jobTitle: seed.title,
     thesis: seed.summary,
-    parameterFit: fallbackParameterFit(session.jobCharProfile),
     whyFit: `Your interest profile (${session.riasecCode || "balanced"}) points to the ${direction.label} family, and this role lines up with the priorities you ranked highest.`,
     firstMilestone: `Spend two weeks talking to working ${seed.title.toLowerCase()}s and shadow one full day of the real work.`,
     constraintsNote:
       "Demo mode — assembled from fixed rules; treat it as a structured starting point, not advice.",
-  };
-}
-
-// Keyless refinement: stay in the same field family but move to the next
-// best-correlated unused occupation; families exhausted -> next-ranked family.
-// Rewrites only the changed parameters' fit lines.
-function fallbackRefineOutput(session, previousOutput, changes) {
-  const scores = sessionRiasec(session);
-  const excludeSocs = usedSocs(session);
-  if (previousOutput.socCode && !excludeSocs.includes(previousOutput.socCode)) {
-    excludeSocs.push(previousOutput.socCode);
-  }
-
-  let pick = null;
-  if (previousOutput.directionId) {
-    [pick] = rankOccupations(scores, {
-      directionIds: [previousOutput.directionId],
-      excludeSocs,
-      limit: 1,
-    });
-  }
-  if (!pick) {
-    const ranked = rankDirections(scores, {
-      excludeIds: previousOutput.directionId ? [previousOutput.directionId] : [],
-    });
-    for (const { id } of ranked) {
-      [pick] = rankOccupations(scores, { directionIds: [id], excludeSocs, limit: 1 });
-      if (pick) break;
-    }
-  }
-
-  const labelOf = new Map(JOB_CHAR_PARAMS.map((p) => [p.id, p.label]));
-  const changedLabels = changes.map((c) => labelOf.get(c.param)).join(", ");
-
-  const base = pick
-    ? occupationOutput(session, pick)
-    : fallbackFirstOutputFromSeeds(session, []);
-  for (const change of changes) {
-    base.parameterFit[change.param] =
-      `${labelOf.get(change.param)}: reworked toward your note — "${change.reason || "no reason given"}".`;
-  }
-
-  return {
-    ...base,
-    whyFit: `Kept close to the ${base.orientedField} family while adjusting what you flagged: ${changedLabels}.`,
-    firstMilestone: `Compare one week in this role against the previous suggestion on exactly the parameters you changed.`,
-    changeSummary: `Shifted ${changedLabels} while holding the rest steady — expect a trade-off elsewhere in the profile.`,
   };
 }
 
@@ -317,13 +246,13 @@ function fallbackWhyThisFits(session, output) {
     },
   ];
 
-  const labelOf = new Map(JOB_CHAR_PARAMS.map((p) => [p.id, p.label]));
-  const topParam = session.jobCharRanking?.[0];
+  const valueLabelOf = new Map(WORK_VALUES_META.map((m) => [m.id, m.label]));
+  const topValue = session.userValues?.order?.[0];
   const values = [
     {
-      point: topParam
-        ? `You ranked ${labelOf.get(topParam)} first (target ${session.jobCharProfile?.[topParam] ?? 50}/100) — weigh this job against that bar before anything else.`
-        : "No ranked priorities recorded — compare the role against what matters most to you.",
+      point: topValue
+        ? `You ranked ${valueLabelOf.get(topValue) || topValue} as your top work value — weigh this job against that bar before anything else.`
+        : "No confirmed work-value hierarchy — compare the role against what matters most to you.",
     },
   ];
 
@@ -466,17 +395,6 @@ function normalizeOutputPayload(payload) {
     if (!value) throw new Error(`Output missing ${key}.`);
   }
 
-  const rawFit = payload?.parameterFit || {};
-  const parameterFit = {};
-  for (const param of JOB_CHAR_PARAM_IDS) {
-    const line = cleanText(rawFit[param]);
-    if (!line) throw new Error(`parameterFit missing ${param}.`);
-    parameterFit[param] = line;
-  }
-  output.parameterFit = parameterFit;
-
-  const changeSummary = cleanText(payload?.changeSummary, "");
-  if (changeSummary) output.changeSummary = changeSummary;
   return output;
 }
 
@@ -671,55 +589,6 @@ function createAiEngine({ apiKey, model }) {
     }
   }
 
-  async function refineOutput({ session, previousOutput, changes }) {
-    if (!client) {
-      return fallbackRefineOutput(session, previousOutput, changes);
-    }
-    try {
-      const scores = sessionRiasec(session);
-      const excludeSocs = usedSocs(session);
-      // Parameter tweaks stay inside the same field family; when it runs dry
-      // the shortlist widens to every family.
-      let shortlist = previousOutput.directionId
-        ? rankOccupations(scores, {
-            directionIds: [previousOutput.directionId],
-            excludeSocs,
-            limit: 15,
-          })
-        : [];
-      if (!shortlist.length) {
-        shortlist = rankOccupations(scores, { excludeSocs, limit: 15 });
-      }
-      const prompts = buildRefinementPrompt({
-        profileDigest: buildSessionDigest(session),
-        previousOutput,
-        changes,
-        occupationShortlist: shortlist,
-      });
-      const parsed = await runJsonCompletion(client, {
-        model,
-        system: prompts.system,
-        user: prompts.user,
-        temperature: 0.8,
-        maxTokens: 1500,
-      });
-      const output = normalizeOutputPayload(parsed);
-      if (!output.changeSummary) {
-        output.changeSummary = "Adjusted the parameters you flagged while keeping the rest stable.";
-      }
-      const socCode = resolveShortlistSoc(parsed, shortlist);
-      const occupation = socCode ? getOccupation(socCode) : null;
-      return {
-        directionId: occupation?.directionId || previousOutput.directionId || null,
-        socCode,
-        ...output,
-      };
-    } catch (error) {
-      console.error("[AI refine output fallback]", error.message);
-      return fallbackRefineOutput(session, previousOutput, changes);
-    }
-  }
-
   // Option B (user decision): a separate second call after the output is
   // built — the core output prompt and schema stay untouched.
   async function generateWhyThisFits({ session, output }) {
@@ -854,7 +723,6 @@ function createAiEngine({ apiKey, model }) {
     analyzeCV,
     generatePersonaSummary,
     generateFirstOutput,
-    refineOutput,
     generateWhyThisFits,
     generateOutputDetail,
   };

@@ -111,7 +111,6 @@ describe("journey rail", () => {
       "big_five",
       "riasec",
       "values",
-      "job_characteristics",
       "cv",
       "summary",
     ]);
@@ -128,8 +127,8 @@ describe("journey rail", () => {
   it("maps steps to rail positions; off-rail steps return -1", () => {
     expect(railIndexForStep("demographics")).toBe(0);
     expect(railIndexForStep("values")).toBe(3);
-    expect(railIndexForStep("cv")).toBe(5);
-    expect(railIndexForStep("summary")).toBe(6);
+    expect(railIndexForStep("cv")).toBe(4);
+    expect(railIndexForStep("summary")).toBe(5);
     expect(railIndexForStep("tree")).toBe(-1);
     expect(railIndexForStep("depth_choice")).toBe(-1);
   });
@@ -325,14 +324,11 @@ describe("selectDockCard (output loop)", () => {
     expect(selectDockCard({ stage: "tree", outputs: [] })).toBeNull();
   });
 
-  it("reviews the latest output until accepted; refine mode swaps the card", () => {
-    expect(selectDockCard({ stage: "tree", outputs: OUTPUTS, acceptedOutputId: null, refineMode: false })).toBe(
+  it("reviews the latest output until one is accepted", () => {
+    expect(selectDockCard({ stage: "tree", outputs: OUTPUTS, acceptedOutputId: null })).toBe(
       "output-review"
     );
-    expect(selectDockCard({ stage: "tree", outputs: OUTPUTS, acceptedOutputId: null, refineMode: true })).toBe(
-      "refine"
-    );
-    expect(selectDockCard({ stage: "tree", outputs: OUTPUTS, acceptedOutputId: "output_2", refineMode: false })).toBeNull();
+    expect(selectDockCard({ stage: "tree", outputs: OUTPUTS, acceptedOutputId: "output_2" })).toBeNull();
   });
 });
 

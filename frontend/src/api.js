@@ -93,10 +93,6 @@ export function confirmValues(payload) {
   return request("/api/values/confirm", { method: "POST", body: JSON.stringify(payload) });
 }
 
-export function submitJobCharRanking(payload) {
-  return request("/api/job-characteristics/rank", { method: "POST", body: JSON.stringify(payload) });
-}
-
 export function submitCvText(payload) {
   return request("/api/cv", { method: "POST", body: JSON.stringify(payload) });
 }

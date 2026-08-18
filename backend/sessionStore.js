@@ -2,7 +2,6 @@ const { randomUUID } = require("node:crypto");
 
 const {
   DEMOGRAPHIC_QUESTIONS,
-  JOB_CHAR_PARAMS,
   CAREER_JOURNEY_QUESTIONS,
 } = require("./questionPool");
 const {
@@ -15,10 +14,10 @@ const { MINI_IPIP_20 } = require("./bigFiveItems");
 
 // Bump when the session shape changes incompatibly. hydrate() expires any
 // persisted session below this version so old Schwartz-shaped sessions can't
-// crash the new work-values UI contract. v3 dropped the job-characteristics
-// tradeoff questions (jobCharItems/jobCharAnswers/jobCharDepth) — a session
-// parked mid-battery has nowhere to land on the ranking-only step.
-const SESSION_SCHEMA_VERSION = 3;
+// crash the new work-values UI contract. v4 dropped the job-characteristics
+// step outright (jobCharRanking/jobCharProfile/jobCharCurveVersion) — a session
+// parked on that step has no route left to service it.
+const SESSION_SCHEMA_VERSION = 4;
 
 // The assessment machine, in order. Exported so anything that walks the machine
 // (the dev seeder) shares one definition with the code that advances it, and so
@@ -29,7 +28,6 @@ const STEP_ORDER = Object.freeze([
   "big_five",
   "riasec",
   "values",
-  "job_characteristics",
   "cv",
   "summary",
   "tree",
@@ -179,9 +177,6 @@ class SessionStore {
       riasecScores: null,
       riasecCode: null,
       riasecInferred: false,
-      jobCharRanking: null,
-      jobCharProfile: null,
-      jobCharCurveVersion: null,
       careerJourneyAnswers: {},
       // Adaptive work-values tournament (backend/valuesTournament.js state).
       valuesTournament: null,
@@ -292,18 +287,6 @@ class SessionStore {
     this.touch(session);
   }
 
-  // The whole job-characteristics step in one write: the ranking, the targets
-  // derived from it, and the step advance — there is nothing to answer after.
-  finalizeJobChar(session, { ranking, profile, curveVersion, nextStep }) {
-    assertStep(nextStep);
-    this._raiseFurthest(session, nextStep);
-    session.jobCharRanking = ranking;
-    session.jobCharProfile = profile;
-    session.jobCharCurveVersion = curveVersion;
-    session.step = nextStep;
-    this.touch(session);
-  }
-
   setCvAnalysis(session, cvText, analysis) {
     session.cvText = cvText;
     session.cvAnalysis = analysis;
@@ -390,7 +373,6 @@ class SessionStore {
           demographicQuestions: SERIALIZED_DEMOGRAPHIC_QUESTIONS,
           bigFiveItems: session.bigFiveItems.map((i) => ({ id: i.id, text: i.text })),
           riasecItems: session.riasecItems.map(serializeRiasecItem),
-          jobCharParams: JOB_CHAR_PARAMS,
           careerJourneyQuestions: SERIALIZED_JOURNEY_QUESTIONS,
         }
       : {};
@@ -413,8 +395,6 @@ class SessionStore {
       riasecScores: session.riasecScores,
       riasecCode: session.riasecCode,
       riasecInferred: session.riasecInferred,
-      jobCharRanking: session.jobCharRanking,
-      jobCharProfile: session.jobCharProfile,
       careerJourneyAnswers: session.careerJourneyAnswers,
       userValues: session.userValues,
       // The pending pairwise comparison (null once the hierarchy is sorted or
