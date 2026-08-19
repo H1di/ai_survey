@@ -18,7 +18,7 @@
 - **No new dependencies.** Drag uses native HTML5 DnD; the branch uses canvas 2D; charts stay on recharts; transitions stay on the installed framer-motion.
 - **Copy is verbatim from the design artifact**, except the ten deviations in §6 of the spec. Do not paraphrase, re-capitalise, or "improve" a string.
 - **O\*NET licence conditions do not change:** the official badge hotlinked from `https://www.onetcenter.org/image/link/onet-in-it.svg` inside a link to `https://services.onetcenter.org/`, and the exact sentence "This site incorporates information from O\*NET Web Services by the U.S. Department of Labor, Employment and Training Administration (USDOL/ETA). O\*NET® is a trademark of USDOL/ETA." must render on the entry screen and in the details panel. Styling may adapt; wording and artwork may not.
-- **Colour is only ever a token.** No hex literal in a component or screen stylesheet — `var(--gold)`, `var(--text-60)`, etc. Two carve-outs, and only these: the colour fields of `ui/branchEngine.js`'s preset objects — the `mainHue`/`branchHue`/`dropHue` RGB triples and the `bg` canvas fill, which is a CSS colour string in one preset and the sentinel `"transparent"` in the other, so it cannot be a triple; and the one-off `rgba(255, 217, 140, α)` values this plan writes inline for glow shadows and the dotted SVG stroke, where α exists nowhere else in the ramp. Any other colour is a token.
+- **Colour is only ever a token.** No hex literal in a component or screen stylesheet — `var(--gold)`, `var(--text-60)`, etc. Two carve-outs, and only these: the colour fields of `ui/branchEngine.js`'s preset objects — the `mainHue`/`branchHue`/`dropHue` RGB triples and the `bg` canvas fill, which is a CSS colour string in one preset and the sentinel `"transparent"` in the other, so it cannot be a triple; and the inline `rgba()` values this plan writes for shadows and the dotted SVG stroke — the gold glows, and the black `rgba(0, 0, 0, α)` behind the hero headline — which are lighting effects rather than palette entries. Any colour that paints a surface, a rule, or type is a token.
 - **The server snapshot stays the single source of truth.** Screens receive data as props and report intent through callbacks; they never call the API, and they never hold session state.
 - **Product name is Invector** in every user-visible string, the `<title>`, and the wordmark.
 - **Accessibility floor:** interactive elements are real `<button>`/`<label>`/`<input>` with a visible focus ring (`outline: 2px solid var(--gold); outline-offset: 2px`); the branch canvases are `aria-hidden="true"`.
@@ -1249,6 +1249,7 @@ The hero is the first three seconds of trust. It carries the headline, the dream
 - Create: `frontend/src/screens/EntryScreen.test.jsx`
 - Create: `frontend/src/screens/OnetAttribution.jsx`
 - Modify: `frontend/src/screens/screens.css`
+- Modify: `frontend/src/setupTests.js` (stub the canvas context jsdom does not implement, so `BranchCanvas` stops printing a warning per render)
 - Modify: `frontend/src/App.jsx` (render `EntryScreen` in the `stage === "entry"` branch; delete the inline entry markup at `1329-1357` and the `OnetAttribution` function at `456-482`)
 
 **Interfaces:**
@@ -1588,14 +1589,19 @@ Append to `frontend/src/screens/screens.css`:
   padding-bottom: 24px;
 }
 
-.onet-attribution {
+/* Scoped under .hero on purpose. The legacy App.css still defines
+   .onet-attribution and .error-text at single-class specificity, and it is
+   imported after screens.css, so an unscoped rule here would lose the cascade
+   and the licence-mandated attribution would ship in the old grey. Task 14
+   deletes the legacy rules; the scoping stays correct either way. */
+.hero .onet-attribution {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
 }
 
-.onet-attribution p {
+.hero .onet-attribution p {
   margin: 0;
   max-width: 480px;
   text-align: center;
@@ -1603,14 +1609,18 @@ Append to `frontend/src/screens/screens.css`:
   color: var(--bone-40);
 }
 
-.onet-attribution a {
+.hero .onet-attribution a {
   color: var(--gold-70);
 }
 
-.error-text {
+.hero .error-text {
   margin: 12px 0 0;
   font: 400 13px/1.5 var(--font-body);
   color: var(--error);
+  border: none;
+  padding: 0;
+  max-width: none;
+  text-align: center;
 }
 ```
 
