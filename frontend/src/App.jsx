@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import GraphView from "./components/GraphView";
 import { DetailPanel } from "./components/GraphView/NodeComponent";
+import EntryScreen from "./screens/EntryScreen";
 import ProfilePanel, { PersonalityRadarChart, WorkValuesRadar } from "./components/ProfileCharts";
 import DevPanel from "./components/DevPanel";
 import { captureDevToken, isDevMode } from "./devMode";
@@ -445,38 +446,6 @@ function ValuesHierarchyCard({ ranking, onMove, busy, onConfirm }) {
           {busy ? "Saving…" : "This is my hierarchy"}
         </button>
       </div>
-    </div>
-  );
-}
-
-// Required by the O*NET Web Services developer terms: the "O*NET in-it"
-// badge linking to services.onetcenter.org plus the exact attribution
-// sentence with the USDOL/ETA trademark acknowledgment. Keep the wording
-// and the badge artwork as published — they are license conditions.
-function OnetAttribution() {
-  return (
-    <div className="onet-attribution">
-      <a
-        href="https://services.onetcenter.org/"
-        target="_blank"
-        rel="noopener noreferrer"
-        title="This site incorporates information from O*NET Web Services. Click to learn more."
-      >
-        <img
-          src="https://www.onetcenter.org/image/link/onet-in-it.svg"
-          width="130"
-          height="60"
-          alt="O*NET in-it"
-        />
-      </a>
-      <p>
-        This site incorporates information from{" "}
-        <a href="https://services.onetcenter.org/" target="_blank" rel="noopener noreferrer">
-          O*NET Web Services
-        </a>{" "}
-        by the U.S. Department of Labor, Employment and Training Administration (USDOL/ETA).
-        O*NET&reg; is a trademark of USDOL/ETA.
-      </p>
     </div>
   );
 }
@@ -1154,6 +1123,44 @@ function App() {
     setStageDetail({ stage: stageItem, index });
   };
 
+  // The hero nav is real navigation: both entries open the same side panel the
+  // graph uses, carrying the methodology rather than marketing copy.
+  const METHODOLOGY_VIEWS = {
+    "how-it-works": {
+      archetype: "how it works",
+      title: "Five instruments, one profile",
+      sections: [
+        {
+          heading: "What you answer",
+          items: [
+            "Four demographic questions.",
+            "The public-domain Mini-IPIP-20, rated 1–5, scored to OCEAN 0–100 plus Stability/Plasticity.",
+            "Twelve fixed activity statements, rated for enjoyment — never job titles — scored to a Holland code.",
+            "An adaptive Ford–Johnson merge-insertion tournament, ≤10 comparisons, ranking the six Minnesota work values.",
+            "Your CV, or seven career-journey questions if you don't have one.",
+          ],
+        },
+      ],
+    },
+    "the-engine": {
+      archetype: "the engine",
+      title: "Grounded in O*NET, traced to your answers",
+      sections: [
+        {
+          heading: "How a suggestion is built",
+          items: [
+            "Your Holland code ranks the field families; the O*NET snapshot ranks occupations inside them by measured interest profile.",
+            "The occupation must come from that shortlist — the engine cannot invent one.",
+            "Its six measured work values are scored against your confirmed hierarchy as a single fit percentage.",
+            "Every line of the explanation points back to a score, a rank, or a sentence you wrote.",
+          ],
+        },
+      ],
+    },
+  };
+
+  const handleOpenMethodology = (key) => setInfoView(METHODOLOGY_VIEWS[key] || null);
+
   const resetAll = () => {
     localStorage.removeItem(SESSION_STORAGE_KEY);
     setRestoring(false);
@@ -1326,35 +1333,15 @@ function App() {
   return (
     <main className="app-shell">
       {stage === "entry" && (
-        <section className="entry-screen">
-          <h1>What would you do if you knew you would definitely succeed?</h1>
-
-          <textarea
-            className="dream-input"
-            value={dreamAnswer}
-            maxLength={500}
-            onChange={(event) => setDreamAnswer(event.target.value)}
-            placeholder="Write your honest answer"
-          />
-
-          <button
-            type="button"
-            className="primary-action"
-            onClick={handleStartSession}
-            disabled={busy.start || !dreamAnswer.trim()}
-          >
-            {busy.start ? "Entering..." : "Help to explore my career"}
-          </button>
-
-          <p className="entry-disclaimer">
-            An exploratory self-reflection tool — not professional career
-            counseling or a psychological assessment.
-          </p>
-
-          {error && <p className="error-text">{error}</p>}
-
-          <OnetAttribution />
-        </section>
+        <EntryScreen
+          value={dreamAnswer}
+          onChange={setDreamAnswer}
+          onStart={handleStartSession}
+          busy={busy.start}
+          error={error}
+          reducedMotion={REDUCED_MOTION}
+          onOpenInfo={handleOpenMethodology}
+        />
       )}
 
       {stage === "survey" && (
@@ -1670,20 +1657,6 @@ function App() {
           </div>
 
           <AnimatePresence>
-            {infoView && (
-              <Motion.div
-                key="info-view"
-                initial={{ x: 20, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                exit={{ x: 20, opacity: 0 }}
-                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <InfoPanel view={infoView} onClose={() => setInfoView(null)} />
-              </Motion.div>
-            )}
-          </AnimatePresence>
-
-          <AnimatePresence>
             {stageDetail && (
               <Motion.div
                 key="stage-detail"
@@ -1729,6 +1702,20 @@ function App() {
           onJump={handleDevJump}
         />
       )}
+
+      <AnimatePresence>
+        {infoView && (
+          <Motion.div
+            key="info-view"
+            initial={{ x: 20, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 20, opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <InfoPanel view={infoView} onClose={() => setInfoView(null)} />
+          </Motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }
