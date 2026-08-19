@@ -36,6 +36,32 @@ export function firstUnansweredIndex(questions, answers) {
   return index === -1 ? Math.max(0, questions.length - 1) : index;
 }
 
+// The demographics step collects all four answers before submitting, but the
+// route takes one at a time. These two turn the screen's drafts into that
+// sequence — and into the button's enabled state.
+function usableDraft(question, raw) {
+  if (raw === undefined || raw === null || String(raw).trim() === "") return false;
+  if (question.kind === "number") return Number.isFinite(Number(raw));
+  return true;
+}
+
+export function demographicsComplete(questions, drafts = {}) {
+  return questions.every((q) => usableDraft(q, drafts[q.id]));
+}
+
+export function demographicsPayloads(questions, drafts = {}, saved = {}) {
+  const payloads = [];
+  for (const q of questions) {
+    const raw = drafts[q.id];
+    if (!usableDraft(q, raw)) continue;
+    const value = q.kind === "number" ? Number(raw) : raw;
+    // A retry after a mid-chain failure must not re-post what already landed.
+    if (saved[q.id] === value) continue;
+    payloads.push({ questionId: q.id, value });
+  }
+  return payloads;
+}
+
 // Reorder helper for the work-values hierarchy list. Pure: returns the
 // input list unchanged when the move would fall off either end.
 export function moveRankItem(list, index, delta) {

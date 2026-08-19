@@ -3,6 +3,8 @@ import {
   buildLifePathGraph,
   selectDockCard,
   firstUnansweredIndex,
+  demographicsComplete,
+  demographicsPayloads,
   moveRankItem,
   outputX,
   ADVICE_BLOCKS,
@@ -388,5 +390,61 @@ describe("railStepReachable", () => {
     expect(railStepReachable("tree", "tree")).toBe(false);
     expect(railStepReachable("entry", "values")).toBe(false);
     expect(railStepReachable("summary", "entry")).toBe(false);
+  });
+});
+
+describe("demographics one-screen helpers", () => {
+  const questions = [
+    { id: "sex", kind: "single" },
+    { id: "age", kind: "number" },
+    { id: "country", kind: "text" },
+    { id: "city", kind: "text" },
+  ];
+
+  it("is incomplete until every question has a usable draft", () => {
+    expect(demographicsComplete(questions, {})).toBe(false);
+    expect(
+      demographicsComplete(questions, { sex: "female", age: "32", country: "Ireland", city: "" })
+    ).toBe(false);
+    expect(
+      demographicsComplete(questions, { sex: "female", age: "32", country: "Ireland", city: "  " })
+    ).toBe(false);
+    expect(
+      demographicsComplete(questions, { sex: "female", age: "abc", country: "Ireland", city: "Dublin" })
+    ).toBe(false);
+    expect(
+      demographicsComplete(questions, { sex: "female", age: "32", country: "Ireland", city: "Dublin" })
+    ).toBe(true);
+  });
+
+  it("builds one payload per question, in order, coercing numbers", () => {
+    expect(
+      demographicsPayloads(questions, {
+        sex: "female",
+        age: "32",
+        country: "Ireland",
+        city: "Dublin",
+      })
+    ).toEqual([
+      { questionId: "sex", value: "female" },
+      { questionId: "age", value: 32 },
+      { questionId: "country", value: "Ireland" },
+      { questionId: "city", value: "Dublin" },
+    ]);
+  });
+
+  it("skips answers the snapshot already holds, so a retry only sends the rest", () => {
+    const drafts = { sex: "female", age: "32", country: "Ireland", city: "Dublin" };
+    const saved = { sex: "female", age: 32 };
+    expect(demographicsPayloads(questions, drafts, saved)).toEqual([
+      { questionId: "country", value: "Ireland" },
+      { questionId: "city", value: "Dublin" },
+    ]);
+  });
+
+  it("drops empty and unparseable drafts rather than posting them", () => {
+    expect(
+      demographicsPayloads(questions, { sex: "", age: "abc", country: "Ireland", city: null })
+    ).toEqual([{ questionId: "country", value: "Ireland" }]);
   });
 });

@@ -3,6 +3,7 @@ import { AnimatePresence, motion as Motion } from "framer-motion";
 import GraphView from "./components/GraphView";
 import { DetailPanel } from "./components/GraphView/NodeComponent";
 import EntryScreen from "./screens/EntryScreen";
+import DemographicsScreen from "./screens/DemographicsScreen";
 import BigFiveScreen from "./screens/BigFiveScreen";
 import RiasecScreen from "./screens/RiasecScreen";
 import ProfilePanel, { PersonalityRadarChart, WorkValuesRadar } from "./components/ProfileCharts";
@@ -34,6 +35,7 @@ import {
 import {
   buildLifePathGraph,
   deriveArchetype,
+  demographicsPayloads,
   firstUnansweredIndex,
   moveRankItem,
   selectDockCard,
@@ -149,70 +151,6 @@ function overallProgress(progress) {
     (progress.journey.active ? progress.journey.answered : 0);
   if (!total) return null;
   return { answered, total, percent: Math.min(100, Math.round((answered / total) * 100)) };
-}
-
-function DemographicQuestionCard({ q, savedValue, draft, setDraft, busy, onSubmit, onBack, canGoBack, progress }) {
-  return (
-    <div className="question-card">
-      <div className="question-card-top">
-        {canGoBack && (
-          <button type="button" className="ghost-action back-action" onClick={onBack} disabled={busy}>
-            ← Back
-          </button>
-        )}
-        <p className="question-category">
-          {progress ? `Question ${progress.index + 1} of ${progress.total}` : "About you"}
-        </p>
-      </div>
-      <h3>{q.question}</h3>
-      {q.kind === "single" && (
-        <div className="option-list">
-          {q.options.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              className={`option-button ${savedValue === o.value ? "selected" : ""}`}
-              onClick={() => onSubmit(o.value)}
-              disabled={busy}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
-      )}
-      {(q.kind === "number" || q.kind === "text") && (
-        <form
-          key={q.id}
-          className="question-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            onSubmit(draft);
-          }}
-        >
-          <input
-            autoFocus
-            type={q.kind === "number" ? "number" : "text"}
-            className="question-textarea"
-            value={draft}
-            min={q.min}
-            max={q.max}
-            placeholder={q.placeholder}
-            onChange={(e) => setDraft(e.target.value)}
-            disabled={busy}
-          />
-          <div className="question-actions single">
-            <button
-              type="submit"
-              className="primary-action"
-              disabled={busy || draft === "" || draft === null}
-            >
-              {busy ? "Saving..." : "Next"}
-            </button>
-          </div>
-        </form>
-      )}
-    </div>
-  );
 }
 
 function CvCard({ mode, setMode, cvDraft, setCvDraft, busy, intent, intentBusy, onSelectIntent, onSubmitText, onUploadFile, uploadFormats }) {
@@ -417,8 +355,7 @@ function App() {
 
   const [demographicQuestions, setDemographicQuestions] = useState([]);
   const [demoAnswers, setDemoAnswers] = useState({});
-  const [demoIndex, setDemoIndex] = useState(0);
-  const [demoDraft, setDemoDraft] = useState("");
+  const [demoDrafts, setDemoDrafts] = useState({});
   const [bigFiveItems, setBigFiveItems] = useState([]);
   const [bigFiveAnswers, setBigFiveAnswers] = useState({});
   const [bigFiveIndex, setBigFiveIndex] = useState(0);
@@ -532,7 +469,11 @@ function App() {
   const hydrateFromSnapshot = (data) => {
     applySessionSnapshot(data);
     setDreamAnswer(data.dreamAnswer || "");
-    setDemoIndex(firstUnansweredIndex(data.demographicQuestions || [], data.demographics));
+    setDemoDrafts(
+      Object.fromEntries(
+        Object.entries(data.demographics || {}).map(([id, value]) => [id, String(value)])
+      )
+    );
     setBigFiveIndex(firstUnansweredIndex(data.bigFiveItems || [], data.bigFiveAnswers));
     setRiasecIndex(firstUnansweredIndex(data.riasecItems || [], data.riasecAnswers));
     setJourneyIndex(
@@ -605,8 +546,7 @@ function App() {
       localStorage.setItem(SESSION_STORAGE_KEY, data.sessionId);
       setStage("survey");
       setShowRail(true);
-      setDemoIndex(0);
-      setDemoDraft("");
+      setDemoDrafts({});
     } catch (e) {
       setError(e.message || "Could not start.");
     } finally {
@@ -614,43 +554,28 @@ function App() {
     }
   };
 
-  const draftFromAnswer = (value) =>
-    value === undefined || value === null ? "" : String(value);
+  const handleDemoDraftChange = (questionId, value) =>
+    setDemoDrafts((drafts) => ({ ...drafts, [questionId]: value }));
 
-  const handleSubmitDemographic = async (rawValue) => {
+  // All four answers land on one screen, but the route takes one at a time —
+  // the last POST is what advances the step. A failure mid-chain leaves the
+  // earlier answers saved; re-submitting only sends what the snapshot lacks.
+  const handleSubmitDemographics = async () => {
     if (!sessionId) return;
-    const q = demographicQuestions[demoIndex];
-    if (!q) return;
-    const value = q.kind === "number" ? Number(rawValue) : rawValue;
-    if (value === "" || value === null || (typeof value === "number" && Number.isNaN(value))) {
-      return;
-    }
+    const payloads = demographicsPayloads(demographicQuestions, demoDrafts, demoAnswers);
+    if (!payloads.length) return;
     setError("");
     setBusy((p) => ({ ...p, demo: true }));
     try {
-      const data = await submitDemographics({
-        sessionId,
-        questionId: q.id,
-        value,
-      });
-      applySessionSnapshot(data);
-      if (demoIndex < demographicQuestions.length - 1) {
-        const nextQ = demographicQuestions[demoIndex + 1];
-        setDemoDraft(draftFromAnswer(data.demographics?.[nextQ.id]));
-        setDemoIndex((i) => i + 1);
+      for (const payload of payloads) {
+        const data = await submitDemographics({ sessionId, ...payload });
+        applySessionSnapshot(data);
       }
     } catch (e) {
       setError(e.message || "Could not save.");
     } finally {
       setBusy((p) => ({ ...p, demo: false }));
     }
-  };
-
-  const handleBackDemographic = () => {
-    const prevQ = demographicQuestions[demoIndex - 1];
-    if (!prevQ) return;
-    setDemoDraft(draftFromAnswer(demoAnswers[prevQ.id]));
-    setDemoIndex((i) => Math.max(0, i - 1));
   };
 
   const handleSubmitBigFive = async (value) => {
@@ -882,7 +807,6 @@ function App() {
     }
   };
 
-  const currentDemographicQuestion = demographicQuestions[demoIndex] || null;
   const currentBigFiveItem = bigFiveItems[bigFiveIndex] || null;
 
   const latestOutput = outputs.length ? outputs[outputs.length - 1] : null;
@@ -1089,8 +1013,7 @@ function App() {
     setProgress(null);
     setDemographicQuestions([]);
     setDemoAnswers({});
-    setDemoIndex(0);
-    setDemoDraft("");
+    setDemoDrafts({});
     setBigFiveItems([]);
     setBigFiveAnswers({});
     setBigFiveIndex(0);
@@ -1302,17 +1225,13 @@ function App() {
             <JourneyRailCard onBegin={() => setShowRail(false)} />
           )}
 
-          {!showRail && step === "demographics" && currentDemographicQuestion && (
-            <DemographicQuestionCard
-              q={currentDemographicQuestion}
-              savedValue={demoAnswers[currentDemographicQuestion.id] ?? null}
-              draft={demoDraft}
-              setDraft={setDemoDraft}
+          {!showRail && step === "demographics" && demographicQuestions.length > 0 && (
+            <DemographicsScreen
+              questions={demographicQuestions}
+              drafts={demoDrafts}
+              onDraftChange={handleDemoDraftChange}
               busy={busy.demo}
-              onSubmit={handleSubmitDemographic}
-              onBack={handleBackDemographic}
-              canGoBack={demoIndex > 0}
-              progress={{ index: demoIndex, total: demographicQuestions.length }}
+              onSubmit={handleSubmitDemographics}
             />
           )}
 
