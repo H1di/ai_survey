@@ -141,6 +141,7 @@ Create `frontend/src/theme/tokens.css`:
 
   /* State */
   --positive: #7cffb2;
+  --error: #ff9b9b;
 
   /* Backgrounds composed from the ramp */
   --glow-corners:
@@ -1609,7 +1610,7 @@ Append to `frontend/src/screens/screens.css`:
 .error-text {
   margin: 12px 0 0;
   font: 400 13px/1.5 var(--font-body);
-  color: #ff9b9b;
+  color: var(--error);
 }
 ```
 
