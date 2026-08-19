@@ -118,3 +118,73 @@
   height: 100%;
   display: block;
 }
+
+.likert {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 520px;
+  border-top: 1px solid var(--gold-25);
+  padding-top: 20px;
+}
+
+.likert-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 80px;
+  background: none;
+  padding: 0;
+}
+
+.likert-ring {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--gold-50);
+  transition: background var(--t-fast) ease, border-color var(--t-fast) ease,
+    box-shadow var(--t-fast) ease;
+}
+
+.likert-option:hover:enabled .likert-ring {
+  border-color: var(--gold);
+}
+
+.likert-option--on .likert-ring {
+  background: var(--gold);
+  border-color: var(--gold);
+  box-shadow: 0 0 14px var(--gold-focus);
+}
+
+.likert-label {
+  font: 400 11px/1.3 var(--font-body);
+  color: var(--text-55);
+  text-align: center;
+}
+
+.likert-option--on .likert-label {
+  color: var(--text);
+}
+
+.likert-option:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The quoted item statement both instruments show. */
+.item-statement {
+  font: 600 24px/1.3 var(--font-display);
+  color: var(--text);
+  margin-bottom: 30px;
+}
+
+.item-statement--italic {
+  font-style: italic;
+}
+
+.item-statement--sm {
+  font-size: 22px;
+  margin-bottom: 20px;
+}

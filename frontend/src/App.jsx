@@ -3,6 +3,8 @@ import { AnimatePresence, motion as Motion } from "framer-motion";
 import GraphView from "./components/GraphView";
 import { DetailPanel } from "./components/GraphView/NodeComponent";
 import EntryScreen from "./screens/EntryScreen";
+import BigFiveScreen from "./screens/BigFiveScreen";
+import RiasecScreen from "./screens/RiasecScreen";
 import ProfilePanel, { PersonalityRadarChart, WorkValuesRadar } from "./components/ProfileCharts";
 import DevPanel from "./components/DevPanel";
 import { captureDevToken, isDevMode } from "./devMode";
@@ -53,22 +55,6 @@ import "./components/GraphView/GraphPage.css";
 const CV_INTENT_OPTIONS = [
   { value: "new", label: "Something completely new" },
   { value: "use_skills", label: "Use the skills I already have" },
-];
-
-const LIKERT = [
-  { value: 1, label: "Strongly disagree" },
-  { value: 2, label: "Disagree" },
-  { value: 3, label: "Neutral" },
-  { value: 4, label: "Agree" },
-  { value: 5, label: "Strongly agree" },
-];
-
-const ENJOY_LIKERT = [
-  { value: 1, label: "Not at all" },
-  { value: 2, label: "Not really" },
-  { value: 3, label: "Maybe" },
-  { value: 4, label: "Quite a bit" },
-  { value: 5, label: "Very much" },
 ];
 
 function stepHeading(step) {
@@ -224,76 +210,6 @@ function DemographicQuestionCard({ q, savedValue, draft, setDraft, busy, onSubmi
             </button>
           </div>
         </form>
-      )}
-    </div>
-  );
-}
-
-function BigFiveQuestionCard({ q, savedValue, busy, onSubmit, onBack, canGoBack, progress }) {
-  return (
-    <div className="question-card">
-      <div className="question-card-top">
-        {canGoBack && (
-          <button type="button" className="ghost-action back-action" onClick={onBack} disabled={busy}>
-            ← Back
-          </button>
-        )}
-        <p className="question-category">
-          {progress ? `Item ${progress.index + 1} of ${progress.total}` : "Personality"}
-        </p>
-      </div>
-      <h3>{q.text}</h3>
-      <div className="likert-row">
-        {LIKERT.map((l) => (
-          <button
-            key={l.value}
-            type="button"
-            className={`option-button likert-button ${savedValue === l.value ? "selected" : ""}`}
-            onClick={() => onSubmit(l.value)}
-            disabled={busy}
-          >
-            <span className="likert-value">{l.value}</span>
-            <span className="likert-label">{l.label}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function RiasecQuestionCard({ q, savedValue, busy, onSubmit, onBack, canGoBack, onSkip, canSkip, progress }) {
-  return (
-    <div className="question-card">
-      <div className="question-card-top">
-        {canGoBack && (
-          <button type="button" className="ghost-action back-action" onClick={onBack} disabled={busy}>
-            ← Back
-          </button>
-        )}
-        <p className="question-category">
-          {progress ? `Activity ${progress.index + 1} of ${progress.total}` : "Interests"}
-        </p>
-      </div>
-      <p className="entry-prompt">How much would you enjoy…</p>
-      <h3>{q.text}</h3>
-      <div className="likert-row">
-        {ENJOY_LIKERT.map((l) => (
-          <button
-            key={l.value}
-            type="button"
-            className={`option-button likert-button ${savedValue === l.value ? "selected" : ""}`}
-            onClick={() => onSubmit(l.value)}
-            disabled={busy}
-          >
-            <span className="likert-value">{l.value}</span>
-            <span className="likert-label">{l.label}</span>
-          </button>
-        ))}
-      </div>
-      {canSkip && (
-        <button type="button" className="ghost-action" onClick={onSkip} disabled={busy}>
-          Skip the quiz — estimate my interests from my answers so far
-        </button>
       )}
     </div>
   );
@@ -1401,14 +1317,15 @@ function App() {
           )}
 
           {step === "big_five" && currentBigFiveItem && (
-            <BigFiveQuestionCard
-              q={currentBigFiveItem}
+            <BigFiveScreen
+              item={currentBigFiveItem}
               savedValue={bigFiveAnswers[currentBigFiveItem.id] ?? null}
+              index={bigFiveIndex}
+              total={bigFiveItems.length}
               busy={busy.bigFive}
-              onSubmit={handleSubmitBigFive}
+              onAnswer={handleSubmitBigFive}
               onBack={handleBackBigFive}
               canGoBack={bigFiveIndex > 0}
-              progress={{ index: bigFiveIndex, total: bigFiveItems.length }}
             />
           )}
 
@@ -1419,16 +1336,17 @@ function App() {
           )}
 
           {step === "riasec" && riasecItems[riasecIndex] && (
-            <RiasecQuestionCard
-              q={riasecItems[riasecIndex]}
+            <RiasecScreen
+              item={riasecItems[riasecIndex]}
               savedValue={riasecAnswers[riasecItems[riasecIndex].id] ?? null}
+              index={riasecIndex}
+              total={riasecItems.length}
               busy={busy.riasec || busy.riasecSkip}
-              onSubmit={handleSubmitRiasec}
+              onAnswer={handleSubmitRiasec}
               onBack={() => setRiasecIndex((i) => Math.max(0, i - 1))}
               canGoBack={riasecIndex > 0}
               onSkip={handleSkipRiasec}
               canSkip={Object.keys(riasecAnswers).length === 0}
-              progress={{ index: riasecIndex, total: riasecItems.length }}
             />
           )}
 
