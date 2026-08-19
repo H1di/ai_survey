@@ -199,14 +199,19 @@
   padding-bottom: 24px;
 }
 
-.onet-attribution {
+/* Scoped under .hero on purpose. The legacy App.css still defines
+   .onet-attribution and .error-text at single-class specificity, and it is
+   imported after screens.css, so an unscoped rule here would lose the cascade
+   and the licence-mandated attribution would ship in the old grey. Task 14
+   deletes the legacy rules; the scoping stays correct either way. */
+.hero .onet-attribution {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
 }
 
-.onet-attribution p {
+.hero .onet-attribution p {
   margin: 0;
   max-width: 480px;
   text-align: center;
@@ -214,12 +219,16 @@
   color: var(--bone-40);
 }
 
-.onet-attribution a {
+.hero .onet-attribution a {
   color: var(--gold-70);
 }
 
-.error-text {
+.hero .error-text {
   margin: 12px 0 0;
   font: 400 13px/1.5 var(--font-body);
-  color: #ff9b9b;
+  color: var(--error);
+  border: none;
+  padding: 0;
+  max-width: none;
+  text-align: center;
 }

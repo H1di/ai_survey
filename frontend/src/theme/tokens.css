@@ -42,6 +42,7 @@
 
   /* State */
   --positive: #7cffb2;
+  --error: #ff9b9b;
 
   /* Backgrounds composed from the ramp */
   --glow-corners:
