@@ -557,19 +557,39 @@ function App() {
   const handleDemoDraftChange = (questionId, value) =>
     setDemoDrafts((drafts) => ({ ...drafts, [questionId]: value }));
 
-  // All four answers land on one screen, but the route takes one at a time —
-  // the last POST is what advances the step. A failure mid-chain leaves the
-  // earlier answers saved; re-submitting only sends what the snapshot lacks.
+  // All four answers land on one screen, but the route takes one at a time and
+  // advances the step the moment all four are present. On a first pass that is
+  // the last POST, and the loop is trivial. A rail revisit is where it bites:
+  //   * Every answer is already saved, so the FIRST post advances the step and
+  //     every later one 400s on the route's step guard — silently dropping the
+  //     user's other edits. Stepping back through /goto keeps them all.
+  //   * If the revisit changed nothing there is no post to make at all, and the
+  //     user would sit on a Continue button that does nothing. Re-posting one
+  //     unchanged answer is what makes the backend re-run its all-answered
+  //     check and move forward, which is the documented rail invariant:
+  //     completing a revisited step advances exactly as on the first pass.
+  // A failure mid-chain leaves the earlier answers saved; re-submitting sends
+  // only what the snapshot still lacks.
   const handleSubmitDemographics = async () => {
     if (!sessionId) return;
-    const payloads = demographicsPayloads(demographicQuestions, demoDrafts, demoAnswers);
+    const changed = demographicsPayloads(demographicQuestions, demoDrafts, demoAnswers);
+    const payloads = changed.length
+      ? changed
+      : demographicsPayloads(demographicQuestions, demoDrafts, {}).slice(0, 1);
     if (!payloads.length) return;
     setError("");
     setBusy((p) => ({ ...p, demo: true }));
     try {
+      let currentStep = step;
       for (const payload of payloads) {
+        if (currentStep !== "demographics") {
+          const back = await sessionGoto({ sessionId, step: "demographics" });
+          applySessionSnapshot(back);
+          currentStep = back.step;
+        }
         const data = await submitDemographics({ sessionId, ...payload });
         applySessionSnapshot(data);
+        currentStep = data.step;
       }
     } catch (e) {
       setError(e.message || "Could not save.");

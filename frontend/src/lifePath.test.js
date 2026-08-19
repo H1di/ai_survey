@@ -447,4 +447,17 @@ describe("demographics one-screen helpers", () => {
       demographicsPayloads(questions, { sex: "", age: "abc", country: "Ireland", city: null })
     ).toEqual([{ questionId: "country", value: "Ireland" }]);
   });
+
+  it("sends nothing when every draft already matches the snapshot", () => {
+    // This is the rail-revisit case. The empty result is correct here — it is
+    // App.jsx's job to fall back to a single re-post so the step still advances.
+    const drafts = { sex: "female", age: "32", country: "Ireland", city: "Dublin" };
+    const saved = { sex: "female", age: 32, country: "Ireland", city: "Dublin" };
+    expect(demographicsPayloads(questions, drafts, saved)).toEqual([]);
+  });
+
+  it("produces every payload when nothing is saved, which is that fallback's input", () => {
+    const drafts = { sex: "female", age: "32", country: "Ireland", city: "Dublin" };
+    expect(demographicsPayloads(questions, drafts, {})).toHaveLength(4);
+  });
 });
