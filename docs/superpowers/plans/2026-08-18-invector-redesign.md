@@ -2012,8 +2012,10 @@ import ScreenShell from "../ui/ScreenShell";
 import LikertScale from "../ui/LikertScale";
 import "./screens.css";
 
-// The canonical IPIP anchors, which is also what the design draws.
-export const ACCURACY_ANCHORS = [
+// The canonical IPIP anchors, which is also what the design draws. Not
+// exported: react-refresh/only-export-components is a hard error in this
+// project, and nothing outside this screen needs them.
+const ACCURACY_ANCHORS = [
   { value: 1, label: "Very inaccurate" },
   { value: 2, label: "Moderately inaccurate" },
   { value: 3, label: "Neither" },
@@ -2066,8 +2068,9 @@ import LikertScale from "../ui/LikertScale";
 import "./screens.css";
 
 // The mockup shows no rating scale for this step, so its enjoyment anchors
-// stay as the product already words them.
-export const ENJOYMENT_ANCHORS = [
+// stay as the product already words them. Not exported, for the same reason
+// as the Big Five set.
+const ENJOYMENT_ANCHORS = [
   { value: 1, label: "Not at all" },
   { value: 2, label: "Not really" },
   { value: 3, label: "Maybe" },
@@ -2176,7 +2179,7 @@ Delete `BigFiveQuestionCard` (`231-260`) and `RiasecQuestionCard` (`263-299`) an
 - [ ] **Step 6: Run the tests**
 
 Run: `cd frontend && npm test -- --run`
-Expected: PASS, including the 13 new tests.
+Expected: PASS, including the 14 new tests.
 
 - [ ] **Step 7: Commit**
 
