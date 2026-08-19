@@ -332,3 +332,18 @@
 .demo-submit {
   margin-top: 34px;
 }
+
+.screen-footnote {
+  margin: 24px 0 0;
+  max-width: 600px;
+  font: 400 12.5px/1.5 var(--font-body);
+  color: var(--text-40);
+}
+
+/* The tournament headline is the one that runs uppercase and larger. */
+.screen--tournament .screen-title {
+  font-size: 44px;
+  line-height: 1.05;
+  text-transform: uppercase;
+  margin-bottom: 34px;
+}

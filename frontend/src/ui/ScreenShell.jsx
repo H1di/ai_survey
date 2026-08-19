@@ -12,10 +12,11 @@ export default function ScreenShell({
   glow = "corners",
   align = "center",
   headerSlot = null,
+  className = "",
   children,
 }) {
   return (
-    <section className={`screen screen--glow-${glow} screen--${align}`}>
+    <section className={`screen screen--glow-${glow} screen--${align} ${className}`}>
       <Wordmark />
       {headerSlot}
       {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}

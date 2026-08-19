@@ -6,6 +6,7 @@ import EntryScreen from "./screens/EntryScreen";
 import DemographicsScreen from "./screens/DemographicsScreen";
 import BigFiveScreen from "./screens/BigFiveScreen";
 import RiasecScreen from "./screens/RiasecScreen";
+import ValuesTournamentScreen from "./screens/ValuesTournamentScreen";
 import ProfilePanel, { PersonalityRadarChart, WorkValuesRadar } from "./components/ProfileCharts";
 import DevPanel from "./components/DevPanel";
 import { captureDevToken, isDevMode } from "./devMode";
@@ -218,41 +219,6 @@ function CvCard({ mode, setMode, cvDraft, setCvDraft, busy, intent, intentBusy, 
         </button>
       </div>
       {busy && <p className="dock-busy">Reading your CV…</p>}
-    </div>
-  );
-}
-
-// The adaptive pairwise-comparison card: pick the more important of two values.
-function ValuesComparisonCard({ comparison, busy, onChoose, progress }) {
-  const a = WORK_VALUE_META[comparison.a] || { label: comparison.a, blurb: "" };
-  const b = WORK_VALUE_META[comparison.b] || { label: comparison.b, blurb: "" };
-  return (
-    <div className="question-card">
-      <p className="question-category">
-        What matters more?{progress ? ` (${progress.answered + 1} of up to ${progress.total})` : ""}
-      </p>
-      <h3>Which of these would you rather have in your work?</h3>
-      <div className="values-ab">
-        <button
-          type="button"
-          className="values-ab-option"
-          onClick={() => onChoose(comparison.a)}
-          disabled={busy}
-        >
-          <span className="values-ab-label">{a.label}</span>
-          <span className="values-ab-blurb">{a.blurb}</span>
-        </button>
-        <span className="values-ab-or">or</span>
-        <button
-          type="button"
-          className="values-ab-option"
-          onClick={() => onChoose(comparison.b)}
-          disabled={busy}
-        >
-          <span className="values-ab-label">{b.label}</span>
-          <span className="values-ab-blurb">{b.blurb}</span>
-        </button>
-      </div>
     </div>
   );
 }
@@ -1290,11 +1256,11 @@ function App() {
           )}
 
           {step === "values" && valuesComparison && (
-            <ValuesComparisonCard
+            <ValuesTournamentScreen
               comparison={valuesComparison}
+              progress={progress?.values || null}
               busy={busy.values}
               onChoose={handleValuesAnswer}
-              progress={progress?.values}
             />
           )}
 
