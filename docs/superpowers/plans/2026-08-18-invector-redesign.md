@@ -2207,7 +2207,7 @@ The only flow change in the redesign: four questions at once instead of four scr
 - Produces:
   - `demographicsComplete(questions, drafts) -> boolean` — true when every question has a usable draft.
   - `demographicsPayloads(questions, drafts, saved = {}) -> [{ questionId, value }]` — in question order, numbers coerced, already-saved identical answers skipped.
-  - `DemographicsScreen` — `({ questions, drafts, onDraftChange, saved, busy, onSubmit })`; `onDraftChange(questionId, value)`.
+  - `DemographicsScreen` — `({ questions, drafts, onDraftChange, busy, onSubmit })`; `onDraftChange(questionId, value)`. The screen never sees the saved answers: `App.jsx` holds them and passes them to `demographicsPayloads` when it submits.
 
 - [ ] **Step 1: Write the failing helper tests**
 
