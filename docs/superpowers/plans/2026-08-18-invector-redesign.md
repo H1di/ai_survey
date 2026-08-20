@@ -3498,6 +3498,17 @@ describe("ExperienceScreen", () => {
     expect(onSubmitJourney).toHaveBeenCalled();
   });
 
+  it("cancels a locked file drop so the browser cannot navigate away", () => {
+    const onUploadFile = vi.fn();
+    render(<ExperienceScreen {...base} onUploadFile={onUploadFile} />);
+    const zone = screen.getByText("A").parentElement;
+    // fireEvent returns false when a handler called preventDefault on a
+    // cancelable event — which is the whole point here.
+    expect(fireEvent.dragOver(zone)).toBe(false);
+    expect(fireEvent.drop(zone)).toBe(false);
+    expect(onUploadFile).not.toHaveBeenCalled();
+  });
+
   it("shows the paste view when the mode says so", () => {
     render(<ExperienceScreen {...base} intent="new" mode="paste" cvDraft="my cv" />);
     expect(
@@ -3628,12 +3639,15 @@ export default function ExperienceScreen({
           <div
             className="experience-half"
             onDragOver={(event) => {
-              if (!locked) event.preventDefault();
+              // Cancel unconditionally, locked or not. An un-cancelled dragover
+              // leaves the drop to the browser, which navigates the tab to the
+              // dropped file and destroys the in-progress session.
+              event.preventDefault();
             }}
             onDrop={(event) => {
-              if (locked) return;
               event.preventDefault();
-              const file = event.dataTransfer.files?.[0];
+              if (locked) return;
+              const file = event.dataTransfer?.files?.[0];
               if (file) onUploadFile(file);
             }}
           >
@@ -3864,7 +3878,13 @@ Delete `CvCard` and the inline journey block, then render one screen for the who
               journeyTotal={careerJourneyQuestions.length}
               journeyDraft={journeyDraft}
               onJourneyDraftChange={setJourneyDraft}
-              onSubmitJourney={() => handleSubmitJourney(journeyDraft)}
+              onSubmitJourney={() => {
+                // Answering the B-side question is the commitment to the
+                // journey path — without this the eyebrow's counter never
+                // starts, even as journeyIndex advances underneath it.
+                setCvMode("journey");
+                handleSubmitJourney(journeyDraft);
+              }}
               onStartJourney={() => setCvMode("journey")}
             />
           )}
