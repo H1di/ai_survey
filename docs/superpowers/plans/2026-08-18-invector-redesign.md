@@ -4497,7 +4497,12 @@ export default function OutputDecision({ output, busy, onAccept, onRegenerate, o
           <p className="output-title">Grounded in O*NET</p>
           <p className="output-body">
             {output.jobTitle}
-            {output.valuesFit ? ` · ${output.valuesFit.overall}% values fit` : ""}
+            {/* The fit sits in its own element so the job title stays a text
+                node of its own — as one concatenated string, an exact-text
+                query for the title never matches. */}
+            {output.valuesFit && (
+              <span className="output-fit"> · {output.valuesFit.overall}% values fit</span>
+            )}
           </p>
           {market && <p className="output-meta">{market}</p>}
         </div>
@@ -4594,6 +4599,10 @@ Append to `frontend/src/screens/screens.css`:
   margin: 12px 0 0;
   font: 300 13.5px/1.6 var(--font-body);
   color: var(--text-60);
+}
+
+.output-fit {
+  color: var(--gold-70);
 }
 
 .output-meta {
