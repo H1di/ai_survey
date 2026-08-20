@@ -6,8 +6,12 @@ import "./screens.css";
 // output — the mockup's card bodies are its stand-in for exactly this data.
 export default function OutputDecision({ output, busy, onAccept, onRegenerate, onOpenDetails }) {
   const market = usMarketLine(output);
+  // Outputs generated before the structured explanation existed — and any
+  // whose second AI call failed — carry a single free-text section instead of
+  // items. Reading only `items` would drop a real explanation on the floor.
   const trace = whyThisFitsSections(output)
-    .flatMap((section) => section.items || [])
+    .flatMap((section) => (section.items?.length ? section.items : [section.text]))
+    .filter(Boolean)
     .slice(0, 3);
   const locked = Boolean(busy.accept || busy.refine);
 

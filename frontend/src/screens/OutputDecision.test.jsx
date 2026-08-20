@@ -72,6 +72,22 @@ describe("OutputDecision", () => {
     ).toBeDisabled();
   });
 
+  it("falls back to a legacy free-text explanation rather than showing nothing", () => {
+    render(
+      <OutputDecision
+        {...base}
+        output={{
+          ...output,
+          whyThisFits: null,
+          whyFit: "Your scores point at structured, analytical work.",
+        }}
+      />
+    );
+    expect(
+      screen.getByText("Your scores point at structured, analytical work.")
+    ).toBeInTheDocument();
+  });
+
   it("survives a keyless output with no market data and no structured explanation", () => {
     render(<OutputDecision {...base} output={{ ...output, onet: {}, whyThisFits: null }} />);
     expect(screen.getByText("Financial Manager")).toBeInTheDocument();
