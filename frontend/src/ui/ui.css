@@ -247,3 +247,52 @@
   font: 600 11px/1 var(--font-mono);
   padding: 6px 4px;
 }
+
+.rank-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 560px;
+  text-align: left;
+}
+
+.rank-row {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--gold-18);
+  cursor: grab;
+  transition: background var(--t-fast) ease, border-color var(--t-fast) ease;
+}
+
+.rank-row--dragging {
+  opacity: 0.55;
+}
+
+.rank-row--over {
+  background: var(--gold-hover);
+  border-bottom-color: var(--gold);
+}
+
+.rank-number {
+  font: 900 30px/1 var(--font-display);
+  color: var(--gold-35);
+  min-width: 1.2em;
+}
+
+.rank-label {
+  font: 600 17px/1 var(--font-body);
+  color: var(--text);
+  flex: 1;
+}
+
+.rank-hint {
+  font: 400 10px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold-50);
+}

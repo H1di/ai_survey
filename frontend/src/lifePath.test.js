@@ -6,6 +6,7 @@ import {
   demographicsComplete,
   demographicsPayloads,
   moveRankItem,
+  moveRankItemTo,
   outputX,
   ADVICE_BLOCKS,
   JOURNEY_RAIL,
@@ -362,6 +363,28 @@ describe("moveRankItem", () => {
     expect(moveRankItem(list, 2, 1)).toBe(list);
     moveRankItem(list, 1, 1);
     expect(list).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("moveRankItemTo", () => {
+  const list = ["a", "b", "c", "d"];
+
+  it("lifts an item and inserts it at the target index", () => {
+    expect(moveRankItemTo(list, 0, 2)).toEqual(["b", "c", "a", "d"]);
+    expect(moveRankItemTo(list, 3, 0)).toEqual(["d", "a", "b", "c"]);
+  });
+
+  it("is a no-op for the same index and for out-of-range moves", () => {
+    expect(moveRankItemTo(list, 1, 1)).toBe(list);
+    expect(moveRankItemTo(list, -1, 2)).toBe(list);
+    expect(moveRankItemTo(list, 0, 9)).toBe(list);
+  });
+
+  it("does not mutate and always returns a permutation of the input", () => {
+    const result = moveRankItemTo(list, 0, 3);
+    expect(list).toEqual(["a", "b", "c", "d"]);
+    expect([...result].sort()).toEqual([...list].sort());
+    expect(result).toHaveLength(list.length);
   });
 });
 

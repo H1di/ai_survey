@@ -72,6 +72,18 @@ export function moveRankItem(list, index, delta) {
   return next;
 }
 
+// Drag reorder: lift the item at `from` and insert it at `to`. Pure, and a
+// no-op for a move that would not change anything.
+export function moveRankItemTo(list, from, to) {
+  if (from === to) return list;
+  if (from < 0 || from >= list.length) return list;
+  if (to < 0 || to >= list.length) return list;
+  const next = [...list];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
 export function buildLifePathGraph({
   outputs = [],
   acceptedOutputId = null,

@@ -7,6 +7,7 @@ import DemographicsScreen from "./screens/DemographicsScreen";
 import BigFiveScreen from "./screens/BigFiveScreen";
 import RiasecScreen from "./screens/RiasecScreen";
 import ValuesTournamentScreen from "./screens/ValuesTournamentScreen";
+import ValuesHierarchyScreen from "./screens/ValuesHierarchyScreen";
 import ProfilePanel, { PersonalityRadarChart, WorkValuesRadar } from "./components/ProfileCharts";
 import DevPanel from "./components/DevPanel";
 import { captureDevToken, isDevMode } from "./devMode";
@@ -38,7 +39,7 @@ import {
   deriveArchetype,
   demographicsPayloads,
   firstUnansweredIndex,
-  moveRankItem,
+  moveRankItemTo,
   selectDockCard,
   JOURNEY_RAIL,
   railIndexForStep,
@@ -219,53 +220,6 @@ function CvCard({ mode, setMode, cvDraft, setCvDraft, busy, intent, intentBusy, 
         </button>
       </div>
       {busy && <p className="dock-busy">Reading your CV…</p>}
-    </div>
-  );
-}
-
-// The reorderable 1→6 hierarchy the tournament produced; the user can tweak it
-// before confirming.
-function ValuesHierarchyCard({ ranking, onMove, busy, onConfirm }) {
-  return (
-    <div className="question-card">
-      <p className="question-category">Your work-value hierarchy</p>
-      <h3>Does this feel like your hierarchy? You can modify it.</h3>
-      <ol className="rank-list">
-        {ranking.map((id, index) => (
-          <li key={id} className="rank-row">
-            <span className="rank-pos">{index + 1}</span>
-            <span className="rank-label">
-              {WORK_VALUE_META[id]?.label || id}
-              <span className="rank-meaning">{WORK_VALUE_META[id]?.blurb}</span>
-            </span>
-            <span className="rank-controls">
-              <button
-                type="button"
-                className="ghost-action"
-                onClick={() => onMove(index, -1)}
-                disabled={busy || index === 0}
-                aria-label={`Move ${WORK_VALUE_META[id]?.label} up`}
-              >
-                ↑
-              </button>
-              <button
-                type="button"
-                className="ghost-action"
-                onClick={() => onMove(index, 1)}
-                disabled={busy || index === ranking.length - 1}
-                aria-label={`Move ${WORK_VALUE_META[id]?.label} down`}
-              >
-                ↓
-              </button>
-            </span>
-          </li>
-        ))}
-      </ol>
-      <div className="question-actions single">
-        <button type="button" className="primary-action" onClick={onConfirm} disabled={busy}>
-          {busy ? "Saving…" : "This is my hierarchy"}
-        </button>
-      </div>
     </div>
   );
 }
@@ -1265,9 +1219,9 @@ function App() {
           )}
 
           {step === "values" && !valuesComparison && valuesRankDraft.length === 6 && (
-            <ValuesHierarchyCard
+            <ValuesHierarchyScreen
               ranking={valuesRankDraft}
-              onMove={(index, delta) => setValuesRankDraft((l) => moveRankItem(l, index, delta))}
+              onReorder={(from, to) => setValuesRankDraft((list) => moveRankItemTo(list, from, to))}
               busy={busy.valuesConfirm}
               onConfirm={handleValuesConfirm}
             />
