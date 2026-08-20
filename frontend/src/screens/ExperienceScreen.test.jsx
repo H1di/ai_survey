@@ -69,6 +69,17 @@ describe("ExperienceScreen", () => {
     expect(onSubmitJourney).toHaveBeenCalled();
   });
 
+  it("cancels a locked file drop so the browser cannot navigate away", () => {
+    const onUploadFile = vi.fn();
+    render(<ExperienceScreen {...base} onUploadFile={onUploadFile} />);
+    const zone = screen.getByText("A").parentElement;
+    // fireEvent returns false when a handler called preventDefault on a
+    // cancelable event — which is the whole point here.
+    expect(fireEvent.dragOver(zone)).toBe(false);
+    expect(fireEvent.drop(zone)).toBe(false);
+    expect(onUploadFile).not.toHaveBeenCalled();
+  });
+
   it("shows the paste view when the mode says so", () => {
     render(<ExperienceScreen {...base} intent="new" mode="paste" cvDraft="my cv" />);
     expect(

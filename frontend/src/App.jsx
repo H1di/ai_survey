@@ -1169,7 +1169,13 @@ function App() {
               journeyTotal={careerJourneyQuestions.length}
               journeyDraft={journeyDraft}
               onJourneyDraftChange={setJourneyDraft}
-              onSubmitJourney={() => handleSubmitJourney(journeyDraft)}
+              onSubmitJourney={() => {
+                // Answering the B-side question is the commitment to the
+                // journey path — without this the eyebrow's counter never
+                // starts, even as journeyIndex advances underneath it.
+                setCvMode("journey");
+                handleSubmitJourney(journeyDraft);
+              }}
               onStartJourney={() => setCvMode("journey")}
             />
           )}

@@ -103,12 +103,15 @@ export default function ExperienceScreen({
           <div
             className="experience-half"
             onDragOver={(event) => {
-              if (!locked) event.preventDefault();
+              // Cancel unconditionally, locked or not. An un-cancelled dragover
+              // leaves the drop to the browser, which navigates the tab to the
+              // dropped file and destroys the in-progress session.
+              event.preventDefault();
             }}
             onDrop={(event) => {
-              if (locked) return;
               event.preventDefault();
-              const file = event.dataTransfer.files?.[0];
+              if (locked) return;
+              const file = event.dataTransfer?.files?.[0];
               if (file) onUploadFile(file);
             }}
           >
