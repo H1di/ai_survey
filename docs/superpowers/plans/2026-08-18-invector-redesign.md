@@ -4161,20 +4161,24 @@ Append to `frontend/src/screens/screens.css`:
   margin-top: 30px;
 }
 
-.summary-archetype {
+/* Scoped under .screen: App.css still defines .summary-archetype,
+   .summary-tagline and .summary-persona at single-class specificity and is
+   imported after screens.css, so unscoped rules here would lose outright.
+   Task 14 deletes the legacy rules; the scoping stays correct either way. */
+.screen .summary-archetype {
   margin: 0;
   font: 900 34px/1.1 var(--font-display);
   letter-spacing: -0.02em;
   color: var(--gold);
 }
 
-.summary-tagline {
+.screen .summary-tagline {
   margin: 8px 0 24px;
   font: 400 14px/1.6 var(--font-body);
   color: var(--text-72);
 }
 
-.summary-persona {
+.screen .summary-persona {
   margin: 24px 0;
   max-width: 520px;
   font: 400 14px/1.7 var(--font-body);
