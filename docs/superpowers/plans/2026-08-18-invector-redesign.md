@@ -4449,6 +4449,22 @@ describe("OutputDecision", () => {
     ).toBeDisabled();
   });
 
+  it("falls back to a legacy free-text explanation rather than showing nothing", () => {
+    render(
+      <OutputDecision
+        {...base}
+        output={{
+          ...output,
+          whyThisFits: null,
+          whyFit: "Your scores point at structured, analytical work.",
+        }}
+      />
+    );
+    expect(
+      screen.getByText("Your scores point at structured, analytical work.")
+    ).toBeInTheDocument();
+  });
+
   it("survives a keyless output with no market data and no structured explanation", () => {
     render(<OutputDecision {...base} output={{ ...output, onet: {}, whyThisFits: null }} />);
     expect(screen.getByText("Financial Manager")).toBeInTheDocument();
@@ -4475,8 +4491,12 @@ import "./screens.css";
 // output — the mockup's card bodies are its stand-in for exactly this data.
 export default function OutputDecision({ output, busy, onAccept, onRegenerate, onOpenDetails }) {
   const market = usMarketLine(output);
+  // Outputs generated before the structured explanation existed — and any
+  // whose second AI call failed — carry a single free-text section instead of
+  // items. Reading only `items` would drop a real explanation on the floor.
   const trace = whyThisFitsSections(output)
-    .flatMap((section) => section.items || [])
+    .flatMap((section) => (section.items?.length ? section.items : [section.text]))
+    .filter(Boolean)
     .slice(0, 3);
   const locked = Boolean(busy.accept || busy.refine);
 
