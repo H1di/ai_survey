@@ -5032,6 +5032,17 @@ Append to `frontend/src/ui/ui.css`:
 }
 ```
 
+- [ ] **Step 3b: Fix the four orphaned setters `resetAll` still calls**
+
+`resetAll` calls `setJobCharParams`, `setRankDraft`, `setRefineMode` and `setRefineChecks`. None of them exist — they were removed with the job-characteristics step and the refine panel, and the calls were left behind. They are four of the eight baseline lint errors (`no-undef`), and they are not cosmetic: `resetAll` throws a ReferenceError on the first one, so **Restart is broken on `main` today** and would ship broken in this redesign. Delete the four lines:
+
+```bash
+cd frontend
+grep -n "setJobCharParams\|setRankDraft\|setRefineMode\|setRefineChecks" src/App.jsx
+```
+
+Expected after the fix: no output, and `npm run lint` down from 8 errors to 4.
+
 - [ ] **Step 4: Drop what nothing calls any more**
 
 ```bash
@@ -5053,7 +5064,7 @@ Expected: backend 185+ passing, untouched; frontend all suites passing.
 - [ ] **Step 6: Lint**
 
 Run: `cd frontend && npm run lint`
-Expected: no errors.
+Expected: at most the 4 pre-existing errors this plan does not own — the two react-hooks findings in `App.jsx` (`Cannot access variable before it is declared`, `Calling setState synchronously within an effect`) and the two unused `salary`/`outlook` destructures. The four `no-undef` errors on the orphaned setters must be gone.
 
 - [ ] **Step 7: Screenshot every screen at both widths**
 
