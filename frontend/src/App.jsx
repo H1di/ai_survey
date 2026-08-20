@@ -3,13 +3,16 @@ import { AnimatePresence, motion as Motion } from "framer-motion";
 import GraphView from "./components/GraphView";
 import { DetailPanel } from "./components/GraphView/NodeComponent";
 import EntryScreen from "./screens/EntryScreen";
+import JourneyIntroScreen from "./screens/JourneyIntroScreen";
 import DemographicsScreen from "./screens/DemographicsScreen";
 import BigFiveScreen from "./screens/BigFiveScreen";
 import RiasecScreen from "./screens/RiasecScreen";
 import ValuesTournamentScreen from "./screens/ValuesTournamentScreen";
 import ValuesHierarchyScreen from "./screens/ValuesHierarchyScreen";
 import ExperienceScreen from "./screens/ExperienceScreen";
-import ProfilePanel, { PersonalityRadarChart, WorkValuesRadar } from "./components/ProfileCharts";
+import SummaryScreen from "./screens/SummaryScreen";
+import StepRail from "./screens/StepRail";
+import ProfilePanel from "./components/ProfileCharts";
 import DevPanel from "./components/DevPanel";
 import { captureDevToken, isDevMode } from "./devMode";
 import {
@@ -42,9 +45,6 @@ import {
   firstUnansweredIndex,
   moveRankItemTo,
   selectDockCard,
-  JOURNEY_RAIL,
-  railIndexForStep,
-  railStepReachable,
   whyThisFitsSections,
   onetSection,
   WORK_VALUE_META,
@@ -56,79 +56,6 @@ import "./App.css";
 captureDevToken();
 const DEV_MODE = isDevMode();
 import "./components/GraphView/GraphPage.css";
-
-function stepHeading(step) {
-  const railEntry = JOURNEY_RAIL.find((r) => r.step === step);
-  if (railEntry) return railEntry.label;
-  return step === "tree" ? "Ready" : "Career Discovery Journey";
-}
-
-function JourneyRailCard({ onBegin }) {
-  return (
-    <div className="question-card journey-rail-card">
-      <h3>Career Discovery Journey</h3>
-      <p className="entry-prompt">Four short steps. Each one feeds the final picture.</p>
-      <ol className="journey-rail-list">
-        {JOURNEY_RAIL.map((r) => (
-          <li key={r.step}>
-            <span className="journey-rail-label">{r.label}</span>
-            <span className="journey-rail-time">{r.time}</span>
-          </li>
-        ))}
-      </ol>
-      <button type="button" className="primary-action" onClick={onBegin}>
-        Start
-      </button>
-    </div>
-  );
-}
-
-function JourneyRailStrip({ step, furthestStep, busy, onNavigate }) {
-  const active = railIndexForStep(step);
-  if (active === -1) return null;
-  return (
-    <ol className="journey-rail-strip" aria-label="Career Discovery Journey progress">
-      {JOURNEY_RAIL.map((r, index) => {
-        // The active step is never a link — it is where you already are.
-        const clickable = index !== active && railStepReachable(r.step, furthestStep);
-        return (
-          <li
-            key={r.step}
-            className={`journey-rail-step ${index === active ? "active" : ""} ${index < active ? "done" : ""}`}
-          >
-            {clickable ? (
-              <button
-                type="button"
-                className="journey-rail-jump"
-                disabled={busy}
-                onClick={() => onNavigate(r.step)}
-              >
-                {r.label}
-              </button>
-            ) : (
-              r.label
-            )}
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-function stepProgressText(step, progress) {
-  if (!progress) return "";
-  if (step === "demographics")
-    return `${progress.demographics.answered} / ${progress.demographics.total}`;
-  if (step === "big_five")
-    return `${progress.bigFive.answered} / ${progress.bigFive.total}`;
-  if (step === "riasec" && progress.riasec.total)
-    return `${progress.riasec.answered} / ${progress.riasec.total}`;
-  if (step === "values" && progress.values && progress.values.answered)
-    return `${progress.values.answered} / ${progress.values.total}`;
-  if (step === "cv" && progress.journey.answered)
-    return `${progress.journey.answered} / ${progress.journey.total}`;
-  return "";
-}
 
 // One journey, one bar. Unknown-yet block sizes assume the short variants so
 // the bar can only get more accurate, never jump backwards. The CV block
@@ -1025,6 +952,33 @@ function App() {
     };
   }
 
+  const overall = overallProgress(progress);
+  const surveyFooter = (
+    <>
+      {overall && (
+        <div className="screen-progress">
+          <div
+            className="screen-progress-track"
+            role="progressbar"
+            aria-valuenow={overall.answered}
+            aria-valuemin={0}
+            aria-valuemax={overall.total}
+            aria-label={`Overall: ${overall.answered} of ${overall.total} questions`}
+          >
+            <div className="screen-progress-fill" style={{ width: `${overall.percent}%` }} />
+          </div>
+          <span className="screen-progress-percent">{overall.percent}%</span>
+        </div>
+      )}
+      <StepRail
+        step={step}
+        furthestStep={furthestStep}
+        busy={busy.goto}
+        onNavigate={handleRailNavigate}
+      />
+    </>
+  );
+
   if (restoring) {
     return (
       <main className="app-shell">
@@ -1049,36 +1003,6 @@ function App() {
 
       {stage === "survey" && (
         <section className="questions-screen">
-          <header className="screen-header">
-            <h2>{stepHeading(step)}</h2>
-            <p>{stepProgressText(step, progress)}</p>
-            <JourneyRailStrip
-              step={step}
-              furthestStep={furthestStep}
-              busy={busy.goto}
-              onNavigate={handleRailNavigate}
-            />
-          </header>
-
-          {step !== "tree" && (() => {
-            const overall = overallProgress(progress);
-            return overall ? (
-              <div className="overall-progress-row">
-                <div
-                  className="overall-progress"
-                  role="progressbar"
-                  aria-valuenow={overall.answered}
-                  aria-valuemin={0}
-                  aria-valuemax={overall.total}
-                  aria-label={`Overall: ${overall.answered} of ${overall.total} questions`}
-                >
-                  <div className="overall-progress-fill" style={{ width: `${overall.percent}%` }} />
-                </div>
-                <span className="overall-progress-percent">{overall.percent}%</span>
-              </div>
-            ) : null;
-          })()}
-
           {!aiEnabled && (
             <p className="demo-notice">
               Demo mode — suggestions come from fixed rules, not AI.
@@ -1086,7 +1010,7 @@ function App() {
           )}
 
           {showRail && step === "demographics" && (
-            <JourneyRailCard onBegin={() => setShowRail(false)} />
+            <JourneyIntroScreen onBegin={() => setShowRail(false)} />
           )}
 
           {!showRail && step === "demographics" && demographicQuestions.length > 0 && (
@@ -1096,6 +1020,7 @@ function App() {
               onDraftChange={handleDemoDraftChange}
               busy={busy.demo}
               onSubmit={handleSubmitDemographics}
+              footer={surveyFooter}
             />
           )}
 
@@ -1109,6 +1034,7 @@ function App() {
               onAnswer={handleSubmitBigFive}
               onBack={handleBackBigFive}
               canGoBack={bigFiveIndex > 0}
+              footer={surveyFooter}
             />
           )}
 
@@ -1130,6 +1056,7 @@ function App() {
               canGoBack={riasecIndex > 0}
               onSkip={handleSkipRiasec}
               canSkip={Object.keys(riasecAnswers).length === 0}
+              footer={surveyFooter}
             />
           )}
 
@@ -1139,6 +1066,7 @@ function App() {
               progress={progress?.values || null}
               busy={busy.values}
               onChoose={handleValuesAnswer}
+              footer={surveyFooter}
             />
           )}
 
@@ -1148,6 +1076,7 @@ function App() {
               onReorder={(from, to) => setValuesRankDraft((list) => moveRankItemTo(list, from, to))}
               busy={busy.valuesConfirm}
               onConfirm={handleValuesConfirm}
+              footer={surveyFooter}
             />
           )}
 
@@ -1177,48 +1106,24 @@ function App() {
                 handleSubmitJourney(journeyDraft);
               }}
               onStartJourney={() => setCvMode("journey")}
+              footer={surveyFooter}
             />
           )}
 
-          {step === "summary" && (() => {
-            const archetype = deriveArchetype({
-              riasecCode: profile?.riasecCode,
-              bigFiveScores: profile?.bigFiveScores,
-            });
-            return (
-              <div className="question-card summary-card">
-                <p className="question-category">Who you are</p>
-                <h3 className="summary-archetype">{archetype.name}</h3>
-                <p className="summary-tagline">{archetype.tagline}</p>
-
-                {profile?.bigFiveScores && (
-                  <PersonalityRadarChart scores={profile.bigFiveScores} />
-                )}
-
-                {profile?.personaSummary && (
-                  <p className="summary-persona">{profile.personaSummary}</p>
-                )}
-
-                {profile?.userValues?.scores && (
-                  <WorkValuesRadar user={profile.userValues.scores} title="What matters to you" />
-                )}
-
-                <div className="question-actions single">
-                  <button
-                    type="button"
-                    className="primary-action"
-                    onClick={handleSummaryContinue}
-                    disabled={busy.summary}
-                  >
-                    {busy.summary ? "Preparing…" : "Continue →"}
-                  </button>
-                </div>
-                <p className="entry-disclaimer">
-                  A preliminary sketch from a short self-report — not a clinical assessment.
-                </p>
-              </div>
-            );
-          })()}
+          {step === "summary" && (
+            <SummaryScreen
+              archetype={deriveArchetype({
+                riasecCode: profile?.riasecCode,
+                bigFiveScores: profile?.bigFiveScores,
+              })}
+              bigFiveScores={profile?.bigFiveScores}
+              personaSummary={profile?.personaSummary}
+              userValues={profile?.userValues}
+              busy={busy.summary}
+              onContinue={handleSummaryContinue}
+              footer={surveyFooter}
+            />
+          )}
 
           {step === "tree" && (
             <div className="question-card">

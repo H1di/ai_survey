@@ -22,12 +22,14 @@ export default function BigFiveScreen({
   onAnswer,
   onBack,
   canGoBack,
+  footer,
 }) {
   return (
     <ScreenShell
       eyebrow={`step 2 · big five · item ${index + 1} of ${total}`}
       title="Mini-IPIP-20"
       sub="The fixed public-domain Mini-IPIP-20, rated 1–5, scored to OCEAN 0–100 plus Stability/Plasticity."
+      footer={footer}
       headerSlot={
         canGoBack ? (
           <button type="button" className="screen-back" onClick={onBack} disabled={busy}>

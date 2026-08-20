@@ -31,6 +31,7 @@ export default function DemographicsScreen({
   onDraftChange,
   busy,
   onSubmit,
+  footer,
 }) {
   const ready = demographicsComplete(questions, drafts) && !busy;
 
@@ -39,6 +40,7 @@ export default function DemographicsScreen({
       eyebrow="step 1 · demographics"
       title="A little about you"
       sub="Four quick questions — sex, age, country, city."
+      footer={footer}
     >
       <div className="demo-grid">
         {questions.map((question) => (

@@ -14,11 +14,12 @@ import {
 import { bigFiveTakeaways, WORK_VALUE_AXES } from "../lifePath";
 import "./ProfileCharts.css";
 
-const ACCENT = "#863bff";
-const ACCENT_SOFT = "rgba(134, 59, 255, 0.25)";
-const JOB_ACCENT = "#1f9d78";
-const JOB_SOFT = "rgba(31, 157, 120, 0.22)";
-const MUTED = "#666666";
+// The design's ramp. Charts are the one place a soft fill earns its keep.
+const ACCENT = "#ffd98c";
+const ACCENT_SOFT = "rgba(255, 217, 140, 0.18)";
+const JOB_ACCENT = "#7cffb2";
+const JOB_SOFT = "rgba(124, 255, 178, 0.16)";
+const MUTED = "rgba(255, 255, 255, 0.55)";
 
 // Axis keys mirror the O/C/E/A/N naming the backend sends to the AI, so a
 // mentioned trait can be matched to its axis and highlighted via
@@ -65,7 +66,7 @@ export function PersonalityRadarChart({ scores, highlightKeys = [] }) {
       <ResponsiveContainer width="100%" height={210}>
         {/* cx nudged left so the right-anchored "Conscientiousness" label fits the panel */}
         <RadarChart data={data} outerRadius="62%" cx="46%">
-          <PolarGrid stroke="#e0e0e0" />
+          <PolarGrid stroke="rgba(255,217,140,.25)" />
           <PolarAngleAxis
             dataKey="trait"
             tick={(props) => <RadarTick {...props} highlighted={highlighted} />}
@@ -162,7 +163,7 @@ export function WorkValuesRadar({ user, job, title = "Work values" }) {
       <p className="profile-chart-title">{title}</p>
       <ResponsiveContainer width="100%" height={230}>
         <RadarChart data={data} outerRadius="64%" cx="50%">
-          <PolarGrid stroke="#e0e0e0" />
+          <PolarGrid stroke="rgba(255,217,140,.25)" />
           <PolarAngleAxis
             dataKey="label"
             tick={{ fontSize: 10, fill: MUTED }}

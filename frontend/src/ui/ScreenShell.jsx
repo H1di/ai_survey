@@ -13,6 +13,7 @@ export default function ScreenShell({
   align = "center",
   headerSlot = null,
   className = "",
+  footer = null,
   children,
 }) {
   return (
@@ -23,6 +24,7 @@ export default function ScreenShell({
       {title && <h2 className="screen-title">{title}</h2>}
       {sub && <p className="screen-sub">{sub}</p>}
       <div className="screen-body">{children}</div>
+      {footer && <div className="screen-footer">{footer}</div>}
     </section>
   );
 }

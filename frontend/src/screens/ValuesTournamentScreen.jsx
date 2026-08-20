@@ -8,13 +8,19 @@ function half(key) {
   return { key, title: meta.label, body: meta.blurb };
 }
 
-export default function ValuesTournamentScreen({ comparison, progress, busy, onChoose }) {
+export default function ValuesTournamentScreen({ comparison, progress, busy, onChoose, footer }) {
   const eyebrow = progress
     ? `step 4 · values tournament · comparison ${progress.answered + 1} of ${progress.total}`
     : "step 4 · values tournament";
 
   return (
-    <ScreenShell eyebrow={eyebrow} title="Which matters more?" glow="none" className="screen--tournament">
+    <ScreenShell
+      eyebrow={eyebrow}
+      title="Which matters more?"
+      glow="none"
+      className="screen--tournament"
+      footer={footer}
+    >
       <SplitChoice
         a={half(comparison.a)}
         b={half(comparison.b)}

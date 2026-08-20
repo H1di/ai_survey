@@ -25,12 +25,14 @@ export default function RiasecScreen({
   canGoBack,
   onSkip,
   canSkip,
+  footer,
 }) {
   return (
     <ScreenShell
       eyebrow={`step 3 · riasec interests · item ${index + 1} of ${total}`}
       title="How much would you enjoy this?"
       sub="Twelve fixed activity statements, rated for enjoyment — never job titles — scored to a Holland code. You can skip to infer interests from personality instead."
+      footer={footer}
       headerSlot={
         canGoBack ? (
           <button type="button" className="screen-back" onClick={onBack} disabled={busy}>

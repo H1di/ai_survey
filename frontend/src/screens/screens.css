@@ -478,3 +478,66 @@
   border-color: var(--gold);
   box-shadow: 0 0 0 3px var(--gold-focus);
 }
+
+.journey-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  max-width: 560px;
+  text-align: left;
+}
+
+.journey-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--gold-18);
+}
+
+.journey-number {
+  font: 400 11px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  color: var(--gold-60);
+}
+
+.journey-label {
+  flex: 1;
+  font: 600 16px/1.3 var(--font-body);
+  color: var(--text);
+}
+
+.journey-time {
+  font: 400 11px/1 var(--font-mono);
+  color: var(--text-40);
+}
+
+.journey-begin,
+.summary-cta {
+  margin-top: 30px;
+}
+
+/* Scoped under .screen: App.css still defines .summary-archetype,
+   .summary-tagline and .summary-persona at single-class specificity and is
+   imported after screens.css, so unscoped rules here would lose outright.
+   Task 14 deletes the legacy rules; the scoping stays correct either way. */
+.screen .summary-archetype {
+  margin: 0;
+  font: 900 34px/1.1 var(--font-display);
+  letter-spacing: -0.02em;
+  color: var(--gold);
+}
+
+.screen .summary-tagline {
+  margin: 8px 0 24px;
+  font: 400 14px/1.6 var(--font-body);
+  color: var(--text-72);
+}
+
+.screen .summary-persona {
+  margin: 24px 0;
+  max-width: 520px;
+  font: 400 14px/1.7 var(--font-body);
+  color: var(--text-60);
+}
