@@ -38,7 +38,13 @@ export default function RankList({ items, onReorder, disabled = false, hint = "d
           ]
             .filter(Boolean)
             .join(" ")}
-          onDragStart={() => !disabled && setDragFrom(index)}
+          onDragStart={(event) => {
+            if (disabled) return;
+            // Firefox refuses to start a drag with no payload, and jsdom's
+            // synthetic events carry no dataTransfer at all — hence the guard.
+            event.dataTransfer?.setData?.("text/plain", String(index));
+            setDragFrom(index);
+          }}
           onDragOver={(event) => {
             if (disabled || dragFrom === null) return;
             event.preventDefault();

@@ -248,7 +248,13 @@
   padding: 6px 4px;
 }
 
-.rank-list {
+/* Scoped under .screen for the same reason the hero's attribution is scoped:
+   the legacy App.css still defines .rank-list, .rank-row and .rank-label at
+   single-class specificity and is imported after ui.css, so unscoped rules
+   here would lose outright — its `border` shorthand and padding would repaint
+   these rows as the old grey boxes. Task 14 deletes the legacy rules; the
+   scoping stays correct either way. */
+.screen .rank-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -259,7 +265,7 @@
   text-align: left;
 }
 
-.rank-row {
+.screen .rank-row {
   display: flex;
   align-items: baseline;
   gap: 20px;
@@ -269,28 +275,28 @@
   transition: background var(--t-fast) ease, border-color var(--t-fast) ease;
 }
 
-.rank-row--dragging {
+.screen .rank-row--dragging {
   opacity: 0.55;
 }
 
-.rank-row--over {
+.screen .rank-row--over {
   background: var(--gold-hover);
   border-bottom-color: var(--gold);
 }
 
-.rank-number {
+.screen .rank-number {
   font: 900 30px/1 var(--font-display);
   color: var(--gold-35);
   min-width: 1.2em;
 }
 
-.rank-label {
+.screen .rank-label {
   font: 600 17px/1 var(--font-body);
   color: var(--text);
   flex: 1;
 }
 
-.rank-hint {
+.screen .rank-hint {
   font: 400 10px/1 var(--font-mono);
   letter-spacing: 0.1em;
   text-transform: uppercase;

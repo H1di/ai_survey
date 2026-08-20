@@ -55,7 +55,13 @@ describe("RankList", () => {
   it("ignores keys and drags while disabled", () => {
     const onReorder = vi.fn();
     render(<RankList items={items} onReorder={onReorder} disabled />);
-    fireEvent.keyDown(screen.getAllByRole("option")[1], { key: "ArrowUp" });
+    const rows = screen.getAllByRole("option");
+    fireEvent.keyDown(rows[1], { key: "ArrowUp" });
+    // The drag half of this test's name has to be exercised too, or a
+    // regression that drops the guard from the drag handlers goes unseen.
+    fireEvent.dragStart(rows[0]);
+    fireEvent.dragOver(rows[2]);
+    fireEvent.drop(rows[2]);
     expect(onReorder).not.toHaveBeenCalled();
   });
 });
