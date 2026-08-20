@@ -19,6 +19,7 @@ import {
   deriveArchetype,
   WORK_VALUE_AXES,
   WORK_VALUE_ORDER,
+  usMarketLine,
 } from "./lifePath";
 
 describe("whyThisFitsSections", () => {
@@ -482,5 +483,24 @@ describe("demographics one-screen helpers", () => {
   it("produces every payload when nothing is saved, which is that fallback's input", () => {
     const drafts = { sex: "female", age: "32", country: "Ireland", city: "Dublin" };
     expect(demographicsPayloads(questions, drafts, {})).toHaveLength(4);
+  });
+});
+
+describe("usMarketLine", () => {
+  it("joins salary and outlook, both flagged as US data", () => {
+    expect(
+      usMarketLine({ onet: { salary: { annualMedian: 166570 }, outlook: { category: "Bright" } } })
+    ).toBe("$166,570/yr median (US) · outlook: Bright");
+  });
+
+  it("renders whichever half is present", () => {
+    expect(usMarketLine({ onet: { salary: { annualMedian: 90000 } } })).toBe("$90,000/yr median (US)");
+    expect(usMarketLine({ onet: { outlook: { category: "Average" } } })).toBe("outlook: Average");
+  });
+
+  it("is empty when the keyless snapshot carries neither", () => {
+    expect(usMarketLine({ onet: {} })).toBe("");
+    expect(usMarketLine({})).toBe("");
+    expect(usMarketLine(null)).toBe("");
   });
 });

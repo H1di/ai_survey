@@ -12,6 +12,7 @@ import ValuesHierarchyScreen from "./screens/ValuesHierarchyScreen";
 import ExperienceScreen from "./screens/ExperienceScreen";
 import SummaryScreen from "./screens/SummaryScreen";
 import StepRail from "./screens/StepRail";
+import OutputDecision from "./screens/OutputDecision";
 import ProfilePanel from "./components/ProfileCharts";
 import DevPanel from "./components/DevPanel";
 import { captureDevToken, isDevMode } from "./devMode";
@@ -899,55 +900,13 @@ function App() {
     dockCard = {
       key: `review-${latestOutput.id}`,
       content: (
-        <div className="question-card dock-card">
-          <p className="question-category">
-            {latestOutput.orientedField}
-            {latestOutput.valuesFit && (
-              <span className="fit-badge">{latestOutput.valuesFit.overall}% values fit</span>
-            )}
-          </p>
-          <h3>{latestOutput.jobTitle}</h3>
-          <p className="dock-subtext">{latestOutput.thesis}</p>
-          {(latestOutput.onet?.salary || latestOutput.onet?.outlook?.category) && (
-            <p className="dock-subtext dock-onet-line">
-              {[
-                latestOutput.onet.salary
-                  ? `$${latestOutput.onet.salary.annualMedian.toLocaleString("en-US")}/yr median (US)`
-                  : null,
-                latestOutput.onet.outlook?.category
-                  ? `outlook: ${latestOutput.onet.outlook.category}`
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-          )}
-          <div className="question-actions">
-            <button
-              type="button"
-              className="primary-action"
-              onClick={handleAcceptOutput}
-              disabled={busy.accept || busy.refine}
-            >
-              {busy.accept ? "Building next steps…" : "Yes, this fits"}
-            </button>
-            <button
-              type="button"
-              className="ghost-action"
-              onClick={handleNotSuitable}
-              disabled={busy.accept || busy.refine}
-            >
-              {busy.refine ? "Finding another…" : "Not for me"}
-            </button>
-            <button
-              type="button"
-              className="ghost-action"
-              onClick={() => handleOutputOpen(latestOutput)}
-            >
-              Details
-            </button>
-          </div>
-        </div>
+        <OutputDecision
+          output={latestOutput}
+          busy={busy}
+          onAccept={handleAcceptOutput}
+          onRegenerate={handleNotSuitable}
+          onOpenDetails={handleOutputOpen}
+        />
       ),
     };
   }

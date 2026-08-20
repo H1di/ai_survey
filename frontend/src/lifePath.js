@@ -394,6 +394,20 @@ export function onetSection(output) {
   };
 }
 
+// The single-line US market summary shown on the output card. Salary and
+// outlook come from the live O*NET API, so both are absent keyless — and both
+// stay visibly US-flagged, because the audience is not.
+export function usMarketLine(output) {
+  const onet = output?.onet;
+  if (!onet) return "";
+  const parts = [];
+  if (onet.salary?.annualMedian) {
+    parts.push(`$${onet.salary.annualMedian.toLocaleString("en-US")}/yr median (US)`);
+  }
+  if (onet.outlook?.category) parts.push(`outlook: ${onet.outlook.category}`);
+  return parts.join(" · ");
+}
+
 // Deterministic one-liners per Big Five axis. Bands match the backend's
 // describeTraits (high >= 65, low <= 35). Neuroticism is DISPLAYED as
 // Emotional Steadiness (100 - N); the stored score keeps raw N everywhere.

@@ -541,3 +541,84 @@
   font: 400 14px/1.7 var(--font-body);
   color: var(--text-60);
 }
+
+.output-decision {
+  width: min(1100px, calc(100vw - 64px));
+  padding: 26px 0 22px;
+  text-align: center;
+  background: var(--ink-screen);
+  border-radius: var(--radius-surface);
+}
+
+.output-field {
+  margin: 0 0 30px;
+  font: 900 40px/1.05 var(--font-display);
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.output-columns {
+  display: flex;
+  align-items: stretch;
+  border-top: 1px solid var(--gold-25);
+  border-bottom: 1px solid var(--gold-25);
+  text-align: left;
+}
+
+.output-column {
+  flex: 1;
+  padding: 30px;
+  border-right: 1px solid var(--gold-25);
+}
+
+.output-column:last-child {
+  border-right: none;
+}
+
+.output-tag {
+  margin: 0 0 14px;
+  font: 500 10px/1 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.output-title {
+  margin: 0;
+  font: 700 22px/1.15 var(--font-display);
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.output-body {
+  margin: 12px 0 0;
+  font: 300 13.5px/1.6 var(--font-body);
+  color: var(--text-60);
+}
+
+.output-fit {
+  color: var(--gold-70);
+}
+
+.output-meta {
+  margin: 10px 0 0;
+  font: 400 12px/1 var(--font-body);
+  color: var(--text-45);
+}
+
+.output-trace {
+  margin: 12px 0 10px;
+  padding-left: 18px;
+  font: 300 13.5px/1.6 var(--font-body);
+  color: var(--text-60);
+}
+
+.output-actions {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 26px;
+  flex-wrap: wrap;
+}
