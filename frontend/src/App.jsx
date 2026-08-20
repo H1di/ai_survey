@@ -8,6 +8,7 @@ import BigFiveScreen from "./screens/BigFiveScreen";
 import RiasecScreen from "./screens/RiasecScreen";
 import ValuesTournamentScreen from "./screens/ValuesTournamentScreen";
 import ValuesHierarchyScreen from "./screens/ValuesHierarchyScreen";
+import ExperienceScreen from "./screens/ExperienceScreen";
 import ProfilePanel, { PersonalityRadarChart, WorkValuesRadar } from "./components/ProfileCharts";
 import DevPanel from "./components/DevPanel";
 import { captureDevToken, isDevMode } from "./devMode";
@@ -55,11 +56,6 @@ import "./App.css";
 captureDevToken();
 const DEV_MODE = isDevMode();
 import "./components/GraphView/GraphPage.css";
-
-const CV_INTENT_OPTIONS = [
-  { value: "new", label: "Something completely new" },
-  { value: "use_skills", label: "Use the skills I already have" },
-];
 
 function stepHeading(step) {
   const railEntry = JOURNEY_RAIL.find((r) => r.step === step);
@@ -155,75 +151,6 @@ function overallProgress(progress) {
   return { answered, total, percent: Math.min(100, Math.round((answered / total) * 100)) };
 }
 
-function CvCard({ mode, setMode, cvDraft, setCvDraft, busy, intent, intentBusy, onSelectIntent, onSubmitText, onUploadFile, uploadFormats }) {
-  if (mode === "paste") {
-    return (
-      <div className="question-card">
-        <div className="question-card-top">
-          <button type="button" className="ghost-action back-action" onClick={() => setMode("choice")} disabled={busy}>
-            ← Back
-          </button>
-          <p className="question-category">Your experience</p>
-        </div>
-        <h3>Paste your CV</h3>
-        <textarea
-          className="dream-input cv-input"
-          value={cvDraft}
-          maxLength={6000}
-          onChange={(e) => setCvDraft(e.target.value)}
-          placeholder="Paste the text of your CV or a summary of your experience"
-        />
-        <div className="question-actions single">
-          <button type="button" className="primary-action" onClick={onSubmitText} disabled={busy || !cvDraft.trim()}>
-            {busy ? "Analysing..." : "Analyse my CV"}
-          </button>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="question-card">
-      <p className="question-category">Your experience</p>
-      <h3>Let's factor in what you already have.</h3>
-
-      <p className="entry-prompt">Where should we start from?</p>
-      <div className="entry-options">
-        {CV_INTENT_OPTIONS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            className={`entry-option ${intent === option.value ? "selected" : ""}`}
-            onClick={() => onSelectIntent(option.value)}
-            disabled={busy || intentBusy}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="option-list">
-        <button type="button" className="option-button" onClick={() => setMode("paste")} disabled={busy || !intent}>
-          Paste my CV as text
-        </button>
-        <label className={`option-button cv-upload ${!intent ? "cv-upload-disabled" : ""}`}>
-          Upload a file ({uploadFormats.join(", ")} — max 5 MB)
-          <input
-            type="file"
-            accept={uploadFormats.join(",")}
-            hidden
-            disabled={busy || !intent}
-            onChange={(e) => e.target.files?.[0] && onUploadFile(e.target.files[0])}
-          />
-        </label>
-        <button type="button" className="option-button" onClick={() => setMode("journey")} disabled={busy || !intent}>
-          No CV — ask me 7 quick questions instead
-        </button>
-      </div>
-      {busy && <p className="dock-busy">Reading your CV…</p>}
-    </div>
-  );
-}
-
 // Side panel for output details and advice lists — same visual language as
 // the roadmap DetailPanel, but section-driven.
 function InfoPanel({ view, onClose }) {
@@ -289,7 +216,6 @@ function App() {
   const [valuesRankDraft, setValuesRankDraft] = useState([]);
   const [careerJourneyQuestions, setCareerJourneyQuestions] = useState([]);
   const [cvUploadFormats, setCvUploadFormats] = useState([".pdf", ".docx", ".txt"]);
-  const [careerJourneyAnswers, setCareerJourneyAnswers] = useState({});
   const [journeyIndex, setJourneyIndex] = useState(0);
   const [journeyDraft, setJourneyDraft] = useState("");
   const [cvMode, setCvMode] = useState("choice"); // choice | paste | journey
@@ -352,7 +278,6 @@ function App() {
     setDemoAnswers(data.demographics || {});
     setBigFiveAnswers(data.bigFiveAnswers || {});
     setRiasecAnswers(data.riasecAnswers || {});
-    setCareerJourneyAnswers(data.careerJourneyAnswers || {});
     setOutputs(data.outputs || []);
     setAcceptedOutputId(data.acceptedOutputId || null);
     setRoadmaps(data.roadmaps || {});
@@ -966,7 +891,6 @@ function App() {
     setValuesRanking(null);
     setValuesRankDraft([]);
     setCareerJourneyQuestions([]);
-    setCareerJourneyAnswers({});
     setJourneyIndex(0);
     setJourneyDraft("");
     setCvMode("choice");
@@ -1227,74 +1151,27 @@ function App() {
             />
           )}
 
-          {step === "cv" && cvMode !== "journey" && (
-            <CvCard
+          {step === "cv" && careerJourneyQuestions.length > 0 && (
+            <ExperienceScreen
               mode={cvMode}
-              setMode={setCvMode}
-              cvDraft={cvDraft}
-              setCvDraft={setCvDraft}
-              busy={busy.cv}
               intent={cvIntent}
               intentBusy={busy.cvIntent}
               onSelectIntent={handleSelectCvIntent}
-              onSubmitText={handleSubmitCvText}
+              cvDraft={cvDraft}
+              onCvDraftChange={setCvDraft}
+              onStartPaste={() => setCvMode("paste")}
+              onSubmitCvText={handleSubmitCvText}
               onUploadFile={handleUploadCv}
               uploadFormats={cvUploadFormats}
+              busy={busy.cv || busy.journey}
+              journeyQuestion={careerJourneyQuestions[journeyIndex]}
+              journeyIndex={journeyIndex}
+              journeyTotal={careerJourneyQuestions.length}
+              journeyDraft={journeyDraft}
+              onJourneyDraftChange={setJourneyDraft}
+              onSubmitJourney={() => handleSubmitJourney(journeyDraft)}
+              onStartJourney={() => setCvMode("journey")}
             />
-          )}
-
-          {step === "cv" && cvMode === "journey" && careerJourneyQuestions[journeyIndex] && (
-            <div className="question-card">
-              <div className="question-card-top">
-                <button
-                  type="button"
-                  className="ghost-action back-action"
-                  onClick={() => {
-                    if (journeyIndex === 0) {
-                      setCvMode("choice");
-                    } else {
-                      const prevQ = careerJourneyQuestions[journeyIndex - 1];
-                      setJourneyDraft(careerJourneyAnswers[prevQ.id] || "");
-                      setJourneyIndex((i) => i - 1);
-                    }
-                  }}
-                  disabled={busy.journey}
-                >
-                  ← Back
-                </button>
-                <p className="question-category">
-                  Question {journeyIndex + 1} of {careerJourneyQuestions.length}
-                </p>
-              </div>
-              <h3>{careerJourneyQuestions[journeyIndex].question}</h3>
-              <form
-                key={careerJourneyQuestions[journeyIndex].id}
-                className="question-form"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSubmitJourney(journeyDraft);
-                }}
-              >
-                <textarea
-                  autoFocus
-                  className="question-textarea"
-                  value={journeyDraft}
-                  maxLength={400}
-                  placeholder={careerJourneyQuestions[journeyIndex].placeholder}
-                  onChange={(e) => setJourneyDraft(e.target.value)}
-                  disabled={busy.journey}
-                />
-                <div className="question-actions single">
-                  <button
-                    type="submit"
-                    className="primary-action"
-                    disabled={busy.journey || !journeyDraft.trim()}
-                  >
-                    {busy.journey ? "Saving..." : "Next"}
-                  </button>
-                </div>
-              </form>
-            </div>
           )}
 
           {step === "summary" && (() => {

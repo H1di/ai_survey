@@ -351,3 +351,130 @@
 .rank-confirm {
   margin-top: 26px;
 }
+
+.intent-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 26px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.intent-pill {
+  padding: 10px 18px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--gold-20);
+  background: var(--pill-idle);
+  color: var(--text-60);
+  font: 500 11px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: color var(--t-fast) ease, border-color var(--t-fast) ease, background var(--t-fast) ease;
+}
+
+.intent-pill--on {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--ink-on-gold);
+}
+
+.experience-split {
+  position: relative;
+  width: 100%;
+  max-width: 820px;
+  transition: opacity var(--t-base) ease;
+}
+
+.experience-split--locked {
+  opacity: 0.4;
+}
+
+.dotted-rule {
+  display: block;
+}
+
+.experience-halves {
+  display: flex;
+  padding: 26px 0;
+  text-align: left;
+}
+
+.experience-half {
+  flex: 1;
+  padding-right: 30px;
+}
+
+.experience-half--b {
+  padding-right: 0;
+  padding-left: 30px;
+}
+
+.experience-rule {
+  width: 1px;
+  align-self: stretch;
+  background: var(--gold-25);
+  flex-shrink: 0;
+}
+
+.ghost-numeral {
+  font: 900 46px/1 var(--font-display);
+  color: var(--gold-35);
+  margin-bottom: 10px;
+}
+
+.experience-copy {
+  margin: 0 0 18px;
+  font: 400 15px/1.6 var(--font-body);
+  color: var(--text-72);
+}
+
+.experience-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.experience-actions .btn {
+  font-size: 12px;
+  padding: 10px 16px;
+}
+
+.link-action {
+  font: 400 12px/1.4 var(--font-body);
+  color: var(--gold-70);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  background: none;
+  padding: 0;
+}
+
+.link-action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn--locked {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.cv-paste {
+  width: 100%;
+  max-width: 640px;
+  min-height: 220px;
+  resize: vertical;
+  padding: 16px 18px;
+  margin-bottom: 22px;
+  border-radius: var(--radius-field);
+  background: var(--field);
+  border: 1px solid var(--field-border);
+  color: var(--text);
+  font: 400 14px/1.6 var(--font-body);
+  outline: none;
+}
+
+.cv-paste:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-focus);
+}
