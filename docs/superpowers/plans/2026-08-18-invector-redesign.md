@@ -3138,7 +3138,13 @@ describe("RankList", () => {
   it("ignores keys and drags while disabled", () => {
     const onReorder = vi.fn();
     render(<RankList items={items} onReorder={onReorder} disabled />);
-    fireEvent.keyDown(screen.getAllByRole("option")[1], { key: "ArrowUp" });
+    const rows = screen.getAllByRole("option");
+    fireEvent.keyDown(rows[1], { key: "ArrowUp" });
+    // The drag half of this test's name has to be exercised too, or a
+    // regression that drops the guard from the drag handlers goes unseen.
+    fireEvent.dragStart(rows[0]);
+    fireEvent.dragOver(rows[2]);
+    fireEvent.drop(rows[2]);
     expect(onReorder).not.toHaveBeenCalled();
   });
 });
@@ -3238,7 +3244,13 @@ export default function RankList({ items, onReorder, disabled = false, hint = "d
           ]
             .filter(Boolean)
             .join(" ")}
-          onDragStart={() => !disabled && setDragFrom(index)}
+          onDragStart={(event) => {
+            if (disabled) return;
+            // Firefox refuses to start a drag with no payload, and jsdom's
+            // synthetic events carry no dataTransfer at all — hence the guard.
+            event.dataTransfer?.setData?.("text/plain", String(index));
+            setDragFrom(index);
+          }}
           onDragOver={(event) => {
             if (disabled || dragFrom === null) return;
             event.preventDefault();
@@ -3270,7 +3282,13 @@ export default function RankList({ items, onReorder, disabled = false, hint = "d
 Append to `frontend/src/ui/ui.css`:
 
 ```css
-.rank-list {
+/* Scoped under .screen for the same reason the hero's attribution is scoped:
+   the legacy App.css still defines .rank-list, .rank-row and .rank-label at
+   single-class specificity and is imported after ui.css, so unscoped rules
+   here would lose outright — its `border` shorthand and padding would repaint
+   these rows as the old grey boxes. Task 14 deletes the legacy rules; the
+   scoping stays correct either way. */
+.screen .rank-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -3281,7 +3299,7 @@ Append to `frontend/src/ui/ui.css`:
   text-align: left;
 }
 
-.rank-row {
+.screen .rank-row {
   display: flex;
   align-items: baseline;
   gap: 20px;
@@ -3291,28 +3309,28 @@ Append to `frontend/src/ui/ui.css`:
   transition: background var(--t-fast) ease, border-color var(--t-fast) ease;
 }
 
-.rank-row--dragging {
+.screen .rank-row--dragging {
   opacity: 0.55;
 }
 
-.rank-row--over {
+.screen .rank-row--over {
   background: var(--gold-hover);
   border-bottom-color: var(--gold);
 }
 
-.rank-number {
+.screen .rank-number {
   font: 900 30px/1 var(--font-display);
   color: var(--gold-35);
   min-width: 1.2em;
 }
 
-.rank-label {
+.screen .rank-label {
   font: 600 17px/1 var(--font-body);
   color: var(--text);
   flex: 1;
 }
 
-.rank-hint {
+.screen .rank-hint {
   font: 400 10px/1 var(--font-mono);
   letter-spacing: 0.1em;
   text-transform: uppercase;
