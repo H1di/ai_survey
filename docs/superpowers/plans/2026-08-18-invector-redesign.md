@@ -5043,6 +5043,10 @@ grep -n "setJobCharParams\|setRankDraft\|setRefineMode\|setRefineChecks" src/App
 
 Expected after the fix: no output, and `npm run lint` down from 8 errors to 4.
 
+- [ ] **Step 3c: Give the RIASEC loading placeholder its rail back**
+
+While `riasecItems` is still loading, `App.jsx` renders a bare placeholder card instead of a screen, and Task 11's move of the rail into each screen's footer left that one render site without it — so the rail vanishes for one network round trip. Pass `footer={surveyFooter}` there too, or render the placeholder through `ScreenShell` like every other step.
+
 - [ ] **Step 4: Drop what nothing calls any more**
 
 ```bash
