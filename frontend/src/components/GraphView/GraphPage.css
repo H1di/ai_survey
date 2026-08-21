@@ -88,11 +88,13 @@
   pointer-events: none;
 }
 
-/* The dock itself stays click-through so empty space around the card never
-   blocks the canvas underneath; its one child (the animated wrapper around
-   OutputDecision) re-enables clicks for the card's own Accept/Regenerate
-   actions. Do not restyle .output-decision here — Task 12 owns that card. */
-.graph-question-dock > div {
+/* The dock stays click-through so the empty space around the card never
+   blocks the graph underneath, and the card re-enables clicks for itself.
+   Bind this to the card's own class, not to its position in the tree: the
+   previous version keyed on `.question-card`, and when the card inside the
+   dock was replaced the Accept and Regenerate buttons silently stopped
+   responding — jsdom does not implement pointer-events, so nothing caught it. */
+.graph-question-dock .output-decision {
   pointer-events: auto;
 }
 
