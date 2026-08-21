@@ -132,6 +132,7 @@
   margin-top: 16px;
 }
 
+/* Not hero-specific: also renders in the survey error row and on the graph page, where the .hero-scoped rule in screens.css does not reach. */
 .error-text {
   margin: 12px 0 0;
   color: var(--text);
@@ -160,32 +161,4 @@
   .question-actions {
     flex-direction: column;
   }
-}
-
-/* O*NET Web Services license block: badge + required attribution sentence.
-   Only rendered inside .hero (EntryScreen), where screens.css's scoped
-   `.hero .onet-attribution` rule wins the cascade and restyles the text —
-   but the layout (spacing, centering, line-wrap width) and the badge image's
-   own border reset live only here, so this stays rather than being deleted. */
-.onet-attribution {
-  margin-top: 28px;
-  text-align: center;
-  max-width: 52ch;
-}
-
-.onet-attribution img {
-  width: 130px;
-  height: 60px;
-  border: none;
-}
-
-.onet-attribution p {
-  margin: 8px 0 0;
-  font-size: 0.72rem;
-  line-height: 1.5;
-  color: var(--text-40);
-}
-
-.onet-attribution a {
-  color: inherit;
 }
