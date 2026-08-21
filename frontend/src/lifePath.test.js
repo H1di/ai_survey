@@ -5,7 +5,6 @@ import {
   firstUnansweredIndex,
   demographicsComplete,
   demographicsPayloads,
-  moveRankItem,
   moveRankItemTo,
   outputX,
   ADVICE_BLOCKS,
@@ -350,20 +349,6 @@ describe("firstUnansweredIndex", () => {
 
   it("handles empty lists", () => {
     expect(firstUnansweredIndex([], {})).toBe(0);
-  });
-});
-
-describe("moveRankItem", () => {
-  const list = ["a", "b", "c"];
-  it("swaps with the neighbour in the given direction", () => {
-    expect(moveRankItem(list, 1, -1)).toEqual(["b", "a", "c"]);
-    expect(moveRankItem(list, 1, 1)).toEqual(["a", "c", "b"]);
-  });
-  it("returns the same list at the edges and does not mutate", () => {
-    expect(moveRankItem(list, 0, -1)).toBe(list);
-    expect(moveRankItem(list, 2, 1)).toBe(list);
-    moveRankItem(list, 1, 1);
-    expect(list).toEqual(["a", "b", "c"]);
   });
 });
 

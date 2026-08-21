@@ -62,16 +62,6 @@ export function demographicsPayloads(questions, drafts = {}, saved = {}) {
   return payloads;
 }
 
-// Reorder helper for the work-values hierarchy list. Pure: returns the
-// input list unchanged when the move would fall off either end.
-export function moveRankItem(list, index, delta) {
-  const target = index + delta;
-  if (target < 0 || target >= list.length) return list;
-  const next = [...list];
-  [next[index], next[target]] = [next[target], next[index]];
-  return next;
-}
-
 // Drag reorder: lift the item at `from` and insert it at `to`. Pure, and a
 // no-op for a move that would not change anything.
 export function moveRankItemTo(list, from, to) {

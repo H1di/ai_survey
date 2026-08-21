@@ -4,6 +4,7 @@ import GraphView from "./components/GraphView";
 import { DetailPanel } from "./components/GraphView/NodeComponent";
 import Wordmark from "./ui/Wordmark";
 import BranchCanvas from "./ui/BranchCanvas";
+import ScreenShell from "./ui/ScreenShell";
 import EntryScreen from "./screens/EntryScreen";
 import JourneyIntroScreen from "./screens/JourneyIntroScreen";
 import DemographicsScreen from "./screens/DemographicsScreen";
@@ -815,8 +816,6 @@ function App() {
     setRiasecItems([]);
     setRiasecAnswers({});
     setRiasecIndex(0);
-    setJobCharParams([]);
-    setRankDraft([]);
     setValuesComparison(null);
     setValuesRanking(null);
     setValuesRankDraft([]);
@@ -829,8 +828,6 @@ function App() {
     setOutputs([]);
     setAcceptedOutputId(null);
     setRoadmaps({});
-    setRefineMode(false);
-    setRefineChecks({});
     setStageDetail(null);
     setInfoView(null);
     setProfile(null);
@@ -1000,9 +997,11 @@ function App() {
           )}
 
           {step === "riasec" && !riasecItems.length && (
-            <div className="question-card">
-              <h3>Preparing the interests quiz…</h3>
-            </div>
+            <ScreenShell
+              eyebrow="step 3 · riasec interests"
+              title="Preparing the interests quiz…"
+              footer={surveyFooter}
+            />
           )}
 
           {step === "riasec" && riasecItems[riasecIndex] && (

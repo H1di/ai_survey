@@ -6,9 +6,9 @@
   z-index: 9999;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
-  color: #d6e2f0;
-  background: #10161f;
-  border: 1px solid #2b3a4d;
+  color: var(--text);
+  background: var(--ink-screen);
+  border: 1px solid var(--gold-25);
   border-radius: 6px;
 }
 
@@ -28,13 +28,13 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
-  color: #7e93ab;
+  color: var(--text-45);
 }
 
 .dev-panel-head button {
   background: none;
   border: none;
-  color: #7e93ab;
+  color: var(--text-45);
   font-size: 14px;
   cursor: pointer;
 }
@@ -45,11 +45,11 @@
   gap: 2px 8px;
   margin: 0 0 8px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #2b3a4d;
+  border-bottom: 1px solid var(--gold-25);
 }
 
 .dev-panel-state dt {
-  color: #7e93ab;
+  color: var(--text-45);
 }
 
 .dev-panel-state dd {
@@ -67,14 +67,15 @@
   text-align: left;
   font: inherit;
   color: inherit;
-  background: #182231;
-  border: 1px solid #2b3a4d;
+  background: var(--ink-page);
+  border: 1px solid var(--gold-25);
   border-radius: 4px;
   cursor: pointer;
 }
 
 .dev-panel-targets button:hover:not(:disabled) {
-  background: #223047;
+  background: var(--gold-hover);
+  border-color: var(--gold-50);
 }
 
 .dev-panel-targets button:disabled {
@@ -84,5 +85,5 @@
 
 .dev-panel-busy {
   margin: 8px 0 0;
-  color: #7e93ab;
+  color: var(--text-45);
 }
