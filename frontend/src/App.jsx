@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import GraphView from "./components/GraphView";
 import { DetailPanel } from "./components/GraphView/NodeComponent";
+import Wordmark from "./ui/Wordmark";
+import BranchCanvas from "./ui/BranchCanvas";
 import EntryScreen from "./screens/EntryScreen";
 import JourneyIntroScreen from "./screens/JourneyIntroScreen";
 import DemographicsScreen from "./screens/DemographicsScreen";
@@ -1122,11 +1124,12 @@ function App() {
 
       {stage === "tree" && (
         <div className="graph-page">
+          <BranchCanvas preset="graph" className="graph-branch" reducedMotion={REDUCED_MOTION} />
           <div className="graph-header">
-            <button type="button" className="graph-back" onClick={resetAll}>
+            <button type="button" className="screen-back" onClick={resetAll}>
               ← Restart
             </button>
-            <span className="graph-logo">Life Path Explorer</span>
+            <Wordmark />
             <span className="graph-header-side">
               {!aiEnabled && <span className="demo-notice demo-notice-inline">Demo mode</span>}
               <button

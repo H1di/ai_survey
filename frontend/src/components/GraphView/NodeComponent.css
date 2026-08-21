@@ -1,6 +1,6 @@
 .node {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
+  background: var(--ink-screen);
+  border: 1px solid var(--gold-20);
   border-radius: 2px;
   padding: 20px 24px;
   min-width: 200px;
@@ -10,22 +10,26 @@
 }
 
 .node:hover {
-  border-color: var(--color-border-strong);
-  box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+  box-shadow: 0 0 20px var(--gold-15);
 }
 
 .node--me {
-  min-width: 80px;
-  max-width: 80px;
-  min-height: 80px;
-  border-radius: 50%;
+  width: 96px;
+  height: 96px;
+  min-width: 0;
+  max-width: none;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: none;
-  background: var(--color-bg);
+  border-radius: 50%;
+  border: 1.5px solid var(--gold-60);
+  background: var(--gold-wash);
+  box-shadow: 0 0 24px rgba(255, 217, 140, 0.15);
+  font: 700 15px/1 var(--font-display);
+  color: var(--gold);
   position: relative;
+  cursor: default;
 }
 
 .me-ring {
@@ -39,7 +43,7 @@
 
 .me-ring circle {
   fill: none;
-  stroke: var(--color-text);
+  stroke: var(--gold);
   stroke-width: 1;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
@@ -55,14 +59,18 @@
   animation: me-label-fade 400ms ease-out 1150ms forwards;
 }
 
-@keyframes me-label-fade {
-  to { opacity: 1; }
+.node-me-caption {
+  position: absolute;
+  top: calc(100% + 14px);
+  white-space: nowrap;
+  font: 500 10px/1 var(--font-mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold-50);
 }
 
-.node-me-label {
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+@keyframes me-label-fade {
+  to { opacity: 1; }
 }
 
 .node-archetype {
@@ -70,106 +78,15 @@
   font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--color-text-faint);
+  color: var(--gold);
   margin-bottom: 8px;
 }
 
 .node-title {
-  font-size: 15px;
-  font-weight: 500;
+  font: 900 34px/1.1 var(--font-display);
   letter-spacing: -0.01em;
-  line-height: 1.3;
   margin-bottom: 14px;
-  color: var(--color-text);
-}
-
-.node--direction {
-  min-width: 220px;
-  max-width: 250px;
-  border-color: var(--color-border-strong);
-  animation: node-pop 180ms ease-out both;
-  animation-delay: var(--appear-delay, 0ms);
-}
-
-.node--profession {
-  min-width: 210px;
-  max-width: 240px;
-  text-align: left;
-  cursor: pointer;
-  animation: node-pop 180ms ease-out both;
-  animation-delay: var(--appear-delay, 0ms);
-}
-
-.node--profession:hover {
-  border-color: var(--color-border-strong);
-  box-shadow: 0 2px 16px rgba(0,0,0,0.06);
-}
-
-.node--profession-selected {
-  border-color: var(--color-accent);
-  box-shadow: 0 2px 16px var(--color-accent-soft);
-}
-
-.node-profession-summary {
-  font-size: 12px;
-  color: var(--color-text-muted);
-  line-height: 1.45;
-}
-
-.node--roadmap {
-  min-width: 230px;
-  max-width: 260px;
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  text-align: left;
-  cursor: pointer;
-  padding: 16px 20px;
-  animation: node-pop 180ms ease-out both;
-  animation-delay: var(--appear-delay, 0ms);
-}
-
-.node--roadmap:hover {
-  border-color: var(--color-border-strong);
-  box-shadow: 0 2px 16px rgba(0,0,0,0.06);
-}
-
-.node--roadmap-last {
-  border-color: var(--color-accent);
-}
-
-.node-roadmap-index {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--color-accent);
-  border: 1px solid var(--color-accent);
-  border-radius: 50%;
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-
-.node-roadmap-body {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.node-roadmap-title {
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 1.3;
-  color: var(--color-text);
-}
-
-.node-roadmap-timeframe {
-  font-size: 11px;
-  color: var(--color-text-faint);
+  color: var(--text);
 }
 
 .node--loading {
@@ -193,7 +110,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--color-text-faint);
+  background: var(--gold-40);
   animation: pulse 1.2s infinite;
 }
 
@@ -205,14 +122,18 @@
   50% { opacity: 1; transform: scale(1); }
 }
 
+/* Side panel for a roadmap step's detail, and (via InfoPanel in App.jsx,
+   which shares these exact class names) for an output's full trace and the
+   advice-block lists. The O*NET attribution footnote rides in here as
+   .detail-footnote — keep it visible wherever O*NET data shows. */
 .detail-panel {
   position: fixed;
   right: 0;
   top: 0;
   bottom: 0;
   width: 360px;
-  background: var(--color-bg);
-  border-left: 1px solid var(--color-border);
+  background: var(--ink-screen);
+  border-left: 1px solid var(--gold-20);
   padding: 48px 40px;
   overflow-y: auto;
   z-index: 100;
@@ -229,43 +150,40 @@
   top: 24px;
   right: 24px;
   font-size: 20px;
-  color: var(--color-text-muted);
+  color: var(--text-45);
   line-height: 1;
-  transition: color var(--transition);
+  transition: color var(--t-fast) ease;
 }
 
 .detail-close:hover {
-  color: var(--color-text);
+  color: var(--gold);
 }
 
 .detail-archetype {
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
+  font: 500 10px/1 var(--font-mono);
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--color-text-faint);
+  color: var(--gold-60);
   margin-bottom: 8px;
 }
 
 .detail-title {
-  font-size: 22px;
-  font-weight: 400;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  font: 700 22px/1.2 var(--font-display);
+  letter-spacing: -0.01em;
   margin-bottom: 24px;
+  color: var(--text);
 }
 
 .detail-desc {
-  font-size: 14px;
-  color: var(--color-text-muted);
-  line-height: 1.7;
+  font: 300 14px/1.7 var(--font-body);
+  color: var(--text-60);
   margin-bottom: 32px;
 }
 
 .detail-section {
   margin-bottom: 24px;
   padding-bottom: 24px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--gold-15);
 }
 
 .detail-section:last-child {
@@ -273,26 +191,23 @@
 }
 
 .detail-section h4 {
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font: 500 11px/1 var(--font-mono);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--color-text-faint);
+  color: var(--gold-60);
   margin-bottom: 10px;
 }
 
 .detail-section p {
-  font-size: 13px;
-  color: var(--color-text-muted);
-  line-height: 1.6;
+  font: 300 13px/1.6 var(--font-body);
+  color: var(--text-60);
 }
 
 /* CC-BY attribution line under the O*NET data section */
 .detail-section .detail-footnote {
   margin-top: 10px;
-  font-size: 11px;
-  color: var(--color-text-faint);
-  line-height: 1.5;
+  font: 300 11px/1.5 var(--font-body);
+  color: var(--text-30);
 }
 
 .detail-section ul {
@@ -303,9 +218,8 @@
 }
 
 .detail-section ul li {
-  font-size: 13px;
-  color: var(--color-text-muted);
-  line-height: 1.5;
+  font: 300 13px/1.5 var(--font-body);
+  color: var(--text-60);
   padding-left: 16px;
   position: relative;
 }
@@ -314,7 +228,7 @@
   content: '—';
   position: absolute;
   left: 0;
-  color: var(--color-text-faint);
+  color: var(--gold-50);
 }
 
 /* Fast pop at the moment the edge's line arrives (delay set per-node via --appear-delay) */
@@ -324,8 +238,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .node--direction,
-  .node--profession,
+  .node--output,
+  .node--advice,
   .node--roadmap {
     animation: none;
   }
@@ -341,45 +255,104 @@
 
 /* Output + advice nodes (v2 output loop) */
 .node--output {
+  max-width: 480px;
   width: 250px;
+  padding: 8px 0 0 30px;
+  border: none;
+  border-left: 2px solid var(--gold);
+  border-radius: 0;
+  background: none;
   cursor: pointer;
   text-align: left;
+  animation: node-pop 180ms ease-out both;
+  animation-delay: var(--appear-delay, 0ms);
 }
-.node--output-latest { box-shadow: 0 0 0 2px rgba(134, 59, 255, 0.35); }
-.node--output-accepted { box-shadow: 0 0 0 2px #863bff; }
+.node--output-latest { box-shadow: 0 0 0 2px var(--gold-40); }
+.node--output-accepted { box-shadow: 0 0 0 2px var(--positive); }
 .node-fit-badge {
   display: inline-block;
   margin-top: 6px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(134, 59, 255, 0.12);
-  color: #863bff;
-  font-weight: 600;
-  font-size: 11px;
+  padding: 0;
+  font: 700 10px/1 var(--font-display);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--gold);
+  background: none;
 }
-.node-top-values {
-  margin: 6px 0 0;
-  font-size: 11px;
-  opacity: 0.7;
+.node-top-values,
+.node-advice-count,
+.node-roadmap-timeframe {
+  font: 400 11px/1 var(--font-mono);
+  color: var(--text-45);
+}
+.node-top-values,
+.node-advice-count {
+  display: inline-block;
+  margin-top: 6px;
 }
 .node-accepted-tag {
   display: inline-block;
   margin-top: 6px;
   margin-left: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  color: #863bff;
+  font: 700 11px/1 var(--font-display);
+  letter-spacing: 0.03em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  color: var(--positive);
+  background: none;
 }
 .node--advice {
   width: 220px;
+  padding: 18px 22px;
+  border: none;
+  border-top: 1px solid var(--gold-20);
+  border-bottom: 1px solid var(--gold-20);
+  border-right: 1px solid var(--gold-20);
+  border-radius: 0;
+  background: none;
   cursor: pointer;
   text-align: left;
+  animation: node-pop 180ms ease-out both;
+  animation-delay: var(--appear-delay, 0ms);
 }
-.node-advice-count {
-  display: inline-block;
-  margin-top: 6px;
-  font-size: 11px;
-  opacity: 0.7;
+
+.node--roadmap {
+  width: 360px;
+  padding: 10px 0;
+  border: none;
+  border-bottom: 1px solid var(--gold-15);
+  border-radius: 0;
+  background: none;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  cursor: pointer;
+  text-align: left;
+  animation: node-pop 180ms ease-out both;
+  animation-delay: var(--appear-delay, 0ms);
+}
+
+.node-roadmap-index {
+  font: 900 20px/1 var(--font-display);
+  color: var(--gold-40);
+  min-width: 24px;
+  flex-shrink: 0;
+}
+
+.node--roadmap-last .node-roadmap-index {
+  color: var(--gold);
+}
+
+.node--roadmap-last {
+  border-bottom: none;
+}
+
+.node-roadmap-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.node-roadmap-title {
+  font: 600 14px/1.3 var(--font-body);
+  color: var(--text);
 }

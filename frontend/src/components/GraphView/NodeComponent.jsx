@@ -8,6 +8,7 @@ export function MeNode() {
         <circle cx="40" cy="40" r="39" pathLength="1" />
       </svg>
       <div className="node-me-label">Me</div>
+      <div className="node-me-caption">invector · life path model</div>
       <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
       <Handle type="source" position={Position.Left} style={{ opacity: 0 }} />
       <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />

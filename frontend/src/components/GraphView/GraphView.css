@@ -3,8 +3,17 @@
   height: 100%;
 }
 
+/* Let the glowing branch canvas behind the graph show through. */
+.react-flow,
+.react-flow__pane,
+.react-flow__renderer {
+  background: transparent;
+}
+
 .react-flow__attribution {
-  display: none;
+  background: transparent;
+  color: var(--text-30);
+  font: 400 10px/1 var(--font-mono);
 }
 
 .graph-controls {
@@ -13,28 +22,31 @@
   box-shadow: none;
 }
 
-.graph-controls button {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border) !important;
-  border-radius: 2px !important;
-  color: var(--color-text-muted);
-  box-shadow: none !important;
-  width: 28px;
-  height: 28px;
+.react-flow__controls-button {
+  background: var(--ink-screen);
+  border-bottom: 1px solid var(--gold-20);
+  fill: var(--gold-70);
 }
 
-.graph-controls button:hover {
-  background: var(--color-surface);
-  color: var(--color-text);
+.react-flow__controls-button:hover {
+  background: var(--gold-hover);
+  fill: var(--gold);
+}
+
+/* Handles are load-bearing for edge attachment but stay invisible. */
+.react-flow__handle {
+  opacity: 0;
 }
 
 .react-flow__edge-path {
-  stroke: var(--color-border);
+  stroke: var(--gold-20);
   stroke-width: 1;
 }
 
 .branch-edge {
   fill: none;
+  stroke: var(--gold-40);
+  stroke-width: 1.5;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
   /* duration must equal EDGE_DRAW_MS in App.jsx */
@@ -45,16 +57,11 @@
   to { stroke-dashoffset: 0; }
 }
 
-/* Chosen-path highlight */
-.branch-edge--active {
-  stroke: var(--color-accent);
-  stroke-width: 1.5;
-}
-
 /* Continuous downstream pulse on the chosen path; fades in only after the
-   draw-in completes (--flow-delay = edge delay + EDGE_DRAW_MS). */
+   draw-in completes (--flow-delay = edge delay + EDGE_DRAW_MS). Its brighter
+   gold, over the resting gold-40 hairline, is what marks the chosen path now. */
 .branch-edge-flow {
-  stroke: var(--color-accent);
+  stroke: var(--gold);
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-dasharray: 6 10;

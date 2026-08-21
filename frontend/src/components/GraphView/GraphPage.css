@@ -3,7 +3,24 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--color-bg);
+  background: var(--ink-graph);
+}
+
+/* The glowing branch sits behind everything else on the page — decorative,
+   never interactive (BranchCanvas is already pointer-events: none). */
+.graph-branch {
+  opacity: 0.55;
+  z-index: 0;
+}
+
+/* .graph-question-dock is intentionally left out of this rule: it is already
+   position: absolute (how it floats centered at the bottom of the page), and
+   forcing it to position: relative here would collapse that into normal flow.
+   z-index alone is enough to keep it above the branch canvas. */
+.graph-header,
+.graph-canvas {
+  position: relative;
+  z-index: 1;
 }
 
 .graph-header {
@@ -11,32 +28,24 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 24px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--gold-20);
   flex-shrink: 0;
   gap: 16px;
 }
 
-.graph-back {
-  font-size: 13px;
-  color: var(--color-text-muted);
-  transition: color var(--transition);
-}
-
-.graph-back:hover {
-  color: var(--color-text);
-}
-
-.graph-logo {
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
+/* .screen-back (ui.css) is written for a full-height .screen, where it floats
+   near the top-left corner. Inside this short flex header it needs to sit in
+   the row instead, so it stays reachable next to the wordmark rather than
+   floating below the header (its containing block, once .graph-header gets
+   position: relative above, becomes the header itself, not the whole page). */
+.graph-header .screen-back {
+  position: static;
 }
 
 .graph-hint {
-  font-size: 12px;
-  color: var(--color-text-faint);
+  font: 400 11px/1 var(--font-mono);
+  letter-spacing: 0.06em;
+  color: var(--text-40);
 }
 
 .graph-header-side {
@@ -46,79 +55,27 @@
 }
 
 .graph-profile-toggle {
-  font-size: 12px;
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border);
-  border-radius: 2px;
-  padding: 5px 12px;
-  transition: all var(--transition);
+  font: 500 11px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-60);
+  background: var(--pill-idle);
+  border: 1px solid var(--gold-20);
+  border-radius: var(--radius-pill);
+  padding: 8px 14px;
+  transition: color var(--t-fast) ease, border-color var(--t-fast) ease,
+    background var(--t-fast) ease;
 }
 
 .graph-profile-toggle:hover,
 .graph-profile-toggle.active {
-  color: var(--color-accent);
-  border-color: var(--color-accent);
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--ink-on-gold);
 }
 
 .graph-canvas {
   flex: 1;
-  position: relative;
-}
-
-.graph-status {
-  position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 13px;
-  color: var(--color-text-muted);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  padding: 8px 16px;
-  border-radius: 2px;
-  z-index: 50;
-}
-
-.graph-loading {
-  height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.graph-loading-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 24px;
-}
-
-.graph-loading-inner p {
-  font-size: 14px;
-  color: var(--color-text-faint);
-  letter-spacing: 0.02em;
-}
-
-.graph-loading-dots {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.graph-loading-dots span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-text);
-  animation: pulse 1.2s infinite;
-}
-
-.graph-loading-dots span:nth-child(2) { animation-delay: 0.2s; }
-.graph-loading-dots span:nth-child(3) { animation-delay: 0.4s; }
-
-@keyframes pulse {
-  0%, 100% { opacity: 0.2; transform: scale(0.7); }
-  50% { opacity: 1; transform: scale(1); }
 }
 
 .graph-question-dock {
@@ -126,72 +83,17 @@
   left: 50%;
   bottom: 32px;
   transform: translateX(-50%);
-  z-index: 150;
-  width: min(560px, calc(100vw - 48px));
+  z-index: 1;
+  width: min(1100px, calc(100vw - 48px));
   pointer-events: none;
 }
 
-.graph-question-dock .question-card {
-  background: var(--color-bg);
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.08);
-  margin: 0;
+/* The dock itself stays click-through so empty space around the card never
+   blocks the canvas underneath; its one child (the animated wrapper around
+   OutputDecision) re-enables clicks for the card's own Accept/Regenerate
+   actions. Do not restyle .output-decision here — Task 12 owns that card. */
+.graph-question-dock > div {
   pointer-events: auto;
-}
-
-/* The manual direction picker lists the whole 15-direction catalog —
-   scroll inside the dock instead of growing past the viewport. */
-.graph-question-dock .option-list {
-  max-height: 38vh;
-  overflow-y: auto;
-}
-
-.dock-subtext {
-  font-size: 13px;
-  color: var(--color-text-muted);
-  line-height: 1.5;
-  margin-bottom: 20px;
-}
-
-.dock-busy {
-  font-size: 12px;
-  color: var(--color-text-faint);
-  font-style: italic;
-  margin-top: 12px;
-}
-
-/* Page 3 accent — scoped so Pages 1-2 buttons stay monochrome */
-.graph-page .primary-action {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #ffffff;
-}
-
-.graph-page .primary-action:hover:enabled {
-  background: var(--color-accent-strong);
-  border-color: var(--color-accent-strong);
-  color: #ffffff;
-}
-
-.graph-question-dock .question-category {
-  color: var(--color-accent);
-}
-
-.dock-card .dock-textarea {
-  width: 100%;
-  min-height: 72px;
-  resize: vertical;
-  border: 1px solid var(--color-border);
-  border-radius: 2px;
-  padding: 10px 12px;
-  font-family: inherit;
-  font-size: 13px;
-  color: var(--color-text);
-  background: var(--color-bg);
-}
-
-.dock-card .dock-textarea:focus {
-  outline: none;
-  border-color: var(--color-accent);
 }
 
 /* Small screens: the header stacks into two clean rows instead of a broken

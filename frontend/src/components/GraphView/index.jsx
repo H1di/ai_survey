@@ -25,7 +25,7 @@ const edgeTypes = {
 };
 
 const defaultEdgeOptions = {
-  style: { stroke: '#999', strokeWidth: 1 },
+  style: { stroke: 'var(--gold-40)', strokeWidth: 1.5 },
   type: 'branch',
 };
 
@@ -87,7 +87,7 @@ export default function GraphView({ nodes: externalNodes, edges: externalEdges, 
         maxZoom={2}
         attributionPosition="bottom-left"
       >
-        <Background color="#f0f0f0" gap={32} size={1} />
+        <Background color="var(--gold-15)" gap={32} size={1} />
         <Controls showInteractive={false} className="graph-controls" />
         <CameraDirector focusKey={focusKey} focusNodeIds={focusNodeIds} />
       </ReactFlow>
