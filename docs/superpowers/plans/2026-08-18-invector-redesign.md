@@ -4926,11 +4926,28 @@ In `GraphPage.css`, set the page background to `var(--ink-graph)`, give `.graph-
   z-index: 0;
 }
 
+/* The dock is deliberately left out of the position rule below: it is already
+   position: absolute, which is how it floats centred at the bottom, and
+   forcing it to relative would drop it back into normal flow. z-index alone
+   keeps it above the canvas. */
 .graph-header,
-.graph-canvas,
-.graph-question-dock {
+.graph-canvas {
   position: relative;
   z-index: 1;
+}
+
+.graph-question-dock {
+  z-index: 1;
+}
+
+/* The dock stays click-through so the empty space around the card never
+   blocks the graph underneath, and the card re-enables clicks for itself.
+   Bind this to the card's own class, not to its position in the tree: the
+   previous version keyed on `.question-card`, and when the card inside the
+   dock was replaced the Accept and Regenerate buttons silently stopped
+   responding — jsdom does not implement pointer-events, so nothing caught it. */
+.graph-question-dock .output-decision {
+  pointer-events: auto;
 }
 ```
 
