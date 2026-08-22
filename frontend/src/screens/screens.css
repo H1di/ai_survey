@@ -542,6 +542,16 @@
   color: var(--text-60);
 }
 
+/* Both radars are ResponsiveContainer width="100%" inside .screen-body, a
+   centred flex column — so "100%" resolves against the item's shrink-to-fit
+   width, which is just the chart title. The six-axis work-values radar
+   collapsed to 178px and clipped four of its own axis labels at every
+   viewport width. Pin the box; the graph's profile panel constrains
+   .profile-chart itself and is not under .screen. */
+.screen .profile-chart {
+  width: min(100%, 460px);
+}
+
 .output-decision {
   width: min(1100px, calc(100vw - 64px));
   padding: 26px 0 22px;
@@ -621,4 +631,102 @@
   justify-content: center;
   margin-top: 26px;
   flex-wrap: wrap;
+}
+
+/* ---------------------------------------------------------------------------
+   Breakpoints (spec section 8).
+
+   These live at the end of screens.css, not next to the components they
+   override, because Vite emits ui.css before screens.css: a media query adds
+   no specificity, so an unmediated `.hero-title { font: 900 68px ... }` in
+   screens.css silently beat `@media (max-width: 900px) { .hero-title {
+   font-size: 40px } }` in ui.css and the headline stayed 68px at every width.
+   Keeping every breakpoint in the last stylesheet is what makes them win.
+   --------------------------------------------------------------------------- */
+
+@media (max-width: 1200px) {
+  .hero-title {
+    font-size: 54px;
+  }
+
+  .screen-title {
+    font-size: 34px;
+  }
+
+  .screen--tournament .screen-title {
+    font-size: 36px;
+  }
+
+  .split-title {
+    font-size: 28px;
+  }
+}
+
+@media (max-width: 900px) {
+  .screen {
+    padding: 76px 24px 48px;
+  }
+
+  .hero-body {
+    padding: 40px 24px 0;
+  }
+
+  .hero-title {
+    font-size: 40px;
+  }
+
+  .screen-title {
+    font-size: 28px;
+  }
+
+  .demo-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .split,
+  .experience-halves,
+  .output-columns {
+    flex-direction: column;
+  }
+
+  .split-rule,
+  .experience-rule {
+    width: 100%;
+    height: 1px;
+  }
+
+  .split-rule-label {
+    display: none;
+  }
+
+  .experience-half,
+  .experience-half--b {
+    padding: 0 0 24px;
+  }
+
+  .output-column {
+    border-right: none;
+    border-bottom: 1px solid var(--gold-25);
+  }
+
+  /* Stacking .output-columns roughly triples the dock's height. The dock is
+     absolutely positioned against the graph page and the page itself does not
+     scroll, so at this width the eyebrow, the field headline and the whole
+     "Oriented field" column sat above the viewport with no way to reach them.
+     Cap the card to the viewport and let it scroll itself. */
+  .output-decision {
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .likert {
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+  }
+
+  .likert-option {
+    width: 84px;
+  }
 }

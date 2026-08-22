@@ -4998,7 +4998,13 @@ Remove every rule from `App.css` whose selector appears only in that list. What 
 
 - [ ] **Step 3: Add the breakpoints**
 
-Append to `frontend/src/ui/ui.css`:
+Append to the **end of `frontend/src/screens/screens.css`**, not to `ui.css`.
+Vite emits `ui.css` before `screens.css`, and a media query adds no
+specificity, so an unmediated `.hero-title { font: 900 68px/1.05 ... }` in
+`screens.css` beats `@media (max-width: 900px) { .hero-title { font-size:
+40px } }` in `ui.css` outright. Written into `ui.css` first, 15 of these
+declarations never applied at any width — the H1 stayed 68px on a 380px
+screen and overflowed it. Every breakpoint belongs in the last stylesheet:
 
 ```css
 @media (max-width: 1200px) {

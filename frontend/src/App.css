@@ -1,18 +1,33 @@
+/* No padding, matching the mockup's zero-padding body: .hero, .screen and
+   .graph-page are each min-height/height 100vh and carry their own padding.
+   The legacy 48px inset framed every full-bleed screen in --ink-page, forced a
+   ~96px page scroll on every step, and pushed the graph's bottom dock — Yes /
+   No included — below the fold. */
 .app-shell {
   min-height: 100vh;
-  padding: 48px 24px;
   color: var(--text);
   background: var(--ink-page);
 }
 
+/* Stage wrapper only. The Invector screens are full-bleed and cap their own
+   content blocks, so the legacy 1080px box letterboxed every survey step in
+   --ink-page while the hero and the graph page ran edge to edge. `relative` is
+   what the screen's top-left Back control (deviation 9) positions against. */
 .questions-screen {
-  width: min(1080px, 100%);
-  margin: 0 auto;
+  position: relative;
+  width: 100%;
   animation: fade-in 220ms ease;
 }
 
+/* The Back control and the .screen that follows it are both positioned with
+   z-index: auto, so without this the later sibling paints over the button and
+   swallows every click on it. */
+.questions-screen > .screen-back {
+  z-index: 2;
+}
+
 .restore-hint {
-  min-height: calc(100vh - 96px);
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -154,10 +169,6 @@
 }
 
 @media (max-width: 760px) {
-  .app-shell {
-    padding: 28px 14px;
-  }
-
   .question-actions {
     flex-direction: column;
   }

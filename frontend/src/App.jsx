@@ -961,6 +961,12 @@ function App() {
 
       {stage === "survey" && (
         <section className="questions-screen">
+          {/* Deviation 9: the Back control lives in the screen's top-left, the
+              same place and treatment the graph page uses. */}
+          <button type="button" className="screen-back" onClick={resetAll}>
+            ← Restart
+          </button>
+
           {!aiEnabled && (
             <p className="demo-notice">
               Demo mode — suggestions come from fixed rules, not AI.
@@ -1101,12 +1107,6 @@ function App() {
               </div>
             </div>
           )}
-
-          <div className="bottom-actions">
-            <button type="button" className="ghost-action" onClick={resetAll}>
-              Restart
-            </button>
-          </div>
 
           {error && (
             <div className="error-row">

@@ -244,14 +244,6 @@
   }
 }
 
-/* Small screens: bigger tap targets for the roadmap chain. */
-@media (max-width: 600px) {
-  .node--roadmap {
-    padding: 20px 22px;
-    min-width: 250px;
-  }
-}
-
 /* Output + advice nodes (v2 output loop) */
 .node--output {
   max-width: 480px;
@@ -354,4 +346,14 @@
 .node-roadmap-title {
   font: 600 14px/1.3 var(--font-body);
   color: var(--text);
+}
+
+/* Small screens: a taller tap target for the roadmap chain. The rule sits at
+   the end of the file because .node--roadmap's own padding is declared below
+   the old position of this block, and a media query adds no specificity — the
+   previous card-era override (padding: 20px 22px) never applied at all. */
+@media (max-width: 600px) {
+  .node--roadmap {
+    padding: 16px 0;
+  }
 }
