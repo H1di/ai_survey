@@ -11,19 +11,10 @@
 
 /* Stage wrapper only. The Invector screens are full-bleed and cap their own
    content blocks, so the legacy 1080px box letterboxed every survey step in
-   --ink-page while the hero and the graph page ran edge to edge. `relative` is
-   what the screen's top-left Back control (deviation 9) positions against. */
+   --ink-page while the hero and the graph page ran edge to edge. */
 .questions-screen {
-  position: relative;
   width: 100%;
   animation: fade-in 220ms ease;
-}
-
-/* The Back control and the .screen that follows it are both positioned with
-   z-index: auto, so without this the later sibling paints over the button and
-   swallows every click on it. */
-.questions-screen > .screen-back {
-  z-index: 2;
 }
 
 .restore-hint {
@@ -87,7 +78,6 @@
   margin-top: 0;
 }
 
-.primary-action,
 .ghost-action {
   appearance: none;
   border: 1px solid var(--gold-25);
@@ -103,17 +93,6 @@
     transform 160ms ease, box-shadow 160ms ease;
 }
 
-.primary-action {
-  background: var(--gold);
-  border-color: var(--gold);
-  color: var(--ink-on-gold);
-}
-
-.primary-action:hover:enabled {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 30px rgba(255, 217, 140, 0.35);
-}
-
 .ghost-action {
   background: var(--ink-page);
   color: var(--text-60);
@@ -122,44 +101,6 @@
 .ghost-action:hover:enabled {
   border-color: var(--gold-50);
   color: var(--gold);
-}
-
-.primary-action:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.question-card {
-  border: 1px solid var(--gold-25);
-  border-radius: 26px;
-  padding: 24px;
-  min-height: 280px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.question-card h3 {
-  margin: 0;
-  font-size: clamp(1.45rem, 2.8vw, 2rem);
-  line-height: 1.22;
-  letter-spacing: -0.01em;
-  font-weight: 500;
-}
-
-.question-actions {
-  margin-top: auto;
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.question-actions.single {
-  margin-top: 0;
-}
-
-.bottom-actions {
-  margin-top: 16px;
 }
 
 /* Not hero-specific: also renders in the survey error row and on the graph page, where the .hero-scoped rule in screens.css does not reach. */
@@ -180,11 +121,5 @@
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@media (max-width: 760px) {
-  .question-actions {
-    flex-direction: column;
   }
 }

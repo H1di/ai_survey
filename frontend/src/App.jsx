@@ -148,6 +148,7 @@ function App() {
   const [careerJourneyQuestions, setCareerJourneyQuestions] = useState([]);
   const [cvUploadFormats, setCvUploadFormats] = useState([".pdf", ".docx", ".txt"]);
   const [journeyIndex, setJourneyIndex] = useState(0);
+  const [journeyAnswers, setJourneyAnswers] = useState({});
   const [journeyDraft, setJourneyDraft] = useState("");
   const [cvMode, setCvMode] = useState("choice"); // choice | paste | journey
   const [cvDraft, setCvDraft] = useState("");
@@ -209,6 +210,7 @@ function App() {
     setDemoAnswers(data.demographics || {});
     setBigFiveAnswers(data.bigFiveAnswers || {});
     setRiasecAnswers(data.riasecAnswers || {});
+    setJourneyAnswers(data.careerJourneyAnswers || {});
     setOutputs(data.outputs || []);
     setAcceptedOutputId(data.acceptedOutputId || null);
     setRoadmaps(data.roadmaps || {});
@@ -561,6 +563,20 @@ function App() {
     }
   };
 
+  // Back on the journey: step to the previous question with its saved answer
+  // restored, or leave the journey entirely from the first one. Answers live on
+  // the server, so nothing is lost either way — re-answering overwrites.
+  const handleJourneyBack = () => {
+    if (journeyIndex <= 0) {
+      setCvMode("choice");
+      setJourneyDraft("");
+      return;
+    }
+    const prev = careerJourneyQuestions[journeyIndex - 1];
+    setJourneyDraft((prev && journeyAnswers[prev.id]) || "");
+    setJourneyIndex((i) => i - 1);
+  };
+
   const handleSubmitJourney = async (rawValue) => {
     if (!sessionId) return;
     const q = careerJourneyQuestions[journeyIndex];
@@ -821,6 +837,7 @@ function App() {
     setValuesRankDraft([]);
     setCareerJourneyQuestions([]);
     setJourneyIndex(0);
+    setJourneyAnswers({});
     setJourneyDraft("");
     setCvMode("choice");
     setCvDraft("");
@@ -841,16 +858,18 @@ function App() {
       riasecStart: false,
       riasec: false,
       riasecSkip: false,
-        values: false,
+      values: false,
       valuesConfirm: false,
       summary: false,
-        cv: false,
+      cv: false,
       cvIntent: false,
       journey: false,
       enterTree: false,
       accept: false,
       roadmap: false,
       refine: false,
+      goto: false,
+      dev: false,
     });
   };
 
@@ -934,6 +953,12 @@ function App() {
         busy={busy.goto}
         onNavigate={handleRailNavigate}
       />
+      {/* Restart sits with the rail, not in the screen's top-left: deviation 9
+          gives that slot to the per-step Back, and the two are the same
+          absolutely-positioned box. */}
+      <button type="button" className="screen-restart" onClick={resetAll}>
+        Restart
+      </button>
     </>
   );
 
@@ -961,12 +986,6 @@ function App() {
 
       {stage === "survey" && (
         <section className="questions-screen">
-          {/* Deviation 9: the Back control lives in the screen's top-left, the
-              same place and treatment the graph page uses. */}
-          <button type="button" className="screen-back" onClick={resetAll}>
-            ← Restart
-          </button>
-
           {!aiEnabled && (
             <p className="demo-notice">
               Demo mode — suggestions come from fixed rules, not AI.
@@ -1067,11 +1086,19 @@ function App() {
               onSubmitJourney={() => {
                 // Answering the B-side question is the commitment to the
                 // journey path — without this the eyebrow's counter never
-                // starts, even as journeyIndex advances underneath it.
+                // starts, even as journeyIndex advances underneath it. Guard on
+                // the same emptiness handleSubmitJourney checks, or Enter on an
+                // empty field commits the path and records nothing.
+                if (!journeyDraft.trim()) return;
                 setCvMode("journey");
                 handleSubmitJourney(journeyDraft);
               }}
               onStartJourney={() => setCvMode("journey")}
+              onBackToChoice={() => {
+                setCvMode("choice");
+                setCvDraft("");
+              }}
+              onJourneyBack={handleJourneyBack}
               footer={surveyFooter}
             />
           )}
@@ -1092,20 +1119,22 @@ function App() {
           )}
 
           {step === "tree" && (
-            <div className="question-card">
-              <h3>Assessment complete.</h3>
-              <p>You're ready to generate your first life path branch.</p>
-              <div className="question-actions single">
-                <button
-                  type="button"
-                  className="primary-action"
-                  onClick={handleEnterLifePath}
-                  disabled={busy.enterTree}
-                >
-                  {busy.enterTree ? "Preparing..." : "Run Life Path Engine"}
-                </button>
-              </div>
-            </div>
+            <ScreenShell
+              eyebrow="assessment complete"
+              title="Assessment complete."
+              sub="You're ready to generate your first life path branch."
+              glow="center"
+              footer={surveyFooter}
+            >
+              <button
+                type="button"
+                className="btn btn--gold summary-cta"
+                onClick={handleEnterLifePath}
+                disabled={busy.enterTree}
+              >
+                {busy.enterTree ? "Preparing…" : "Run Life Path Engine"}
+              </button>
+            </ScreenShell>
           )}
 
           {error && (

@@ -329,6 +329,15 @@
   border-bottom-color: var(--gold);
 }
 
+/* `outline: none` above is emitted after the global :focus-visible rule and
+   wins at equal specificity, so without this the underline inputs — the whole
+   of demographics and the journey question — had no focus indicator at all.
+   Section 8 makes the ring the accessibility floor. */
+.demo-input:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
 .demo-submit {
   margin-top: 34px;
 }
@@ -387,6 +396,12 @@
 
 .experience-split--locked {
   opacity: 0.4;
+}
+
+/* The stroke lives here, not on the element: it is a colour, so it is a token
+   (--gold-30 is the spec's dashed-rule value). */
+.dotted-rule line {
+  stroke: var(--gold-30);
 }
 
 .dotted-rule {
@@ -707,6 +722,12 @@
   .output-column {
     border-right: none;
     border-bottom: 1px solid var(--gold-25);
+  }
+
+  /* .output-columns draws its own bottom rule, so the last column's would
+     stack on it as a 2px line where the design has 1px. */
+  .output-column:last-child {
+    border-bottom: none;
   }
 
   /* Stacking .output-columns roughly triples the dock's height. The dock is

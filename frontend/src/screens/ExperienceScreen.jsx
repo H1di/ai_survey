@@ -10,15 +10,7 @@ const CV_INTENT_OPTIONS = [
 function DottedRule() {
   return (
     <svg className="dotted-rule" width="100%" height="2" aria-hidden="true">
-      <line
-        x1="0"
-        y1="1"
-        x2="100%"
-        y2="1"
-        stroke="rgba(255,217,140,.3)"
-        strokeDasharray="1,7"
-        strokeLinecap="round"
-      />
+      <line x1="0" y1="1" x2="100%" y2="1" strokeDasharray="1,7" strokeLinecap="round" />
     </svg>
   );
 }
@@ -42,6 +34,8 @@ export default function ExperienceScreen({
   onJourneyDraftChange,
   onSubmitJourney,
   onStartJourney,
+  onBackToChoice,
+  onJourneyBack,
   footer,
 }) {
   const eyebrow =
@@ -49,9 +43,20 @@ export default function ExperienceScreen({
       ? `step 5 · experience · question ${journeyIndex + 1} of ${journeyTotal}`
       : "step 5 · experience";
 
+  const backControl = (onBack) => (
+    <button type="button" className="screen-back" onClick={onBack} disabled={busy}>
+      ← Back
+    </button>
+  );
+
   if (mode === "paste") {
     return (
-      <ScreenShell eyebrow={eyebrow} title="Paste your CV" footer={footer}>
+      <ScreenShell
+        eyebrow={eyebrow}
+        title="Paste your CV"
+        footer={footer}
+        headerSlot={backControl(onBackToChoice)}
+      >
         <textarea
           className="cv-paste"
           value={cvDraft}
@@ -78,6 +83,7 @@ export default function ExperienceScreen({
   return (
     <ScreenShell
       eyebrow={eyebrow}
+      headerSlot={mode === "journey" ? backControl(onJourneyBack) : null}
       title="Where should we start from?"
       sub="Paste or upload a CV (.pdf/.docx/.html/.txt/.pptx, max 5 MB) — or answer seven career-journey questions if you don't have one."
       footer={footer}

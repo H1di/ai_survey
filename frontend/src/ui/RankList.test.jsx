@@ -38,8 +38,19 @@ describe("RankList", () => {
     const row = screen.getAllByRole("option")[2];
     fireEvent.keyDown(row, { key: "Home" });
     expect(onReorder).toHaveBeenCalledWith(2, 0);
+    // End on the last row is already where it asked to go: no callback, and
+    // nothing announced, so a screen reader is not told about a non-move.
     fireEvent.keyDown(row, { key: "End" });
-    expect(onReorder).toHaveBeenCalledWith(2, 2);
+    expect(onReorder).toHaveBeenCalledTimes(1);
+  });
+
+  it("announces every move in a live region", () => {
+    render(<RankList items={items} onReorder={() => {}} />);
+    const live = document.querySelector('[role="status"]');
+    expect(live).toHaveAttribute("aria-live", "polite");
+    expect(live).toHaveTextContent("");
+    fireEvent.keyDown(screen.getAllByRole("option")[1], { key: "ArrowUp" });
+    expect(live).toHaveTextContent(`${items[1].label}, position 1 of ${items.length}`);
   });
 
   it("reorders on drop", () => {

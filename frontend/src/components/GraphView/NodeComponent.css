@@ -86,6 +86,10 @@
   letter-spacing: -0.01em;
   margin-bottom: 14px;
   color: var(--text);
+  /* O*NET titles are not written for a 220px column — "Industrial-Organizational
+     Psychologists" is one 274px word at this size. Without this it paints
+     straight over the neighbouring node. */
+  overflow-wrap: anywhere;
 }
 
 .node--loading {
@@ -236,17 +240,12 @@
   to   { opacity: 1; transform: scale(1); }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .node--output,
-  .node--advice,
-  .node--roadmap {
-    animation: none;
-  }
-}
-
 /* Output + advice nodes (v2 output loop) */
 .node--output {
-  max-width: 480px;
+  /* `width` is the layout contract: buildLifePathGraph spaces siblings by
+     OUTPUT_GAP_X against this number, so it stays fixed and the spec's
+     max-width: 480px — which a fixed width makes inert anyway — is dropped
+     rather than left as a dead declaration. */
   width: 250px;
   padding: 8px 0 0 30px;
   border: none;
@@ -355,5 +354,17 @@
 @media (max-width: 600px) {
   .node--roadmap {
     padding: 16px 0;
+  }
+}
+
+/* Same reason this sits at the end of the file: all three node types declare
+   `animation: node-pop` below where this block used to be, and a media query
+   adds no specificity — so the suppression never applied. On main it worked
+   only because it happened to sit under the one rule it had to beat. */
+@media (prefers-reduced-motion: reduce) {
+  .node--output,
+  .node--advice,
+  .node--roadmap {
+    animation: none;
   }
 }
