@@ -61,15 +61,30 @@
   margin: 0;
 }
 
-.error-row.graph-error {
-  position: absolute;
-  left: 24px;
-  bottom: 18px;
+/* Floating error chrome, shared by both stages. The survey row has to be
+   pinned to the viewport rather than to its wrapper: every .screen is at least
+   100vh, so an error appended after one lands below the fold and the user just
+   sees their answer fail to register. */
+.error-row.graph-error,
+.questions-screen > .error-row {
   z-index: 20;
   background: var(--ink-screen);
   padding: 8px 12px;
   border: 1px solid var(--gold-25);
   border-radius: 10px;
+}
+
+.error-row.graph-error {
+  position: absolute;
+  left: 24px;
+  bottom: 18px;
+}
+
+.questions-screen > .error-row {
+  position: fixed;
+  left: 24px;
+  bottom: 18px;
+  margin-top: 0;
 }
 
 .primary-action,
