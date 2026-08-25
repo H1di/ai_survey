@@ -7,9 +7,16 @@ export const ME_NODE = { id: "me", type: "me", position: { x: 0, y: 0 }, data: {
 // Vertical story: Me -> output iteration chain (horizontal trail) -> the
 // accepted output grows 4 advice cards and its roadmap chain.
 const OUTPUT_Y = 240;
-const OUTPUT_GAP_X = 380;
+// Node positions are left edges, so the widths below are what centres one row
+// under another. They mirror NodeComponent.css and spec 5.11: a 480px output
+// card, 220px advice cells, 360px roadmap rows, an 80px loading dot.
+const OUTPUT_W = 480;
+const ADVICE_W = 220;
+const ROADMAP_W = 360;
+const LOADING_W = 80;
+// Siblings are spaced against the card's width plus an 80px alley.
+const OUTPUT_GAP_X = OUTPUT_W + 80;
 const ADVICE_Y = 520;
-const ADVICE_GAP = 300;
 const ROADMAP_START_Y = 780;
 const ROADMAP_GAP = 200;
 
@@ -36,13 +43,41 @@ export function firstUnansweredIndex(questions, answers) {
   return index === -1 ? Math.max(0, questions.length - 1) : index;
 }
 
-// Reorder helper for the work-values hierarchy list. Pure: returns the
-// input list unchanged when the move would fall off either end.
-export function moveRankItem(list, index, delta) {
-  const target = index + delta;
-  if (target < 0 || target >= list.length) return list;
+// The demographics step collects all four answers before submitting, but the
+// route takes one at a time. These two turn the screen's drafts into that
+// sequence — and into the button's enabled state.
+function usableDraft(question, raw) {
+  if (raw === undefined || raw === null || String(raw).trim() === "") return false;
+  if (question.kind === "number") return Number.isFinite(Number(raw));
+  return true;
+}
+
+export function demographicsComplete(questions, drafts = {}) {
+  return questions.every((q) => usableDraft(q, drafts[q.id]));
+}
+
+export function demographicsPayloads(questions, drafts = {}, saved = {}) {
+  const payloads = [];
+  for (const q of questions) {
+    const raw = drafts[q.id];
+    if (!usableDraft(q, raw)) continue;
+    const value = q.kind === "number" ? Number(raw) : raw;
+    // A retry after a mid-chain failure must not re-post what already landed.
+    if (saved[q.id] === value) continue;
+    payloads.push({ questionId: q.id, value });
+  }
+  return payloads;
+}
+
+// Drag reorder: lift the item at `from` and insert it at `to`. Pure, and a
+// no-op for a move that would not change anything.
+export function moveRankItemTo(list, from, to) {
+  if (from === to) return list;
+  if (from < 0 || from >= list.length) return list;
+  if (to < 0 || to >= list.length) return list;
   const next = [...list];
-  [next[index], next[target]] = [next[target], next[index]];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
   return next;
 }
 
@@ -72,7 +107,10 @@ export function buildLifePathGraph({
         jobTitle: output.jobTitle,
         orientedField: output.orientedField,
         fit: output.valuesFit ? output.valuesFit.overall : null,
-        topValues: output.topValues || [],
+        thesis: output.thesis,
+        // Spec 5.11's meta row is salary · outlook, not the work values —
+        // those keep their own section in the details panel.
+        market: usMarketLine(output),
         accepted: isAccepted,
         latest: isLatest,
         onOpen: () => onOutputOpen(output),
@@ -93,12 +131,15 @@ export function buildLifePathGraph({
     return { nodes, edges };
   }
   const anchorX = outputX(acceptedIndex);
+  // Everything below the accepted card hangs off the card's centre, not off
+  // its left rule — the design stacks them as one column.
+  const centerX = anchorX + OUTPUT_W / 2;
 
   if (detailPending) {
     nodes.push({
       id: "detail-loading",
       type: "loading",
-      position: { x: anchorX, y: ADVICE_Y },
+      position: { x: centerX - LOADING_W / 2, y: ADVICE_Y },
       data: {},
     });
     edges.push({
@@ -115,7 +156,12 @@ export function buildLifePathGraph({
       nodes.push({
         id: nodeId,
         type: "advice",
-        position: { x: anchorX + (index - (ADVICE_BLOCKS.length - 1) / 2) * ADVICE_GAP, y: ADVICE_Y },
+        // The cells abut: spec 5.11 bounds the row with rules top, bottom and
+        // between, and each cell's own right border is the rule between.
+        position: {
+          x: centerX - (ADVICE_BLOCKS.length * ADVICE_W) / 2 + index * ADVICE_W,
+          y: ADVICE_Y,
+        },
         draggable: true,
         style: { "--appear-delay": `${edgeDelay + EDGE_DRAW_MS}ms` },
         data: {
@@ -138,7 +184,7 @@ export function buildLifePathGraph({
     nodes.push({
       id: "roadmap-loading",
       type: "loading",
-      position: { x: anchorX, y: ROADMAP_START_Y },
+      position: { x: centerX - LOADING_W / 2, y: ROADMAP_START_Y },
       data: {},
     });
     edges.push({
@@ -159,7 +205,7 @@ export function buildLifePathGraph({
       nodes.push({
         id: nodeId,
         type: "roadmap",
-        position: { x: anchorX, y: ROADMAP_START_Y + index * ROADMAP_GAP },
+        position: { x: centerX - ROADMAP_W / 2, y: ROADMAP_START_Y + index * ROADMAP_GAP },
         draggable: true,
         style: { "--appear-delay": `${edgeDelay + EDGE_DRAW_MS}ms` },
         data: {
@@ -197,12 +243,12 @@ export function selectDockCard({ stage, outputs = [], acceptedOutputId }) {
 // Display-only Career Discovery Journey rail. Labels are copy, not state:
 // the backend step machine stays the source of truth for execution order.
 export const JOURNEY_RAIL = [
-  { step: "demographics", label: "About you", time: "~1 min" },
-  { step: "big_five", label: "Step 1 — How you think", time: "2–3 min" },
-  { step: "riasec", label: "Step 2 — What truly interests you", time: "2 min" },
-  { step: "values", label: "Step 3 — Your values", time: "1–2 min" },
-  { step: "cv", label: "Step 4 — Your skills & experience", time: "1–2 min" },
-  { step: "summary", label: "Who you are", time: "~1 min" },
+  { step: "demographics", label: "Demographics", time: "~1 min" },
+  { step: "big_five", label: "Big Five", time: "2–3 min" },
+  { step: "riasec", label: "Interests", time: "2 min" },
+  { step: "values", label: "Values", time: "1–2 min" },
+  { step: "cv", label: "Experience", time: "1–2 min" },
+  { step: "summary", label: "Summary", time: "~1 min" },
 ];
 
 export function railIndexForStep(step) {
@@ -354,6 +400,20 @@ export function onetSection(output) {
     items,
     footnote: onet.attribution,
   };
+}
+
+// The single-line US market summary shown on the output card. Salary and
+// outlook come from the live O*NET API, so both are absent keyless — and both
+// stay visibly US-flagged, because the audience is not.
+export function usMarketLine(output) {
+  const onet = output?.onet;
+  if (!onet) return "";
+  const parts = [];
+  if (onet.salary?.annualMedian) {
+    parts.push(`$${onet.salary.annualMedian.toLocaleString("en-US")}/yr median (US)`);
+  }
+  if (onet.outlook?.category) parts.push(`outlook: ${onet.outlook.category}`);
+  return parts.join(" · ");
 }
 
 // Deterministic one-liners per Big Five axis. Bands match the backend's

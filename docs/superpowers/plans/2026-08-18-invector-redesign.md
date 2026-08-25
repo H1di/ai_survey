@@ -18,7 +18,7 @@
 - **No new dependencies.** Drag uses native HTML5 DnD; the branch uses canvas 2D; charts stay on recharts; transitions stay on the installed framer-motion.
 - **Copy is verbatim from the design artifact**, except the ten deviations in §6 of the spec. Do not paraphrase, re-capitalise, or "improve" a string.
 - **O\*NET licence conditions do not change:** the official badge hotlinked from `https://www.onetcenter.org/image/link/onet-in-it.svg` inside a link to `https://services.onetcenter.org/`, and the exact sentence "This site incorporates information from O\*NET Web Services by the U.S. Department of Labor, Employment and Training Administration (USDOL/ETA). O\*NET® is a trademark of USDOL/ETA." must render on the entry screen and in the details panel. Styling may adapt; wording and artwork may not.
-- **Colour is only ever a token.** No hex literal in a component or screen stylesheet — `var(--gold)`, `var(--text-60)`, etc. The one exception is `ui/branchEngine.js`, whose hues are numeric RGB triples in the preset objects.
+- **Colour is only ever a token.** No hex literal in a component or screen stylesheet — `var(--gold)`, `var(--text-60)`, etc. Two carve-outs, and only these: the colour fields of `ui/branchEngine.js`'s preset objects — the `mainHue`/`branchHue`/`dropHue` RGB triples and the `bg` canvas fill, which is a CSS colour string in one preset and the sentinel `"transparent"` in the other, so it cannot be a triple; the inline `rgba()` values this plan writes for shadows — the gold glows, and the black `rgba(0, 0, 0, α)` behind the hero headline — which are lighting effects rather than palette entries; and the palette constants in `components/ProfileCharts.jsx`, because recharts takes colours as JS props and cannot read a custom property. (The dotted SVG stroke was on this list and no longer needs to be: `.dotted-rule line { stroke: var(--gold-30) }` moves it into CSS, where it is a token like everything else.) Any colour that paints a surface, a rule, or type is a token.
 - **The server snapshot stays the single source of truth.** Screens receive data as props and report intent through callbacks; they never call the API, and they never hold session state.
 - **Product name is Invector** in every user-visible string, the `<title>`, and the wordmark.
 - **Accessibility floor:** interactive elements are real `<button>`/`<label>`/`<input>` with a visible focus ring (`outline: 2px solid var(--gold); outline-offset: 2px`); the branch canvases are `aria-hidden="true"`.
@@ -141,6 +141,7 @@ Create `frontend/src/theme/tokens.css`:
 
   /* State */
   --positive: #7cffb2;
+  --error: #ff9b9b;
 
   /* Backgrounds composed from the ramp */
   --glow-corners:
@@ -610,7 +611,7 @@ describe("tickTips", () => {
 
   it("spawns a child with the branch hue when the roll succeeds, and never past maxDepth", () => {
     const opt = BRANCH_PRESETS.hero;
-    const always = () => 0; // 0 < branchRate, and picks the negative direction
+    const always = () => 0; // 0 is below every threshold, so every roll succeeds
     const tips = seedTips(opt, 1000, 500, mid);
     const { tips: next } = tickTips(tips, opt, 1000, 500, always);
     expect(next).toHaveLength(2);
@@ -633,14 +634,20 @@ describe("tickTips", () => {
     expect(drops[0].hue).toEqual(opt.dropHue);
   });
 
-  it("never grows the tip list past the cap", () => {
+  it("stays bounded under a branch-every-frame roll", () => {
+    // The cap gates child spawning, not the parents already alive: the frame
+    // that crosses it still pushes every remaining parent, so the population
+    // overshoots MAX_TIPS once and then can only shrink. Bounded, not capped.
     const opt = BRANCH_PRESETS.graph;
     const always = () => 0;
     let tips = seedTips(opt, 1000, 500, mid);
+    let peak = 0;
     for (let i = 0; i < 200; i += 1) {
       tips = tickTips(tips, opt, 1000, 500, always).tips;
+      peak = Math.max(peak, tips.length);
     }
-    expect(tips.length).toBeLessThanOrEqual(MAX_TIPS + 1);
+    expect(peak).toBeGreaterThan(0);
+    expect(peak).toBeLessThanOrEqual(2 * MAX_TIPS);
   });
 });
 
@@ -729,7 +736,10 @@ export const BRANCH_PRESETS = {
 };
 
 // Ceiling on live tips: the branch rate compounds, and an uncapped run melts
-// a laptop fan within a minute.
+// a laptop fan within a minute. The design artifact gates on its per-frame
+// accumulator, which does not actually bound anything across frames; this
+// engine gates on the frame's input population instead. Below the ceiling the
+// two are identical, so the animation looks the same.
 export const MAX_TIPS = 260;
 
 export function seedTips(opt, W, H, rng = Math.random) {
@@ -789,7 +799,11 @@ export function tickTips(tips, opt, W, H, rng = Math.random) {
 
     if (t.life > 0 && t.y > -20 && t.x > -20 && t.x < W + 20 && t.w > 0.4) {
       next.push(t);
-      if (t.depth < opt.maxDepth && next.length < MAX_TIPS && rng() < opt.branchRate) {
+      // Gate on the frame's INPUT size, not on `next`: `next` resets every
+      // frame, so gating on it lets each frame add another MAX_TIPS children
+      // and the population grows without bound (measured: 7224 tips over 200
+      // frames of always-branch, against a 520 ceiling).
+      if (t.depth < opt.maxDepth && tips.length < MAX_TIPS && rng() < opt.branchRate) {
         const dir = rng() < 0.5 ? 1 : -1;
         next.push({
           x: t.x,
@@ -1235,6 +1249,7 @@ The hero is the first three seconds of trust. It carries the headline, the dream
 - Create: `frontend/src/screens/EntryScreen.test.jsx`
 - Create: `frontend/src/screens/OnetAttribution.jsx`
 - Modify: `frontend/src/screens/screens.css`
+- Modify: `frontend/src/setupTests.js` (stub the canvas context jsdom does not implement, so `BranchCanvas` stops printing a warning per render)
 - Modify: `frontend/src/App.jsx` (render `EntryScreen` in the `stage === "entry"` branch; delete the inline entry markup at `1329-1357` and the `OnetAttribution` function at `456-482`)
 
 **Interfaces:**
@@ -1266,7 +1281,11 @@ describe("EntryScreen", () => {
   it("renders the headline with the last word set apart in gold", () => {
     render(<EntryScreen {...base} />);
     const heading = screen.getByRole("heading", { level: 1 });
-    expect(heading).toHaveTextContent("What would you do if you knew you would definitely succeed?");
+    // The design breaks the line four ways, and <br> contributes no whitespace
+    // to textContent — assert the fragments, not one flattened sentence.
+    ["What would you do", "if you knew you", "would definitely"].forEach((fragment) =>
+      expect(heading).toHaveTextContent(fragment)
+    );
     expect(heading.querySelector(".hero-accent")).toHaveTextContent("succeed?");
   });
 
@@ -1340,7 +1359,7 @@ import BranchCanvas from "../ui/BranchCanvas";
 import OnetAttribution from "./OnetAttribution";
 import "./screens.css";
 
-const REPO_URL = "https://github.com/h1di/ai_survey_2";
+const REPO_URL = "https://github.com/H1di/ai_survey";
 
 // The first screen: the branch grows behind the question that starts
 // everything. Line breaks follow the design exactly.
@@ -1570,14 +1589,19 @@ Append to `frontend/src/screens/screens.css`:
   padding-bottom: 24px;
 }
 
-.onet-attribution {
+/* Scoped under .hero on purpose. The legacy App.css still defines
+   .onet-attribution and .error-text at single-class specificity, and it is
+   imported after screens.css, so an unscoped rule here would lose the cascade
+   and the licence-mandated attribution would ship in the old grey. Task 14
+   deletes the legacy rules; the scoping stays correct either way. */
+.hero .onet-attribution {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
 }
 
-.onet-attribution p {
+.hero .onet-attribution p {
   margin: 0;
   max-width: 480px;
   text-align: center;
@@ -1585,14 +1609,18 @@ Append to `frontend/src/screens/screens.css`:
   color: var(--bone-40);
 }
 
-.onet-attribution a {
+.hero .onet-attribution a {
   color: var(--gold-70);
 }
 
-.error-text {
+.hero .error-text {
   margin: 12px 0 0;
   font: 400 13px/1.5 var(--font-body);
-  color: #ff9b9b;
+  color: var(--error);
+  border: none;
+  padding: 0;
+  max-width: none;
+  text-align: center;
 }
 ```
 
@@ -1984,8 +2012,10 @@ import ScreenShell from "../ui/ScreenShell";
 import LikertScale from "../ui/LikertScale";
 import "./screens.css";
 
-// The canonical IPIP anchors, which is also what the design draws.
-export const ACCURACY_ANCHORS = [
+// The canonical IPIP anchors, which is also what the design draws. Not
+// exported: react-refresh/only-export-components is a hard error in this
+// project, and nothing outside this screen needs them.
+const ACCURACY_ANCHORS = [
   { value: 1, label: "Very inaccurate" },
   { value: 2, label: "Moderately inaccurate" },
   { value: 3, label: "Neither" },
@@ -2038,8 +2068,9 @@ import LikertScale from "../ui/LikertScale";
 import "./screens.css";
 
 // The mockup shows no rating scale for this step, so its enjoyment anchors
-// stay as the product already words them.
-export const ENJOYMENT_ANCHORS = [
+// stay as the product already words them. Not exported, for the same reason
+// as the Big Five set.
+const ENJOYMENT_ANCHORS = [
   { value: 1, label: "Not at all" },
   { value: 2, label: "Not really" },
   { value: 3, label: "Maybe" },
@@ -2148,7 +2179,7 @@ Delete `BigFiveQuestionCard` (`231-260`) and `RiasecQuestionCard` (`263-299`) an
 - [ ] **Step 6: Run the tests**
 
 Run: `cd frontend && npm test -- --run`
-Expected: PASS, including the 13 new tests.
+Expected: PASS, including the 14 new tests.
 
 - [ ] **Step 7: Commit**
 
@@ -2176,7 +2207,7 @@ The only flow change in the redesign: four questions at once instead of four scr
 - Produces:
   - `demographicsComplete(questions, drafts) -> boolean` — true when every question has a usable draft.
   - `demographicsPayloads(questions, drafts, saved = {}) -> [{ questionId, value }]` — in question order, numbers coerced, already-saved identical answers skipped.
-  - `DemographicsScreen` — `({ questions, drafts, onDraftChange, saved, busy, onSubmit })`; `onDraftChange(questionId, value)`.
+  - `DemographicsScreen` — `({ questions, drafts, onDraftChange, busy, onSubmit })`; `onDraftChange(questionId, value)`. The screen never sees the saved answers: `App.jsx` holds them and passes them to `demographicsPayloads` when it submits.
 
 - [ ] **Step 1: Write the failing helper tests**
 
@@ -2230,6 +2261,19 @@ describe("demographics one-screen helpers", () => {
       { questionId: "country", value: "Ireland" },
       { questionId: "city", value: "Dublin" },
     ]);
+  });
+
+  it("sends nothing when every draft already matches the snapshot", () => {
+    // This is the rail-revisit case. The empty result is correct here — it is
+    // App.jsx's job to fall back to a single re-post so the step still advances.
+    const drafts = { sex: "female", age: "32", country: "Ireland", city: "Dublin" };
+    const saved = { sex: "female", age: 32, country: "Ireland", city: "Dublin" };
+    expect(demographicsPayloads(questions, drafts, saved)).toEqual([]);
+  });
+
+  it("produces every payload when nothing is saved, which is that fallback's input", () => {
+    const drafts = { sex: "female", age: "32", country: "Ireland", city: "Dublin" };
+    expect(demographicsPayloads(questions, drafts, {})).toHaveLength(4);
   });
 
   it("drops empty and unparseable drafts rather than posting them", () => {
@@ -2573,19 +2617,39 @@ Replace `handleSubmitDemographic` and `handleBackDemographic` with:
   const handleDemoDraftChange = (questionId, value) =>
     setDemoDrafts((drafts) => ({ ...drafts, [questionId]: value }));
 
-  // All four answers land on one screen, but the route takes one at a time —
-  // the last POST is what advances the step. A failure mid-chain leaves the
-  // earlier answers saved; re-submitting only sends what the snapshot lacks.
+  // All four answers land on one screen, but the route takes one at a time and
+  // advances the step the moment all four are present. On a first pass that is
+  // the last POST, and the loop is trivial. A rail revisit is where it bites:
+  //   * Every answer is already saved, so the FIRST post advances the step and
+  //     every later one 400s on the route's step guard — silently dropping the
+  //     user's other edits. Stepping back through /goto keeps them all.
+  //   * If the revisit changed nothing there is no post to make at all, and the
+  //     user would sit on a Continue button that does nothing. Re-posting one
+  //     unchanged answer is what makes the backend re-run its all-answered
+  //     check and move forward, which is the documented rail invariant:
+  //     completing a revisited step advances exactly as on the first pass.
+  // A failure mid-chain leaves the earlier answers saved; re-submitting sends
+  // only what the snapshot still lacks.
   const handleSubmitDemographics = async () => {
     if (!sessionId) return;
-    const payloads = demographicsPayloads(demographicQuestions, demoDrafts, demoAnswers);
+    const changed = demographicsPayloads(demographicQuestions, demoDrafts, demoAnswers);
+    const payloads = changed.length
+      ? changed
+      : demographicsPayloads(demographicQuestions, demoDrafts, {}).slice(0, 1);
     if (!payloads.length) return;
     setError("");
     setBusy((p) => ({ ...p, demo: true }));
     try {
+      let currentStep = step;
       for (const payload of payloads) {
+        if (currentStep !== "demographics") {
+          const back = await sessionGoto({ sessionId, step: "demographics" });
+          applySessionSnapshot(back);
+          currentStep = back.step;
+        }
         const data = await submitDemographics({ sessionId, ...payload });
         applySessionSnapshot(data);
+        currentStep = data.step;
       }
     } catch (e) {
       setError(e.message || "Could not save.");
@@ -3074,7 +3138,13 @@ describe("RankList", () => {
   it("ignores keys and drags while disabled", () => {
     const onReorder = vi.fn();
     render(<RankList items={items} onReorder={onReorder} disabled />);
-    fireEvent.keyDown(screen.getAllByRole("option")[1], { key: "ArrowUp" });
+    const rows = screen.getAllByRole("option");
+    fireEvent.keyDown(rows[1], { key: "ArrowUp" });
+    // The drag half of this test's name has to be exercised too, or a
+    // regression that drops the guard from the drag handlers goes unseen.
+    fireEvent.dragStart(rows[0]);
+    fireEvent.dragOver(rows[2]);
+    fireEvent.drop(rows[2]);
     expect(onReorder).not.toHaveBeenCalled();
   });
 });
@@ -3174,7 +3244,13 @@ export default function RankList({ items, onReorder, disabled = false, hint = "d
           ]
             .filter(Boolean)
             .join(" ")}
-          onDragStart={() => !disabled && setDragFrom(index)}
+          onDragStart={(event) => {
+            if (disabled) return;
+            // Firefox refuses to start a drag with no payload, and jsdom's
+            // synthetic events carry no dataTransfer at all — hence the guard.
+            event.dataTransfer?.setData?.("text/plain", String(index));
+            setDragFrom(index);
+          }}
           onDragOver={(event) => {
             if (disabled || dragFrom === null) return;
             event.preventDefault();
@@ -3206,7 +3282,13 @@ export default function RankList({ items, onReorder, disabled = false, hint = "d
 Append to `frontend/src/ui/ui.css`:
 
 ```css
-.rank-list {
+/* Scoped under .screen for the same reason the hero's attribution is scoped:
+   the legacy App.css still defines .rank-list, .rank-row and .rank-label at
+   single-class specificity and is imported after ui.css, so unscoped rules
+   here would lose outright — its `border` shorthand and padding would repaint
+   these rows as the old grey boxes. Task 14 deletes the legacy rules; the
+   scoping stays correct either way. */
+.screen .rank-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -3217,7 +3299,7 @@ Append to `frontend/src/ui/ui.css`:
   text-align: left;
 }
 
-.rank-row {
+.screen .rank-row {
   display: flex;
   align-items: baseline;
   gap: 20px;
@@ -3227,28 +3309,28 @@ Append to `frontend/src/ui/ui.css`:
   transition: background var(--t-fast) ease, border-color var(--t-fast) ease;
 }
 
-.rank-row--dragging {
+.screen .rank-row--dragging {
   opacity: 0.55;
 }
 
-.rank-row--over {
+.screen .rank-row--over {
   background: var(--gold-hover);
   border-bottom-color: var(--gold);
 }
 
-.rank-number {
+.screen .rank-number {
   font: 900 30px/1 var(--font-display);
   color: var(--gold-35);
   min-width: 1.2em;
 }
 
-.rank-label {
+.screen .rank-label {
   font: 600 17px/1 var(--font-body);
   color: var(--text);
   flex: 1;
 }
 
-.rank-hint {
+.screen .rank-hint {
   font: 400 10px/1 var(--font-mono);
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -3416,6 +3498,17 @@ describe("ExperienceScreen", () => {
     expect(onSubmitJourney).toHaveBeenCalled();
   });
 
+  it("cancels a locked file drop so the browser cannot navigate away", () => {
+    const onUploadFile = vi.fn();
+    render(<ExperienceScreen {...base} onUploadFile={onUploadFile} />);
+    const zone = screen.getByText("A").parentElement;
+    // fireEvent returns false when a handler called preventDefault on a
+    // cancelable event — which is the whole point here.
+    expect(fireEvent.dragOver(zone)).toBe(false);
+    expect(fireEvent.drop(zone)).toBe(false);
+    expect(onUploadFile).not.toHaveBeenCalled();
+  });
+
   it("shows the paste view when the mode says so", () => {
     render(<ExperienceScreen {...base} intent="new" mode="paste" cvDraft="my cv" />);
     expect(
@@ -3546,12 +3639,15 @@ export default function ExperienceScreen({
           <div
             className="experience-half"
             onDragOver={(event) => {
-              if (!locked) event.preventDefault();
+              // Cancel unconditionally, locked or not. An un-cancelled dragover
+              // leaves the drop to the browser, which navigates the tab to the
+              // dropped file and destroys the in-progress session.
+              event.preventDefault();
             }}
             onDrop={(event) => {
-              if (locked) return;
               event.preventDefault();
-              const file = event.dataTransfer.files?.[0];
+              if (locked) return;
+              const file = event.dataTransfer?.files?.[0];
               if (file) onUploadFile(file);
             }}
           >
@@ -3782,7 +3878,13 @@ Delete `CvCard` and the inline journey block, then render one screen for the who
               journeyTotal={careerJourneyQuestions.length}
               journeyDraft={journeyDraft}
               onJourneyDraftChange={setJourneyDraft}
-              onSubmitJourney={() => handleSubmitJourney(journeyDraft)}
+              onSubmitJourney={() => {
+                // Answering the B-side question is the commitment to the
+                // journey path — without this the eyebrow's counter never
+                // starts, even as journeyIndex advances underneath it.
+                setCvMode("journey");
+                handleSubmitJourney(journeyDraft);
+              }}
               onStartJourney={() => setCvMode("journey")}
             />
           )}
@@ -4059,20 +4161,24 @@ Append to `frontend/src/screens/screens.css`:
   margin-top: 30px;
 }
 
-.summary-archetype {
+/* Scoped under .screen: App.css still defines .summary-archetype,
+   .summary-tagline and .summary-persona at single-class specificity and is
+   imported after screens.css, so unscoped rules here would lose outright.
+   Task 14 deletes the legacy rules; the scoping stays correct either way. */
+.screen .summary-archetype {
   margin: 0;
   font: 900 34px/1.1 var(--font-display);
   letter-spacing: -0.02em;
   color: var(--gold);
 }
 
-.summary-tagline {
+.screen .summary-tagline {
   margin: 8px 0 24px;
   font: 400 14px/1.6 var(--font-body);
   color: var(--text-72);
 }
 
-.summary-persona {
+.screen .summary-persona {
   margin: 24px 0;
   max-width: 520px;
   font: 400 14px/1.7 var(--font-body);
@@ -4343,6 +4449,22 @@ describe("OutputDecision", () => {
     ).toBeDisabled();
   });
 
+  it("falls back to a legacy free-text explanation rather than showing nothing", () => {
+    render(
+      <OutputDecision
+        {...base}
+        output={{
+          ...output,
+          whyThisFits: null,
+          whyFit: "Your scores point at structured, analytical work.",
+        }}
+      />
+    );
+    expect(
+      screen.getByText("Your scores point at structured, analytical work.")
+    ).toBeInTheDocument();
+  });
+
   it("survives a keyless output with no market data and no structured explanation", () => {
     render(<OutputDecision {...base} output={{ ...output, onet: {}, whyThisFits: null }} />);
     expect(screen.getByText("Financial Manager")).toBeInTheDocument();
@@ -4369,8 +4491,12 @@ import "./screens.css";
 // output — the mockup's card bodies are its stand-in for exactly this data.
 export default function OutputDecision({ output, busy, onAccept, onRegenerate, onOpenDetails }) {
   const market = usMarketLine(output);
+  // Outputs generated before the structured explanation existed — and any
+  // whose second AI call failed — carry a single free-text section instead of
+  // items. Reading only `items` would drop a real explanation on the floor.
   const trace = whyThisFitsSections(output)
-    .flatMap((section) => section.items || [])
+    .flatMap((section) => (section.items?.length ? section.items : [section.text]))
+    .filter(Boolean)
     .slice(0, 3);
   const locked = Boolean(busy.accept || busy.refine);
 
@@ -4391,7 +4517,12 @@ export default function OutputDecision({ output, busy, onAccept, onRegenerate, o
           <p className="output-title">Grounded in O*NET</p>
           <p className="output-body">
             {output.jobTitle}
-            {output.valuesFit ? ` · ${output.valuesFit.overall}% values fit` : ""}
+            {/* The fit sits in its own element so the job title stays a text
+                node of its own — as one concatenated string, an exact-text
+                query for the title never matches. */}
+            {output.valuesFit && (
+              <span className="output-fit"> · {output.valuesFit.overall}% values fit</span>
+            )}
           </p>
           {market && <p className="output-meta">{market}</p>}
         </div>
@@ -4488,6 +4619,10 @@ Append to `frontend/src/screens/screens.css`:
   margin: 12px 0 0;
   font: 300 13.5px/1.6 var(--font-body);
   color: var(--text-60);
+}
+
+.output-fit {
+  color: var(--gold-70);
 }
 
 .output-meta {
@@ -4791,11 +4926,28 @@ In `GraphPage.css`, set the page background to `var(--ink-graph)`, give `.graph-
   z-index: 0;
 }
 
+/* The dock is deliberately left out of the position rule below: it is already
+   position: absolute, which is how it floats centred at the bottom, and
+   forcing it to relative would drop it back into normal flow. z-index alone
+   keeps it above the canvas. */
 .graph-header,
-.graph-canvas,
-.graph-question-dock {
+.graph-canvas {
   position: relative;
   z-index: 1;
+}
+
+.graph-question-dock {
+  z-index: 1;
+}
+
+/* The dock stays click-through so the empty space around the card never
+   blocks the graph underneath, and the card re-enables clicks for itself.
+   Bind this to the card's own class, not to its position in the tree: the
+   previous version keyed on `.question-card`, and when the card inside the
+   dock was replaced the Accept and Regenerate buttons silently stopped
+   responding — jsdom does not implement pointer-events, so nothing caught it. */
+.graph-question-dock .output-decision {
+  pointer-events: auto;
 }
 ```
 
@@ -4846,7 +4998,13 @@ Remove every rule from `App.css` whose selector appears only in that list. What 
 
 - [ ] **Step 3: Add the breakpoints**
 
-Append to `frontend/src/ui/ui.css`:
+Append to the **end of `frontend/src/screens/screens.css`**, not to `ui.css`.
+Vite emits `ui.css` before `screens.css`, and a media query adds no
+specificity, so an unmediated `.hero-title { font: 900 68px/1.05 ... }` in
+`screens.css` beats `@media (max-width: 900px) { .hero-title { font-size:
+40px } }` in `ui.css` outright. Written into `ui.css` first, 15 of these
+declarations never applied at any width — the H1 stayed 68px on a 380px
+screen and overflowed it. Every breakpoint belongs in the last stylesheet:
 
 ```css
 @media (max-width: 1200px) {
@@ -4926,6 +5084,21 @@ Append to `frontend/src/ui/ui.css`:
 }
 ```
 
+- [ ] **Step 3b: Fix the four orphaned setters `resetAll` still calls**
+
+`resetAll` calls `setJobCharParams`, `setRankDraft`, `setRefineMode` and `setRefineChecks`. None of them exist — they were removed with the job-characteristics step and the refine panel, and the calls were left behind. They are four of the eight baseline lint errors (`no-undef`), and they are not cosmetic: `resetAll` throws a ReferenceError on the first one, so **Restart is broken on `main` today** and would ship broken in this redesign. Delete the four lines:
+
+```bash
+cd frontend
+grep -n "setJobCharParams\|setRankDraft\|setRefineMode\|setRefineChecks" src/App.jsx
+```
+
+Expected after the fix: no output, and `npm run lint` down from 8 errors to 4.
+
+- [ ] **Step 3c: Give the RIASEC loading placeholder its rail back**
+
+While `riasecItems` is still loading, `App.jsx` renders a bare placeholder card instead of a screen, and Task 11's move of the rail into each screen's footer left that one render site without it — so the rail vanishes for one network round trip. Pass `footer={surveyFooter}` there too, or render the placeholder through `ScreenShell` like every other step.
+
 - [ ] **Step 4: Drop what nothing calls any more**
 
 ```bash
@@ -4947,7 +5120,7 @@ Expected: backend 185+ passing, untouched; frontend all suites passing.
 - [ ] **Step 6: Lint**
 
 Run: `cd frontend && npm run lint`
-Expected: no errors.
+Expected: at most the 4 pre-existing errors this plan does not own — the two react-hooks findings in `App.jsx` (`Cannot access variable before it is declared`, `Calling setState synchronously within an effect`) and the two unused `salary`/`outlook` destructures. The four `no-undef` errors on the orphaned setters must be gone.
 
 - [ ] **Step 7: Screenshot every screen at both widths**
 
@@ -4983,5 +5156,10 @@ The work is done when all of the following hold:
   ```bash
   cd frontend && grep -rn "#[0-9a-fA-F]\{3,6\}\b" src --include=*.css | grep -v "theme/tokens.css"
   ```
+- No stylesheet still references the deleted light palette. Task 1 removed the `--color-*` custom properties while five stylesheets still consumed them; every one of those consumers is migrated by Tasks 11, 13 and 14, and this grep is what proves it:
+  ```bash
+  cd frontend && grep -rn -- "--color-" src
+  ```
+  Expected: no output. A hit means a stylesheet is resolving colours to nothing.
 - The O*NET badge and the exact licence sentence render on the entry screen and in the details panel.
 - A full keyless run and a full keyed run both reach an accepted output with a roadmap.

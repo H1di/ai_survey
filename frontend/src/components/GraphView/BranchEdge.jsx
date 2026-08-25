@@ -25,10 +25,16 @@ export default function BranchEdge({
       <path
         id={id}
         d={edgePath}
-        className={`branch-edge ${active ? 'branch-edge--active' : ''}`}
+        className="branch-edge"
         pathLength="1"
         markerEnd={markerEnd}
-        style={{ ...style, animationDelay: `${delay}ms`, fill: 'none' }}
+        style={{
+          ...style,
+          stroke: 'var(--gold-40)',
+          strokeWidth: 1.5,
+          animationDelay: `${delay}ms`,
+          fill: 'none',
+        }}
       />
       {active && (
         <path

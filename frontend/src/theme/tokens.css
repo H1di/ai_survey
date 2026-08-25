@@ -1,0 +1,68 @@
+/* Invector design tokens. Values are transcribed from the design artifact —
+   do not invent shades. Every colour used anywhere in the app resolves to one
+   of these. */
+:root {
+  /* Surfaces — three related blacks, used deliberately for depth. */
+  --ink-void: #000000;
+  --ink-page: #0a0a0a;
+  --ink-screen: #0e0e0e;
+  --ink-graph: #050308;
+  --ink-on-gold: #05070b;
+
+  /* Gold ramp. The alpha steps are the hairline system. */
+  --gold: #ffd98c;
+  --gold-70: rgba(255, 217, 140, 0.7);
+  --gold-60: rgba(255, 217, 140, 0.6);
+  --gold-50: rgba(255, 217, 140, 0.5);
+  --gold-40: rgba(255, 217, 140, 0.4);
+  --gold-35: rgba(255, 217, 140, 0.35);
+  --gold-30: rgba(255, 217, 140, 0.3);
+  --gold-25: rgba(255, 217, 140, 0.25);
+  --gold-20: rgba(255, 217, 140, 0.2);
+  --gold-18: rgba(255, 217, 140, 0.18);
+  --gold-15: rgba(255, 217, 140, 0.15);
+  --gold-wash: rgba(255, 217, 140, 0.06);
+  --gold-hover: rgba(255, 217, 140, 0.05);
+  --gold-focus: rgba(255, 217, 140, 0.18);
+
+  /* Text */
+  --bone: #f4f0e7;
+  --bone-50: rgba(244, 240, 231, 0.5);
+  --bone-40: rgba(244, 240, 231, 0.4);
+  --text: #ffffff;
+  --text-72: rgba(255, 255, 255, 0.72);
+  --text-60: rgba(255, 255, 255, 0.6);
+  --text-55: rgba(255, 255, 255, 0.55);
+  --text-45: rgba(255, 255, 255, 0.45);
+  --text-40: rgba(255, 255, 255, 0.4);
+  --text-30: rgba(255, 255, 255, 0.3);
+  --field: rgba(255, 255, 255, 0.07);
+  --field-border: rgba(255, 217, 140, 0.32);
+  --pill-idle: rgba(255, 255, 255, 0.06);
+
+  /* State */
+  --positive: #7cffb2;
+  --error: #ff9b9b;
+
+  /* Backgrounds composed from the ramp */
+  --glow-corners:
+    radial-gradient(ellipse 480px 320px at 100% 0%, rgba(255, 217, 140, 0.07), transparent 60%),
+    radial-gradient(ellipse 420px 280px at 0% 100%, rgba(163, 120, 255, 0.06), transparent 60%);
+  --glow-center:
+    radial-gradient(ellipse 600px 360px at 50% 0%, rgba(255, 217, 140, 0.08), transparent 65%);
+
+  /* Type */
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Manrope", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  /* Shape */
+  --radius-pill: 999px;
+  --radius-field: 16px;
+  --radius-surface: 14px;
+
+  /* Motion */
+  --t-fast: 140ms;
+  --t-base: 220ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}

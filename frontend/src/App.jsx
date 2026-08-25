@@ -2,7 +2,21 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import GraphView from "./components/GraphView";
 import { DetailPanel } from "./components/GraphView/NodeComponent";
-import ProfilePanel, { PersonalityRadarChart, WorkValuesRadar } from "./components/ProfileCharts";
+import Wordmark from "./ui/Wordmark";
+import BranchCanvas from "./ui/BranchCanvas";
+import ScreenShell from "./ui/ScreenShell";
+import EntryScreen from "./screens/EntryScreen";
+import JourneyIntroScreen from "./screens/JourneyIntroScreen";
+import DemographicsScreen from "./screens/DemographicsScreen";
+import BigFiveScreen from "./screens/BigFiveScreen";
+import RiasecScreen from "./screens/RiasecScreen";
+import ValuesTournamentScreen from "./screens/ValuesTournamentScreen";
+import ValuesHierarchyScreen from "./screens/ValuesHierarchyScreen";
+import ExperienceScreen from "./screens/ExperienceScreen";
+import SummaryScreen from "./screens/SummaryScreen";
+import StepRail from "./screens/StepRail";
+import OutputDecision from "./screens/OutputDecision";
+import ProfilePanel from "./components/ProfileCharts";
 import DevPanel from "./components/DevPanel";
 import { captureDevToken, isDevMode } from "./devMode";
 import {
@@ -31,12 +45,10 @@ import {
 import {
   buildLifePathGraph,
   deriveArchetype,
+  demographicsPayloads,
   firstUnansweredIndex,
-  moveRankItem,
+  moveRankItemTo,
   selectDockCard,
-  JOURNEY_RAIL,
-  railIndexForStep,
-  railStepReachable,
   whyThisFitsSections,
   onetSection,
   WORK_VALUE_META,
@@ -48,100 +60,6 @@ import "./App.css";
 captureDevToken();
 const DEV_MODE = isDevMode();
 import "./components/GraphView/GraphPage.css";
-
-const CV_INTENT_OPTIONS = [
-  { value: "new", label: "Something completely new" },
-  { value: "use_skills", label: "Use the skills I already have" },
-];
-
-const LIKERT = [
-  { value: 1, label: "Strongly disagree" },
-  { value: 2, label: "Disagree" },
-  { value: 3, label: "Neutral" },
-  { value: 4, label: "Agree" },
-  { value: 5, label: "Strongly agree" },
-];
-
-const ENJOY_LIKERT = [
-  { value: 1, label: "Not at all" },
-  { value: 2, label: "Not really" },
-  { value: 3, label: "Maybe" },
-  { value: 4, label: "Quite a bit" },
-  { value: 5, label: "Very much" },
-];
-
-function stepHeading(step) {
-  const railEntry = JOURNEY_RAIL.find((r) => r.step === step);
-  if (railEntry) return railEntry.label;
-  return step === "tree" ? "Ready" : "Career Discovery Journey";
-}
-
-function JourneyRailCard({ onBegin }) {
-  return (
-    <div className="question-card journey-rail-card">
-      <h3>Career Discovery Journey</h3>
-      <p className="entry-prompt">Four short steps. Each one feeds the final picture.</p>
-      <ol className="journey-rail-list">
-        {JOURNEY_RAIL.map((r) => (
-          <li key={r.step}>
-            <span className="journey-rail-label">{r.label}</span>
-            <span className="journey-rail-time">{r.time}</span>
-          </li>
-        ))}
-      </ol>
-      <button type="button" className="primary-action" onClick={onBegin}>
-        Start
-      </button>
-    </div>
-  );
-}
-
-function JourneyRailStrip({ step, furthestStep, busy, onNavigate }) {
-  const active = railIndexForStep(step);
-  if (active === -1) return null;
-  return (
-    <ol className="journey-rail-strip" aria-label="Career Discovery Journey progress">
-      {JOURNEY_RAIL.map((r, index) => {
-        // The active step is never a link — it is where you already are.
-        const clickable = index !== active && railStepReachable(r.step, furthestStep);
-        return (
-          <li
-            key={r.step}
-            className={`journey-rail-step ${index === active ? "active" : ""} ${index < active ? "done" : ""}`}
-          >
-            {clickable ? (
-              <button
-                type="button"
-                className="journey-rail-jump"
-                disabled={busy}
-                onClick={() => onNavigate(r.step)}
-              >
-                {r.label}
-              </button>
-            ) : (
-              r.label
-            )}
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-function stepProgressText(step, progress) {
-  if (!progress) return "";
-  if (step === "demographics")
-    return `${progress.demographics.answered} / ${progress.demographics.total}`;
-  if (step === "big_five")
-    return `${progress.bigFive.answered} / ${progress.bigFive.total}`;
-  if (step === "riasec" && progress.riasec.total)
-    return `${progress.riasec.answered} / ${progress.riasec.total}`;
-  if (step === "values" && progress.values && progress.values.answered)
-    return `${progress.values.answered} / ${progress.values.total}`;
-  if (step === "cv" && progress.journey.answered)
-    return `${progress.journey.answered} / ${progress.journey.total}`;
-  return "";
-}
 
 // One journey, one bar. Unknown-yet block sizes assume the short variants so
 // the bar can only get more accurate, never jump backwards. The CV block
@@ -162,323 +80,6 @@ function overallProgress(progress) {
     (progress.journey.active ? progress.journey.answered : 0);
   if (!total) return null;
   return { answered, total, percent: Math.min(100, Math.round((answered / total) * 100)) };
-}
-
-function DemographicQuestionCard({ q, savedValue, draft, setDraft, busy, onSubmit, onBack, canGoBack, progress }) {
-  return (
-    <div className="question-card">
-      <div className="question-card-top">
-        {canGoBack && (
-          <button type="button" className="ghost-action back-action" onClick={onBack} disabled={busy}>
-            ← Back
-          </button>
-        )}
-        <p className="question-category">
-          {progress ? `Question ${progress.index + 1} of ${progress.total}` : "About you"}
-        </p>
-      </div>
-      <h3>{q.question}</h3>
-      {q.kind === "single" && (
-        <div className="option-list">
-          {q.options.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              className={`option-button ${savedValue === o.value ? "selected" : ""}`}
-              onClick={() => onSubmit(o.value)}
-              disabled={busy}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
-      )}
-      {(q.kind === "number" || q.kind === "text") && (
-        <form
-          key={q.id}
-          className="question-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            onSubmit(draft);
-          }}
-        >
-          <input
-            autoFocus
-            type={q.kind === "number" ? "number" : "text"}
-            className="question-textarea"
-            value={draft}
-            min={q.min}
-            max={q.max}
-            placeholder={q.placeholder}
-            onChange={(e) => setDraft(e.target.value)}
-            disabled={busy}
-          />
-          <div className="question-actions single">
-            <button
-              type="submit"
-              className="primary-action"
-              disabled={busy || draft === "" || draft === null}
-            >
-              {busy ? "Saving..." : "Next"}
-            </button>
-          </div>
-        </form>
-      )}
-    </div>
-  );
-}
-
-function BigFiveQuestionCard({ q, savedValue, busy, onSubmit, onBack, canGoBack, progress }) {
-  return (
-    <div className="question-card">
-      <div className="question-card-top">
-        {canGoBack && (
-          <button type="button" className="ghost-action back-action" onClick={onBack} disabled={busy}>
-            ← Back
-          </button>
-        )}
-        <p className="question-category">
-          {progress ? `Item ${progress.index + 1} of ${progress.total}` : "Personality"}
-        </p>
-      </div>
-      <h3>{q.text}</h3>
-      <div className="likert-row">
-        {LIKERT.map((l) => (
-          <button
-            key={l.value}
-            type="button"
-            className={`option-button likert-button ${savedValue === l.value ? "selected" : ""}`}
-            onClick={() => onSubmit(l.value)}
-            disabled={busy}
-          >
-            <span className="likert-value">{l.value}</span>
-            <span className="likert-label">{l.label}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function RiasecQuestionCard({ q, savedValue, busy, onSubmit, onBack, canGoBack, onSkip, canSkip, progress }) {
-  return (
-    <div className="question-card">
-      <div className="question-card-top">
-        {canGoBack && (
-          <button type="button" className="ghost-action back-action" onClick={onBack} disabled={busy}>
-            ← Back
-          </button>
-        )}
-        <p className="question-category">
-          {progress ? `Activity ${progress.index + 1} of ${progress.total}` : "Interests"}
-        </p>
-      </div>
-      <p className="entry-prompt">How much would you enjoy…</p>
-      <h3>{q.text}</h3>
-      <div className="likert-row">
-        {ENJOY_LIKERT.map((l) => (
-          <button
-            key={l.value}
-            type="button"
-            className={`option-button likert-button ${savedValue === l.value ? "selected" : ""}`}
-            onClick={() => onSubmit(l.value)}
-            disabled={busy}
-          >
-            <span className="likert-value">{l.value}</span>
-            <span className="likert-label">{l.label}</span>
-          </button>
-        ))}
-      </div>
-      {canSkip && (
-        <button type="button" className="ghost-action" onClick={onSkip} disabled={busy}>
-          Skip the quiz — estimate my interests from my answers so far
-        </button>
-      )}
-    </div>
-  );
-}
-
-function CvCard({ mode, setMode, cvDraft, setCvDraft, busy, intent, intentBusy, onSelectIntent, onSubmitText, onUploadFile, uploadFormats }) {
-  if (mode === "paste") {
-    return (
-      <div className="question-card">
-        <div className="question-card-top">
-          <button type="button" className="ghost-action back-action" onClick={() => setMode("choice")} disabled={busy}>
-            ← Back
-          </button>
-          <p className="question-category">Your experience</p>
-        </div>
-        <h3>Paste your CV</h3>
-        <textarea
-          className="dream-input cv-input"
-          value={cvDraft}
-          maxLength={6000}
-          onChange={(e) => setCvDraft(e.target.value)}
-          placeholder="Paste the text of your CV or a summary of your experience"
-        />
-        <div className="question-actions single">
-          <button type="button" className="primary-action" onClick={onSubmitText} disabled={busy || !cvDraft.trim()}>
-            {busy ? "Analysing..." : "Analyse my CV"}
-          </button>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="question-card">
-      <p className="question-category">Your experience</p>
-      <h3>Let's factor in what you already have.</h3>
-
-      <p className="entry-prompt">Where should we start from?</p>
-      <div className="entry-options">
-        {CV_INTENT_OPTIONS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            className={`entry-option ${intent === option.value ? "selected" : ""}`}
-            onClick={() => onSelectIntent(option.value)}
-            disabled={busy || intentBusy}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="option-list">
-        <button type="button" className="option-button" onClick={() => setMode("paste")} disabled={busy || !intent}>
-          Paste my CV as text
-        </button>
-        <label className={`option-button cv-upload ${!intent ? "cv-upload-disabled" : ""}`}>
-          Upload a file ({uploadFormats.join(", ")} — max 5 MB)
-          <input
-            type="file"
-            accept={uploadFormats.join(",")}
-            hidden
-            disabled={busy || !intent}
-            onChange={(e) => e.target.files?.[0] && onUploadFile(e.target.files[0])}
-          />
-        </label>
-        <button type="button" className="option-button" onClick={() => setMode("journey")} disabled={busy || !intent}>
-          No CV — ask me 7 quick questions instead
-        </button>
-      </div>
-      {busy && <p className="dock-busy">Reading your CV…</p>}
-    </div>
-  );
-}
-
-// The adaptive pairwise-comparison card: pick the more important of two values.
-function ValuesComparisonCard({ comparison, busy, onChoose, progress }) {
-  const a = WORK_VALUE_META[comparison.a] || { label: comparison.a, blurb: "" };
-  const b = WORK_VALUE_META[comparison.b] || { label: comparison.b, blurb: "" };
-  return (
-    <div className="question-card">
-      <p className="question-category">
-        What matters more?{progress ? ` (${progress.answered + 1} of up to ${progress.total})` : ""}
-      </p>
-      <h3>Which of these would you rather have in your work?</h3>
-      <div className="values-ab">
-        <button
-          type="button"
-          className="values-ab-option"
-          onClick={() => onChoose(comparison.a)}
-          disabled={busy}
-        >
-          <span className="values-ab-label">{a.label}</span>
-          <span className="values-ab-blurb">{a.blurb}</span>
-        </button>
-        <span className="values-ab-or">or</span>
-        <button
-          type="button"
-          className="values-ab-option"
-          onClick={() => onChoose(comparison.b)}
-          disabled={busy}
-        >
-          <span className="values-ab-label">{b.label}</span>
-          <span className="values-ab-blurb">{b.blurb}</span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// The reorderable 1→6 hierarchy the tournament produced; the user can tweak it
-// before confirming.
-function ValuesHierarchyCard({ ranking, onMove, busy, onConfirm }) {
-  return (
-    <div className="question-card">
-      <p className="question-category">Your work-value hierarchy</p>
-      <h3>Does this feel like your hierarchy? You can modify it.</h3>
-      <ol className="rank-list">
-        {ranking.map((id, index) => (
-          <li key={id} className="rank-row">
-            <span className="rank-pos">{index + 1}</span>
-            <span className="rank-label">
-              {WORK_VALUE_META[id]?.label || id}
-              <span className="rank-meaning">{WORK_VALUE_META[id]?.blurb}</span>
-            </span>
-            <span className="rank-controls">
-              <button
-                type="button"
-                className="ghost-action"
-                onClick={() => onMove(index, -1)}
-                disabled={busy || index === 0}
-                aria-label={`Move ${WORK_VALUE_META[id]?.label} up`}
-              >
-                ↑
-              </button>
-              <button
-                type="button"
-                className="ghost-action"
-                onClick={() => onMove(index, 1)}
-                disabled={busy || index === ranking.length - 1}
-                aria-label={`Move ${WORK_VALUE_META[id]?.label} down`}
-              >
-                ↓
-              </button>
-            </span>
-          </li>
-        ))}
-      </ol>
-      <div className="question-actions single">
-        <button type="button" className="primary-action" onClick={onConfirm} disabled={busy}>
-          {busy ? "Saving…" : "This is my hierarchy"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// Required by the O*NET Web Services developer terms: the "O*NET in-it"
-// badge linking to services.onetcenter.org plus the exact attribution
-// sentence with the USDOL/ETA trademark acknowledgment. Keep the wording
-// and the badge artwork as published — they are license conditions.
-function OnetAttribution() {
-  return (
-    <div className="onet-attribution">
-      <a
-        href="https://services.onetcenter.org/"
-        target="_blank"
-        rel="noopener noreferrer"
-        title="This site incorporates information from O*NET Web Services. Click to learn more."
-      >
-        <img
-          src="https://www.onetcenter.org/image/link/onet-in-it.svg"
-          width="130"
-          height="60"
-          alt="O*NET in-it"
-        />
-      </a>
-      <p>
-        This site incorporates information from{" "}
-        <a href="https://services.onetcenter.org/" target="_blank" rel="noopener noreferrer">
-          O*NET Web Services
-        </a>{" "}
-        by the U.S. Department of Labor, Employment and Training Administration (USDOL/ETA).
-        O*NET&reg; is a trademark of USDOL/ETA.
-      </p>
-    </div>
-  );
 }
 
 // Side panel for output details and advice lists — same visual language as
@@ -532,8 +133,7 @@ function App() {
 
   const [demographicQuestions, setDemographicQuestions] = useState([]);
   const [demoAnswers, setDemoAnswers] = useState({});
-  const [demoIndex, setDemoIndex] = useState(0);
-  const [demoDraft, setDemoDraft] = useState("");
+  const [demoDrafts, setDemoDrafts] = useState({});
   const [bigFiveItems, setBigFiveItems] = useState([]);
   const [bigFiveAnswers, setBigFiveAnswers] = useState({});
   const [bigFiveIndex, setBigFiveIndex] = useState(0);
@@ -547,8 +147,8 @@ function App() {
   const [valuesRankDraft, setValuesRankDraft] = useState([]);
   const [careerJourneyQuestions, setCareerJourneyQuestions] = useState([]);
   const [cvUploadFormats, setCvUploadFormats] = useState([".pdf", ".docx", ".txt"]);
-  const [careerJourneyAnswers, setCareerJourneyAnswers] = useState({});
   const [journeyIndex, setJourneyIndex] = useState(0);
+  const [journeyAnswers, setJourneyAnswers] = useState({});
   const [journeyDraft, setJourneyDraft] = useState("");
   const [cvMode, setCvMode] = useState("choice"); // choice | paste | journey
   const [cvDraft, setCvDraft] = useState("");
@@ -610,7 +210,7 @@ function App() {
     setDemoAnswers(data.demographics || {});
     setBigFiveAnswers(data.bigFiveAnswers || {});
     setRiasecAnswers(data.riasecAnswers || {});
-    setCareerJourneyAnswers(data.careerJourneyAnswers || {});
+    setJourneyAnswers(data.careerJourneyAnswers || {});
     setOutputs(data.outputs || []);
     setAcceptedOutputId(data.acceptedOutputId || null);
     setRoadmaps(data.roadmaps || {});
@@ -647,7 +247,11 @@ function App() {
   const hydrateFromSnapshot = (data) => {
     applySessionSnapshot(data);
     setDreamAnswer(data.dreamAnswer || "");
-    setDemoIndex(firstUnansweredIndex(data.demographicQuestions || [], data.demographics));
+    setDemoDrafts(
+      Object.fromEntries(
+        Object.entries(data.demographics || {}).map(([id, value]) => [id, String(value)])
+      )
+    );
     setBigFiveIndex(firstUnansweredIndex(data.bigFiveItems || [], data.bigFiveAnswers));
     setRiasecIndex(firstUnansweredIndex(data.riasecItems || [], data.riasecAnswers));
     setJourneyIndex(
@@ -720,8 +324,7 @@ function App() {
       localStorage.setItem(SESSION_STORAGE_KEY, data.sessionId);
       setStage("survey");
       setShowRail(true);
-      setDemoIndex(0);
-      setDemoDraft("");
+      setDemoDrafts({});
     } catch (e) {
       setError(e.message || "Could not start.");
     } finally {
@@ -729,43 +332,48 @@ function App() {
     }
   };
 
-  const draftFromAnswer = (value) =>
-    value === undefined || value === null ? "" : String(value);
+  const handleDemoDraftChange = (questionId, value) =>
+    setDemoDrafts((drafts) => ({ ...drafts, [questionId]: value }));
 
-  const handleSubmitDemographic = async (rawValue) => {
+  // All four answers land on one screen, but the route takes one at a time and
+  // advances the step the moment all four are present. On a first pass that is
+  // the last POST, and the loop is trivial. A rail revisit is where it bites:
+  //   * Every answer is already saved, so the FIRST post advances the step and
+  //     every later one 400s on the route's step guard — silently dropping the
+  //     user's other edits. Stepping back through /goto keeps them all.
+  //   * If the revisit changed nothing there is no post to make at all, and the
+  //     user would sit on a Continue button that does nothing. Re-posting one
+  //     unchanged answer is what makes the backend re-run its all-answered
+  //     check and move forward, which is the documented rail invariant:
+  //     completing a revisited step advances exactly as on the first pass.
+  // A failure mid-chain leaves the earlier answers saved; re-submitting sends
+  // only what the snapshot still lacks.
+  const handleSubmitDemographics = async () => {
     if (!sessionId) return;
-    const q = demographicQuestions[demoIndex];
-    if (!q) return;
-    const value = q.kind === "number" ? Number(rawValue) : rawValue;
-    if (value === "" || value === null || (typeof value === "number" && Number.isNaN(value))) {
-      return;
-    }
+    const changed = demographicsPayloads(demographicQuestions, demoDrafts, demoAnswers);
+    const payloads = changed.length
+      ? changed
+      : demographicsPayloads(demographicQuestions, demoDrafts, {}).slice(0, 1);
+    if (!payloads.length) return;
     setError("");
     setBusy((p) => ({ ...p, demo: true }));
     try {
-      const data = await submitDemographics({
-        sessionId,
-        questionId: q.id,
-        value,
-      });
-      applySessionSnapshot(data);
-      if (demoIndex < demographicQuestions.length - 1) {
-        const nextQ = demographicQuestions[demoIndex + 1];
-        setDemoDraft(draftFromAnswer(data.demographics?.[nextQ.id]));
-        setDemoIndex((i) => i + 1);
+      let currentStep = step;
+      for (const payload of payloads) {
+        if (currentStep !== "demographics") {
+          const back = await sessionGoto({ sessionId, step: "demographics" });
+          applySessionSnapshot(back);
+          currentStep = back.step;
+        }
+        const data = await submitDemographics({ sessionId, ...payload });
+        applySessionSnapshot(data);
+        currentStep = data.step;
       }
     } catch (e) {
       setError(e.message || "Could not save.");
     } finally {
       setBusy((p) => ({ ...p, demo: false }));
     }
-  };
-
-  const handleBackDemographic = () => {
-    const prevQ = demographicQuestions[demoIndex - 1];
-    if (!prevQ) return;
-    setDemoDraft(draftFromAnswer(demoAnswers[prevQ.id]));
-    setDemoIndex((i) => Math.max(0, i - 1));
   };
 
   const handleSubmitBigFive = async (value) => {
@@ -955,6 +563,20 @@ function App() {
     }
   };
 
+  // Back on the journey: step to the previous question with its saved answer
+  // restored, or leave the journey entirely from the first one. Answers live on
+  // the server, so nothing is lost either way — re-answering overwrites.
+  const handleJourneyBack = () => {
+    if (journeyIndex <= 0) {
+      setCvMode("choice");
+      setJourneyDraft("");
+      return;
+    }
+    const prev = careerJourneyQuestions[journeyIndex - 1];
+    setJourneyDraft((prev && journeyAnswers[prev.id]) || "");
+    setJourneyIndex((i) => i - 1);
+  };
+
   const handleSubmitJourney = async (rawValue) => {
     if (!sessionId) return;
     const q = careerJourneyQuestions[journeyIndex];
@@ -997,7 +619,6 @@ function App() {
     }
   };
 
-  const currentDemographicQuestion = demographicQuestions[demoIndex] || null;
   const currentBigFiveItem = bigFiveItems[bigFiveIndex] || null;
 
   const latestOutput = outputs.length ? outputs[outputs.length - 1] : null;
@@ -1154,6 +775,44 @@ function App() {
     setStageDetail({ stage: stageItem, index });
   };
 
+  // The hero nav is real navigation: both entries open the same side panel the
+  // graph uses, carrying the methodology rather than marketing copy.
+  const METHODOLOGY_VIEWS = {
+    "how-it-works": {
+      archetype: "how it works",
+      title: "Five instruments, one profile",
+      sections: [
+        {
+          heading: "What you answer",
+          items: [
+            "Four demographic questions.",
+            "The public-domain Mini-IPIP-20, rated 1–5, scored to OCEAN 0–100 plus Stability/Plasticity.",
+            "Twelve fixed activity statements, rated for enjoyment — never job titles — scored to a Holland code.",
+            "An adaptive Ford–Johnson merge-insertion tournament, ≤10 comparisons, ranking the six Minnesota work values.",
+            "Your CV, or seven career-journey questions if you don't have one.",
+          ],
+        },
+      ],
+    },
+    "the-engine": {
+      archetype: "the engine",
+      title: "Grounded in O*NET, traced to your answers",
+      sections: [
+        {
+          heading: "How a suggestion is built",
+          items: [
+            "Your Holland code ranks the field families; the O*NET snapshot ranks occupations inside them by measured interest profile.",
+            "The occupation must come from that shortlist — the engine cannot invent one.",
+            "Its six measured work values are scored against your confirmed hierarchy as a single fit percentage.",
+            "Every line of the explanation points back to a score, a rank, or a sentence you wrote.",
+          ],
+        },
+      ],
+    },
+  };
+
+  const handleOpenMethodology = (key) => setInfoView(METHODOLOGY_VIEWS[key] || null);
+
   const resetAll = () => {
     localStorage.removeItem(SESSION_STORAGE_KEY);
     setRestoring(false);
@@ -1166,22 +825,19 @@ function App() {
     setProgress(null);
     setDemographicQuestions([]);
     setDemoAnswers({});
-    setDemoIndex(0);
-    setDemoDraft("");
+    setDemoDrafts({});
     setBigFiveItems([]);
     setBigFiveAnswers({});
     setBigFiveIndex(0);
     setRiasecItems([]);
     setRiasecAnswers({});
     setRiasecIndex(0);
-    setJobCharParams([]);
-    setRankDraft([]);
     setValuesComparison(null);
     setValuesRanking(null);
     setValuesRankDraft([]);
     setCareerJourneyQuestions([]);
-    setCareerJourneyAnswers({});
     setJourneyIndex(0);
+    setJourneyAnswers({});
     setJourneyDraft("");
     setCvMode("choice");
     setCvDraft("");
@@ -1189,8 +845,6 @@ function App() {
     setOutputs([]);
     setAcceptedOutputId(null);
     setRoadmaps({});
-    setRefineMode(false);
-    setRefineChecks({});
     setStageDetail(null);
     setInfoView(null);
     setProfile(null);
@@ -1204,16 +858,18 @@ function App() {
       riasecStart: false,
       riasec: false,
       riasecSkip: false,
-        values: false,
+      values: false,
       valuesConfirm: false,
       summary: false,
-        cv: false,
+      cv: false,
       cvIntent: false,
       journey: false,
       enterTree: false,
       accept: false,
       roadmap: false,
       refine: false,
+      goto: false,
+      dev: false,
     });
   };
 
@@ -1231,13 +887,11 @@ function App() {
   const selectedRoadmap = acceptedOutputId ? roadmaps[acceptedOutputId] : null;
   const roadmapVisible = Boolean(selectedRoadmap);
 
-  const treeHint = !outputs.length
-    ? "Generating your first path…"
-    : !acceptedOutputId
-      ? "Review the suggestion — accept it or ask for a different direction"
-      : roadmapVisible
-        ? "Your roadmap — click any step for details"
-        : "Accepted — building your next steps";
+  // Spec 5.11's centre header. The mockup only ever draws the accepted graph;
+  // the leading word keeps the line honest on the way there.
+  const graphHeadline = `${
+    !outputs.length ? "generating" : !acceptedOutputId ? "exploring" : "accepted"
+  } · your life path graph`;
 
   let focusKey = "start";
   let focusNodeIds = ["me"];
@@ -1262,58 +916,49 @@ function App() {
     dockCard = {
       key: `review-${latestOutput.id}`,
       content: (
-        <div className="question-card dock-card">
-          <p className="question-category">
-            {latestOutput.orientedField}
-            {latestOutput.valuesFit && (
-              <span className="fit-badge">{latestOutput.valuesFit.overall}% values fit</span>
-            )}
-          </p>
-          <h3>{latestOutput.jobTitle}</h3>
-          <p className="dock-subtext">{latestOutput.thesis}</p>
-          {(latestOutput.onet?.salary || latestOutput.onet?.outlook?.category) && (
-            <p className="dock-subtext dock-onet-line">
-              {[
-                latestOutput.onet.salary
-                  ? `$${latestOutput.onet.salary.annualMedian.toLocaleString("en-US")}/yr median (US)`
-                  : null,
-                latestOutput.onet.outlook?.category
-                  ? `outlook: ${latestOutput.onet.outlook.category}`
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-          )}
-          <div className="question-actions">
-            <button
-              type="button"
-              className="primary-action"
-              onClick={handleAcceptOutput}
-              disabled={busy.accept || busy.refine}
-            >
-              {busy.accept ? "Building next steps…" : "Yes, this fits"}
-            </button>
-            <button
-              type="button"
-              className="ghost-action"
-              onClick={handleNotSuitable}
-              disabled={busy.accept || busy.refine}
-            >
-              {busy.refine ? "Finding another…" : "Not for me"}
-            </button>
-            <button
-              type="button"
-              className="ghost-action"
-              onClick={() => handleOutputOpen(latestOutput)}
-            >
-              Details
-            </button>
-          </div>
-        </div>
+        <OutputDecision
+          output={latestOutput}
+          busy={busy}
+          onAccept={handleAcceptOutput}
+          onRegenerate={handleNotSuitable}
+          onOpenDetails={handleOutputOpen}
+        />
       ),
     };
   }
+
+  const overall = overallProgress(progress);
+  const surveyFooter = (
+    <>
+      {overall && (
+        <div className="screen-progress">
+          <div
+            className="screen-progress-track"
+            role="progressbar"
+            aria-valuenow={overall.answered}
+            aria-valuemin={0}
+            aria-valuemax={overall.total}
+            aria-label={`Overall: ${overall.answered} of ${overall.total} questions`}
+          >
+            <div className="screen-progress-fill" style={{ width: `${overall.percent}%` }} />
+          </div>
+          <span className="screen-progress-percent">{overall.percent}%</span>
+        </div>
+      )}
+      <StepRail
+        step={step}
+        furthestStep={furthestStep}
+        busy={busy.goto}
+        onNavigate={handleRailNavigate}
+      />
+      {/* Restart sits with the rail, not in the screen's top-left: deviation 9
+          gives that slot to the per-step Back, and the two are the same
+          absolutely-positioned box. */}
+      <button type="button" className="screen-restart" onClick={resetAll}>
+        Restart
+      </button>
+    </>
+  );
 
   if (restoring) {
     return (
@@ -1326,69 +971,19 @@ function App() {
   return (
     <main className="app-shell">
       {stage === "entry" && (
-        <section className="entry-screen">
-          <h1>What would you do if you knew you would definitely succeed?</h1>
-
-          <textarea
-            className="dream-input"
-            value={dreamAnswer}
-            maxLength={500}
-            onChange={(event) => setDreamAnswer(event.target.value)}
-            placeholder="Write your honest answer"
-          />
-
-          <button
-            type="button"
-            className="primary-action"
-            onClick={handleStartSession}
-            disabled={busy.start || !dreamAnswer.trim()}
-          >
-            {busy.start ? "Entering..." : "Help to explore my career"}
-          </button>
-
-          <p className="entry-disclaimer">
-            An exploratory self-reflection tool — not professional career
-            counseling or a psychological assessment.
-          </p>
-
-          {error && <p className="error-text">{error}</p>}
-
-          <OnetAttribution />
-        </section>
+        <EntryScreen
+          value={dreamAnswer}
+          onChange={setDreamAnswer}
+          onStart={handleStartSession}
+          busy={busy.start}
+          error={error}
+          reducedMotion={REDUCED_MOTION}
+          onOpenInfo={handleOpenMethodology}
+        />
       )}
 
       {stage === "survey" && (
         <section className="questions-screen">
-          <header className="screen-header">
-            <h2>{stepHeading(step)}</h2>
-            <p>{stepProgressText(step, progress)}</p>
-            <JourneyRailStrip
-              step={step}
-              furthestStep={furthestStep}
-              busy={busy.goto}
-              onNavigate={handleRailNavigate}
-            />
-          </header>
-
-          {step !== "tree" && (() => {
-            const overall = overallProgress(progress);
-            return overall ? (
-              <div className="overall-progress-row">
-                <div
-                  className="overall-progress"
-                  role="progressbar"
-                  aria-valuenow={overall.answered}
-                  aria-valuemin={0}
-                  aria-valuemax={overall.total}
-                  aria-label={`Overall: ${overall.answered} of ${overall.total} questions`}
-                >
-                  <div className="overall-progress-fill" style={{ width: `${overall.percent}%` }} />
-                </div>
-                <span className="overall-progress-percent">{overall.percent}%</span>
-              </div>
-            ) : null;
-          })()}
-
           {!aiEnabled && (
             <p className="demo-notice">
               Demo mode — suggestions come from fixed rules, not AI.
@@ -1396,205 +991,149 @@ function App() {
           )}
 
           {showRail && step === "demographics" && (
-            <JourneyRailCard onBegin={() => setShowRail(false)} />
+            <JourneyIntroScreen onBegin={() => setShowRail(false)} />
           )}
 
-          {!showRail && step === "demographics" && currentDemographicQuestion && (
-            <DemographicQuestionCard
-              q={currentDemographicQuestion}
-              savedValue={demoAnswers[currentDemographicQuestion.id] ?? null}
-              draft={demoDraft}
-              setDraft={setDemoDraft}
+          {!showRail && step === "demographics" && demographicQuestions.length > 0 && (
+            <DemographicsScreen
+              questions={demographicQuestions}
+              drafts={demoDrafts}
+              onDraftChange={handleDemoDraftChange}
               busy={busy.demo}
-              onSubmit={handleSubmitDemographic}
-              onBack={handleBackDemographic}
-              canGoBack={demoIndex > 0}
-              progress={{ index: demoIndex, total: demographicQuestions.length }}
+              onSubmit={handleSubmitDemographics}
+              footer={surveyFooter}
             />
           )}
 
           {step === "big_five" && currentBigFiveItem && (
-            <BigFiveQuestionCard
-              q={currentBigFiveItem}
+            <BigFiveScreen
+              item={currentBigFiveItem}
               savedValue={bigFiveAnswers[currentBigFiveItem.id] ?? null}
+              index={bigFiveIndex}
+              total={bigFiveItems.length}
               busy={busy.bigFive}
-              onSubmit={handleSubmitBigFive}
+              onAnswer={handleSubmitBigFive}
               onBack={handleBackBigFive}
               canGoBack={bigFiveIndex > 0}
-              progress={{ index: bigFiveIndex, total: bigFiveItems.length }}
+              footer={surveyFooter}
             />
           )}
 
           {step === "riasec" && !riasecItems.length && (
-            <div className="question-card">
-              <h3>Preparing the interests quiz…</h3>
-            </div>
+            <ScreenShell
+              eyebrow="step 3 · riasec interests"
+              title="Preparing the interests quiz…"
+              footer={surveyFooter}
+            />
           )}
 
           {step === "riasec" && riasecItems[riasecIndex] && (
-            <RiasecQuestionCard
-              q={riasecItems[riasecIndex]}
+            <RiasecScreen
+              item={riasecItems[riasecIndex]}
               savedValue={riasecAnswers[riasecItems[riasecIndex].id] ?? null}
+              index={riasecIndex}
+              total={riasecItems.length}
               busy={busy.riasec || busy.riasecSkip}
-              onSubmit={handleSubmitRiasec}
+              onAnswer={handleSubmitRiasec}
               onBack={() => setRiasecIndex((i) => Math.max(0, i - 1))}
               canGoBack={riasecIndex > 0}
               onSkip={handleSkipRiasec}
               canSkip={Object.keys(riasecAnswers).length === 0}
-              progress={{ index: riasecIndex, total: riasecItems.length }}
+              footer={surveyFooter}
             />
           )}
 
           {step === "values" && valuesComparison && (
-            <ValuesComparisonCard
+            <ValuesTournamentScreen
               comparison={valuesComparison}
+              progress={progress?.values || null}
               busy={busy.values}
               onChoose={handleValuesAnswer}
-              progress={progress?.values}
+              footer={surveyFooter}
             />
           )}
 
           {step === "values" && !valuesComparison && valuesRankDraft.length === 6 && (
-            <ValuesHierarchyCard
+            <ValuesHierarchyScreen
               ranking={valuesRankDraft}
-              onMove={(index, delta) => setValuesRankDraft((l) => moveRankItem(l, index, delta))}
+              onReorder={(from, to) => setValuesRankDraft((list) => moveRankItemTo(list, from, to))}
               busy={busy.valuesConfirm}
               onConfirm={handleValuesConfirm}
+              footer={surveyFooter}
             />
           )}
 
-          {step === "cv" && cvMode !== "journey" && (
-            <CvCard
+          {step === "cv" && careerJourneyQuestions.length > 0 && (
+            <ExperienceScreen
               mode={cvMode}
-              setMode={setCvMode}
-              cvDraft={cvDraft}
-              setCvDraft={setCvDraft}
-              busy={busy.cv}
               intent={cvIntent}
               intentBusy={busy.cvIntent}
               onSelectIntent={handleSelectCvIntent}
-              onSubmitText={handleSubmitCvText}
+              cvDraft={cvDraft}
+              onCvDraftChange={setCvDraft}
+              onStartPaste={() => setCvMode("paste")}
+              onSubmitCvText={handleSubmitCvText}
               onUploadFile={handleUploadCv}
               uploadFormats={cvUploadFormats}
+              busy={busy.cv || busy.journey}
+              journeyQuestion={careerJourneyQuestions[journeyIndex]}
+              journeyIndex={journeyIndex}
+              journeyTotal={careerJourneyQuestions.length}
+              journeyDraft={journeyDraft}
+              onJourneyDraftChange={setJourneyDraft}
+              onSubmitJourney={() => {
+                // Answering the B-side question is the commitment to the
+                // journey path — without this the eyebrow's counter never
+                // starts, even as journeyIndex advances underneath it. Guard on
+                // the same emptiness handleSubmitJourney checks, or Enter on an
+                // empty field commits the path and records nothing.
+                if (!journeyDraft.trim()) return;
+                setCvMode("journey");
+                handleSubmitJourney(journeyDraft);
+              }}
+              onStartJourney={() => setCvMode("journey")}
+              onBackToChoice={() => {
+                setCvMode("choice");
+                setCvDraft("");
+              }}
+              onJourneyBack={handleJourneyBack}
+              footer={surveyFooter}
             />
           )}
 
-          {step === "cv" && cvMode === "journey" && careerJourneyQuestions[journeyIndex] && (
-            <div className="question-card">
-              <div className="question-card-top">
-                <button
-                  type="button"
-                  className="ghost-action back-action"
-                  onClick={() => {
-                    if (journeyIndex === 0) {
-                      setCvMode("choice");
-                    } else {
-                      const prevQ = careerJourneyQuestions[journeyIndex - 1];
-                      setJourneyDraft(careerJourneyAnswers[prevQ.id] || "");
-                      setJourneyIndex((i) => i - 1);
-                    }
-                  }}
-                  disabled={busy.journey}
-                >
-                  ← Back
-                </button>
-                <p className="question-category">
-                  Question {journeyIndex + 1} of {careerJourneyQuestions.length}
-                </p>
-              </div>
-              <h3>{careerJourneyQuestions[journeyIndex].question}</h3>
-              <form
-                key={careerJourneyQuestions[journeyIndex].id}
-                className="question-form"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSubmitJourney(journeyDraft);
-                }}
-              >
-                <textarea
-                  autoFocus
-                  className="question-textarea"
-                  value={journeyDraft}
-                  maxLength={400}
-                  placeholder={careerJourneyQuestions[journeyIndex].placeholder}
-                  onChange={(e) => setJourneyDraft(e.target.value)}
-                  disabled={busy.journey}
-                />
-                <div className="question-actions single">
-                  <button
-                    type="submit"
-                    className="primary-action"
-                    disabled={busy.journey || !journeyDraft.trim()}
-                  >
-                    {busy.journey ? "Saving..." : "Next"}
-                  </button>
-                </div>
-              </form>
-            </div>
+          {step === "summary" && (
+            <SummaryScreen
+              archetype={deriveArchetype({
+                riasecCode: profile?.riasecCode,
+                bigFiveScores: profile?.bigFiveScores,
+              })}
+              bigFiveScores={profile?.bigFiveScores}
+              personaSummary={profile?.personaSummary}
+              userValues={profile?.userValues}
+              busy={busy.summary}
+              onContinue={handleSummaryContinue}
+              footer={surveyFooter}
+            />
           )}
-
-          {step === "summary" && (() => {
-            const archetype = deriveArchetype({
-              riasecCode: profile?.riasecCode,
-              bigFiveScores: profile?.bigFiveScores,
-            });
-            return (
-              <div className="question-card summary-card">
-                <p className="question-category">Who you are</p>
-                <h3 className="summary-archetype">{archetype.name}</h3>
-                <p className="summary-tagline">{archetype.tagline}</p>
-
-                {profile?.bigFiveScores && (
-                  <PersonalityRadarChart scores={profile.bigFiveScores} />
-                )}
-
-                {profile?.personaSummary && (
-                  <p className="summary-persona">{profile.personaSummary}</p>
-                )}
-
-                {profile?.userValues?.scores && (
-                  <WorkValuesRadar user={profile.userValues.scores} title="What matters to you" />
-                )}
-
-                <div className="question-actions single">
-                  <button
-                    type="button"
-                    className="primary-action"
-                    onClick={handleSummaryContinue}
-                    disabled={busy.summary}
-                  >
-                    {busy.summary ? "Preparing…" : "Continue →"}
-                  </button>
-                </div>
-                <p className="entry-disclaimer">
-                  A preliminary sketch from a short self-report — not a clinical assessment.
-                </p>
-              </div>
-            );
-          })()}
 
           {step === "tree" && (
-            <div className="question-card">
-              <h3>Assessment complete.</h3>
-              <p>You're ready to generate your first life path branch.</p>
-              <div className="question-actions single">
-                <button
-                  type="button"
-                  className="primary-action"
-                  onClick={handleEnterLifePath}
-                  disabled={busy.enterTree}
-                >
-                  {busy.enterTree ? "Preparing..." : "Run Life Path Engine"}
-                </button>
-              </div>
-            </div>
+            <ScreenShell
+              eyebrow="assessment complete"
+              title="Assessment complete."
+              sub="You're ready to generate your first life path branch."
+              glow="center"
+              footer={surveyFooter}
+            >
+              <button
+                type="button"
+                className="btn btn--gold summary-cta"
+                onClick={handleEnterLifePath}
+                disabled={busy.enterTree}
+              >
+                {busy.enterTree ? "Preparing…" : "Run Life Path Engine"}
+              </button>
+            </ScreenShell>
           )}
-
-          <div className="bottom-actions">
-            <button type="button" className="ghost-action" onClick={resetAll}>
-              Restart
-            </button>
-          </div>
 
           {error && (
             <div className="error-row">
@@ -1611,11 +1150,15 @@ function App() {
 
       {stage === "tree" && (
         <div className="graph-page">
+          <BranchCanvas preset="graph" className="graph-branch" reducedMotion={REDUCED_MOTION} />
           <div className="graph-header">
-            <button type="button" className="graph-back" onClick={resetAll}>
-              ← Restart
-            </button>
-            <span className="graph-logo">Life Path Explorer</span>
+            <span className="graph-header-lead">
+              <Wordmark />
+              <button type="button" className="screen-back" onClick={resetAll}>
+                ← Restart
+              </button>
+            </span>
+            <span className="graph-headline">{graphHeadline}</span>
             <span className="graph-header-side">
               {!aiEnabled && <span className="demo-notice demo-notice-inline">Demo mode</span>}
               <button
@@ -1625,7 +1168,6 @@ function App() {
               >
                 {profileOpen ? "Hide profile" : "My profile"}
               </button>
-              <span className="graph-hint">{treeHint}</span>
             </span>
           </div>
 
@@ -1643,45 +1185,35 @@ function App() {
                 onClose={() => setProfileOpen(false)}
               />
             )}
-          </div>
 
-          <div className="graph-question-dock">
-            <AnimatePresence mode="wait">
-              {dockCard && (
-                <Motion.div
-                  key={dockCard.key}
-                  initial={{ y: 12, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  exit={{
-                    y: 12,
-                    opacity: 0,
-                    transition: { duration: REDUCED_MOTION ? 0 : 0.25 },
-                  }}
-                  transition={
-                    REDUCED_MOTION
-                      ? { duration: 0 }
-                      : { duration: 0.35, ease: [0.22, 1, 0.36, 1] }
-                  }
-                >
-                  {dockCard.content}
-                </Motion.div>
-              )}
-            </AnimatePresence>
+            {/* The dock lives inside .graph-canvas, not .graph-page: it is
+                capped against its containing block, and the canvas is the part
+                of the page below the header — so a tall card can never grow
+                over the header and swallow its controls. */}
+            <div className="graph-question-dock">
+              <AnimatePresence mode="wait">
+                {dockCard && (
+                  <Motion.div
+                    key={dockCard.key}
+                    initial={{ y: 12, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{
+                      y: 12,
+                      opacity: 0,
+                      transition: { duration: REDUCED_MOTION ? 0 : 0.25 },
+                    }}
+                    transition={
+                      REDUCED_MOTION
+                        ? { duration: 0 }
+                        : { duration: 0.35, ease: [0.22, 1, 0.36, 1] }
+                    }
+                  >
+                    {dockCard.content}
+                  </Motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
-
-          <AnimatePresence>
-            {infoView && (
-              <Motion.div
-                key="info-view"
-                initial={{ x: 20, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                exit={{ x: 20, opacity: 0 }}
-                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <InfoPanel view={infoView} onClose={() => setInfoView(null)} />
-              </Motion.div>
-            )}
-          </AnimatePresence>
 
           <AnimatePresence>
             {stageDetail && (
@@ -1729,6 +1261,20 @@ function App() {
           onJump={handleDevJump}
         />
       )}
+
+      <AnimatePresence>
+        {infoView && (
+          <Motion.div
+            key="info-view"
+            initial={{ x: 20, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 20, opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <InfoPanel view={infoView} onClose={() => setInfoView(null)} />
+          </Motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }

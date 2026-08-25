@@ -3,8 +3,17 @@
   height: 100%;
 }
 
+/* Let the glowing branch canvas behind the graph show through. */
+.react-flow,
+.react-flow__pane,
+.react-flow__renderer {
+  background: transparent;
+}
+
 .react-flow__attribution {
-  display: none;
+  background: transparent;
+  color: var(--text-30);
+  font: 400 10px/1 var(--font-mono);
 }
 
 .graph-controls {
@@ -13,28 +22,71 @@
   box-shadow: none;
 }
 
-.graph-controls button {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border) !important;
-  border-radius: 2px !important;
-  color: var(--color-text-muted);
-  box-shadow: none !important;
-  width: 28px;
-  height: 28px;
+.react-flow__controls-button {
+  background: var(--ink-screen);
+  border-bottom: 1px solid var(--gold-20);
+  fill: var(--gold-70);
 }
 
-.graph-controls button:hover {
-  background: var(--color-surface);
-  color: var(--color-text);
+.react-flow__controls-button:hover {
+  background: var(--gold-hover);
+  fill: var(--gold);
+}
+
+/* Our output node type is literally named "output", which collides with React
+   Flow's built-in node names — the library then paints its own card (white
+   background, 1px border, 150px, 10px padding, centred 12px text) on the
+   wrapper behind our transparent node, and its hover/selected box-shadows on
+   top. Every node here draws itself, so the built-in chrome is removed for all
+   four reserved names rather than only the one we happen to use today. */
+.react-flow__node-input,
+.react-flow__node-default,
+.react-flow__node-output,
+.react-flow__node-group {
+  width: auto;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: inherit;
+  font-size: inherit;
+  text-align: left;
+  box-shadow: none;
+}
+
+.react-flow__node-input.selectable:hover,
+.react-flow__node-default.selectable:hover,
+.react-flow__node-output.selectable:hover,
+.react-flow__node-group.selectable:hover,
+.react-flow__node-input.selectable.selected,
+.react-flow__node-input.selectable:focus,
+.react-flow__node-input.selectable:focus-visible,
+.react-flow__node-default.selectable.selected,
+.react-flow__node-default.selectable:focus,
+.react-flow__node-default.selectable:focus-visible,
+.react-flow__node-output.selectable.selected,
+.react-flow__node-output.selectable:focus,
+.react-flow__node-output.selectable:focus-visible,
+.react-flow__node-group.selectable.selected,
+.react-flow__node-group.selectable:focus,
+.react-flow__node-group.selectable:focus-visible {
+  box-shadow: none;
+}
+
+/* Handles are load-bearing for edge attachment but stay invisible. */
+.react-flow__handle {
+  opacity: 0;
 }
 
 .react-flow__edge-path {
-  stroke: var(--color-border);
+  stroke: var(--gold-20);
   stroke-width: 1;
 }
 
 .branch-edge {
   fill: none;
+  stroke: var(--gold-40);
+  stroke-width: 1.5;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
   /* duration must equal EDGE_DRAW_MS in App.jsx */
@@ -45,16 +97,11 @@
   to { stroke-dashoffset: 0; }
 }
 
-/* Chosen-path highlight */
-.branch-edge--active {
-  stroke: var(--color-accent);
-  stroke-width: 1.5;
-}
-
 /* Continuous downstream pulse on the chosen path; fades in only after the
-   draw-in completes (--flow-delay = edge delay + EDGE_DRAW_MS). */
+   draw-in completes (--flow-delay = edge delay + EDGE_DRAW_MS). Its brighter
+   gold, over the resting gold-40 hairline, is what marks the chosen path now. */
 .branch-edge-flow {
-  stroke: var(--color-accent);
+  stroke: var(--gold);
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-dasharray: 6 10;

@@ -3,7 +3,9 @@ import {
   buildLifePathGraph,
   selectDockCard,
   firstUnansweredIndex,
-  moveRankItem,
+  demographicsComplete,
+  demographicsPayloads,
+  moveRankItemTo,
   outputX,
   ADVICE_BLOCKS,
   JOURNEY_RAIL,
@@ -16,6 +18,7 @@ import {
   deriveArchetype,
   WORK_VALUE_AXES,
   WORK_VALUE_ORDER,
+  usMarketLine,
 } from "./lifePath";
 
 describe("whyThisFitsSections", () => {
@@ -120,8 +123,8 @@ describe("journey rail", () => {
     }
   });
 
-  it("labels the work-values step 'Your values'", () => {
-    expect(JOURNEY_RAIL.find((r) => r.step === "values").label).toBe("Step 3 — Your values");
+  it("labels the work-values step 'Values'", () => {
+    expect(JOURNEY_RAIL.find((r) => r.step === "values").label).toBe("Values");
   });
 
   it("maps steps to rail positions; off-rail steps return -1", () => {
@@ -175,8 +178,10 @@ const OUTPUTS = [
     parentId: null,
     jobTitle: "Agronomist",
     orientedField: "Agriculture & Environment",
+    thesis: "Field work with a measurable outcome every season.",
     valuesFit: { overall: 78 },
     topValues: ["security", "universalism", "tradition"],
+    onet: { salary: { annualMedian: 74100 }, outlook: { category: "Average" } },
     accepted: null,
     detail: null,
   },
@@ -185,8 +190,10 @@ const OUTPUTS = [
     parentId: "output_1",
     jobTitle: "Environmental Technician",
     orientedField: "Agriculture & Environment",
+    thesis: "Sampling, measuring and reporting on the places people live in.",
     valuesFit: { overall: 84 },
     topValues: ["universalism", "security", "self_direction"],
+    onet: null,
     accepted: null,
     detail: null,
   },
@@ -230,7 +237,7 @@ describe("buildLifePathGraph (output chain)", () => {
     expect(edges.find((e) => e.id === "output_1-output_2").data.active).toBe(true);
   });
 
-  it("passes fit, top values, and accepted/latest flags into node data", () => {
+  it("passes fit, thesis, market line, and accepted/latest flags into node data", () => {
     const onOutputOpen = vi.fn();
     const { nodes } = buildLifePathGraph({
       outputs: OUTPUTS,
@@ -241,10 +248,18 @@ describe("buildLifePathGraph (output chain)", () => {
     });
     const second = nodes.find((n) => n.id === "output_2");
     expect(second.data.fit).toBe(84);
+    expect(second.data.thesis).toBe(OUTPUTS[1].thesis);
     expect(second.data.accepted).toBe(true);
     expect(second.data.latest).toBe(true);
     second.data.onOpen();
     expect(onOutputOpen).toHaveBeenCalledWith(OUTPUTS[1]);
+
+    // The spec's meta row is salary · outlook, so the node carries the same
+    // US-flagged market line the details panel uses — and nothing when the
+    // live O*NET call had no key to make.
+    const first = nodes.find((n) => n.id === "output_1");
+    expect(first.data.market).toBe("$74,100/yr median (US) · outlook: Average");
+    expect(second.data.market).toBe("");
   });
 
   it("accepted output with detail grows the four advice nodes", () => {
@@ -292,6 +307,39 @@ describe("buildLifePathGraph (output chain)", () => {
     expect(edges.find((e) => e.id === "output_1-stage-output_1-stage_1")).toBeTruthy();
     expect(edges.find((e) => e.id === "stage-output_1-stage_1-stage-output_1-stage_2")).toBeTruthy();
     expect(stages[1].data.last).toBe(true);
+  });
+
+  // Node positions are left edges and the card is 480px wide (spec 5.11), so
+  // "centred" here means the row's own centre lands on the card's.
+  it("abuts the advice cells and centres both rows under the accepted card", () => {
+    const outputs = [OUTPUTS[0], { ...OUTPUTS[1], accepted: true, detail: DETAIL }];
+    const { nodes } = buildLifePathGraph({
+      outputs,
+      acceptedOutputId: "output_2",
+      roadmaps: {
+        output_2: {
+          professionId: "output_2",
+          stages: [{ id: "stage_1", title: "T1", timeframe: "1m" }],
+        },
+      },
+      onOutputOpen: noop,
+      onAdviceOpen: noop,
+      onStageOpen: noop,
+    });
+    const cardCentre = outputX(1) + 480 / 2;
+
+    const advice = nodes.filter((n) => n.type === "advice");
+    expect(advice).toHaveLength(4);
+    expect(advice[1].position.x - advice[0].position.x).toBe(220);
+    const rowLeft = advice[0].position.x;
+    const rowRight = advice[advice.length - 1].position.x + 220;
+    expect((rowLeft + rowRight) / 2).toBe(cardCentre);
+
+    const stage = nodes.find((n) => n.type === "roadmap");
+    expect(stage.position.x + 360 / 2).toBe(cardCentre);
+
+    // and siblings never overlap: the gap clears the card's own width
+    expect(outputX(1) - outputX(0)).toBeGreaterThanOrEqual(480);
   });
 
   it("shows loading placeholders while detail or roadmap generate", () => {
@@ -349,17 +397,25 @@ describe("firstUnansweredIndex", () => {
   });
 });
 
-describe("moveRankItem", () => {
-  const list = ["a", "b", "c"];
-  it("swaps with the neighbour in the given direction", () => {
-    expect(moveRankItem(list, 1, -1)).toEqual(["b", "a", "c"]);
-    expect(moveRankItem(list, 1, 1)).toEqual(["a", "c", "b"]);
+describe("moveRankItemTo", () => {
+  const list = ["a", "b", "c", "d"];
+
+  it("lifts an item and inserts it at the target index", () => {
+    expect(moveRankItemTo(list, 0, 2)).toEqual(["b", "c", "a", "d"]);
+    expect(moveRankItemTo(list, 3, 0)).toEqual(["d", "a", "b", "c"]);
   });
-  it("returns the same list at the edges and does not mutate", () => {
-    expect(moveRankItem(list, 0, -1)).toBe(list);
-    expect(moveRankItem(list, 2, 1)).toBe(list);
-    moveRankItem(list, 1, 1);
-    expect(list).toEqual(["a", "b", "c"]);
+
+  it("is a no-op for the same index and for out-of-range moves", () => {
+    expect(moveRankItemTo(list, 1, 1)).toBe(list);
+    expect(moveRankItemTo(list, -1, 2)).toBe(list);
+    expect(moveRankItemTo(list, 0, 9)).toBe(list);
+  });
+
+  it("does not mutate and always returns a permutation of the input", () => {
+    const result = moveRankItemTo(list, 0, 3);
+    expect(list).toEqual(["a", "b", "c", "d"]);
+    expect([...result].sort()).toEqual([...list].sort());
+    expect(result).toHaveLength(list.length);
   });
 });
 
@@ -388,5 +444,93 @@ describe("railStepReachable", () => {
     expect(railStepReachable("tree", "tree")).toBe(false);
     expect(railStepReachable("entry", "values")).toBe(false);
     expect(railStepReachable("summary", "entry")).toBe(false);
+  });
+});
+
+describe("demographics one-screen helpers", () => {
+  const questions = [
+    { id: "sex", kind: "single" },
+    { id: "age", kind: "number" },
+    { id: "country", kind: "text" },
+    { id: "city", kind: "text" },
+  ];
+
+  it("is incomplete until every question has a usable draft", () => {
+    expect(demographicsComplete(questions, {})).toBe(false);
+    expect(
+      demographicsComplete(questions, { sex: "female", age: "32", country: "Ireland", city: "" })
+    ).toBe(false);
+    expect(
+      demographicsComplete(questions, { sex: "female", age: "32", country: "Ireland", city: "  " })
+    ).toBe(false);
+    expect(
+      demographicsComplete(questions, { sex: "female", age: "abc", country: "Ireland", city: "Dublin" })
+    ).toBe(false);
+    expect(
+      demographicsComplete(questions, { sex: "female", age: "32", country: "Ireland", city: "Dublin" })
+    ).toBe(true);
+  });
+
+  it("builds one payload per question, in order, coercing numbers", () => {
+    expect(
+      demographicsPayloads(questions, {
+        sex: "female",
+        age: "32",
+        country: "Ireland",
+        city: "Dublin",
+      })
+    ).toEqual([
+      { questionId: "sex", value: "female" },
+      { questionId: "age", value: 32 },
+      { questionId: "country", value: "Ireland" },
+      { questionId: "city", value: "Dublin" },
+    ]);
+  });
+
+  it("skips answers the snapshot already holds, so a retry only sends the rest", () => {
+    const drafts = { sex: "female", age: "32", country: "Ireland", city: "Dublin" };
+    const saved = { sex: "female", age: 32 };
+    expect(demographicsPayloads(questions, drafts, saved)).toEqual([
+      { questionId: "country", value: "Ireland" },
+      { questionId: "city", value: "Dublin" },
+    ]);
+  });
+
+  it("drops empty and unparseable drafts rather than posting them", () => {
+    expect(
+      demographicsPayloads(questions, { sex: "", age: "abc", country: "Ireland", city: null })
+    ).toEqual([{ questionId: "country", value: "Ireland" }]);
+  });
+
+  it("sends nothing when every draft already matches the snapshot", () => {
+    // This is the rail-revisit case. The empty result is correct here — it is
+    // App.jsx's job to fall back to a single re-post so the step still advances.
+    const drafts = { sex: "female", age: "32", country: "Ireland", city: "Dublin" };
+    const saved = { sex: "female", age: 32, country: "Ireland", city: "Dublin" };
+    expect(demographicsPayloads(questions, drafts, saved)).toEqual([]);
+  });
+
+  it("produces every payload when nothing is saved, which is that fallback's input", () => {
+    const drafts = { sex: "female", age: "32", country: "Ireland", city: "Dublin" };
+    expect(demographicsPayloads(questions, drafts, {})).toHaveLength(4);
+  });
+});
+
+describe("usMarketLine", () => {
+  it("joins salary and outlook, both flagged as US data", () => {
+    expect(
+      usMarketLine({ onet: { salary: { annualMedian: 166570 }, outlook: { category: "Bright" } } })
+    ).toBe("$166,570/yr median (US) · outlook: Bright");
+  });
+
+  it("renders whichever half is present", () => {
+    expect(usMarketLine({ onet: { salary: { annualMedian: 90000 } } })).toBe("$90,000/yr median (US)");
+    expect(usMarketLine({ onet: { outlook: { category: "Average" } } })).toBe("outlook: Average");
+  });
+
+  it("is empty when the keyless snapshot carries neither", () => {
+    expect(usMarketLine({ onet: {} })).toBe("");
+    expect(usMarketLine({})).toBe("");
+    expect(usMarketLine(null)).toBe("");
   });
 });

@@ -1,0 +1,749 @@
+.step-rail {
+  list-style: none;
+  margin: 0 0 36px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.step-rail-item,
+.step-rail-item > button {
+  padding: 8px 16px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--gold-20);
+  background: var(--pill-idle);
+  color: var(--text-60);
+  font: 600 12px/1 var(--font-display);
+  letter-spacing: 0.01em;
+  transition: color var(--t-fast) ease, border-color var(--t-fast) ease;
+}
+
+/* The button carries its own pill, so the wrapping li must not double it. */
+.step-rail-item:has(> button) {
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.step-rail-item > button:hover:enabled {
+  border-color: var(--gold-50);
+  color: var(--text);
+}
+
+.step-rail-item > button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.step-rail-item--active {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--ink-on-gold);
+}
+
+.step-rail-item--inert:not(.step-rail-item--active):not(.step-rail-item--done) {
+  opacity: 0.45;
+}
+
+/* --- Shared button set --- */
+.btn {
+  border-radius: var(--radius-pill);
+  font: 700 14px/1 var(--font-display);
+  letter-spacing: 0.01em;
+  padding: 15px 30px;
+  transition: background var(--t-fast) ease, transform var(--t-fast) ease,
+    box-shadow var(--t-fast) ease, border-color var(--t-fast) ease;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn--bone {
+  background: var(--bone);
+  color: var(--ink-on-gold);
+  padding: 16px 30px;
+}
+
+.btn--bone:hover:enabled {
+  background: var(--gold);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(255, 217, 140, 0.35);
+}
+
+.btn--gold {
+  background: var(--gold);
+  color: var(--ink-on-gold);
+  font-size: 13px;
+  padding: 14px 28px;
+}
+
+.btn--gold:hover:enabled {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(255, 217, 140, 0.35);
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--text-72);
+  border: 1px solid var(--text-30);
+  font-weight: 500;
+  padding: 14px 20px;
+}
+
+.btn--ghost:hover:enabled {
+  color: var(--text);
+  border-color: var(--gold-50);
+}
+
+/* --- Hero --- */
+.hero {
+  position: relative;
+  min-height: 100vh;
+  background: var(--ink-void);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.hero-bar {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 22px 40px;
+}
+
+.hero-nav {
+  display: flex;
+  gap: 26px;
+}
+
+.hero-nav button,
+.hero-nav a {
+  font: 400 12px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--bone-50);
+  text-decoration: none;
+  transition: color var(--t-fast) ease;
+}
+
+.hero-nav button:hover,
+.hero-nav a:hover {
+  color: var(--gold);
+}
+
+.hero-body {
+  position: relative;
+  flex: 1;
+  padding: 60px 48px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.hero-title {
+  margin: 0;
+  width: 100%;
+  max-width: 1100px;
+  text-align: left;
+  font: 900 68px/1.05 var(--font-display);
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: var(--text);
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+}
+
+.hero-accent {
+  color: var(--gold);
+}
+
+.hero-input {
+  margin-top: 16px;
+  width: 100%;
+  max-width: 520px;
+  min-height: 90px;
+  resize: none;
+  padding: 16px 18px;
+  border-radius: var(--radius-field);
+  background: var(--field);
+  border: 1px solid var(--field-border);
+  color: var(--text);
+  font: 400 15px/1.5 var(--font-body);
+  outline: none;
+}
+
+.hero-input:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-focus);
+}
+
+.hero-body > .btn {
+  margin-top: 22px;
+}
+
+.hero-disclaimer {
+  margin: 16px 0 0;
+  max-width: 420px;
+  text-align: center;
+  font: 400 12.5px/1.5 var(--font-body);
+  color: var(--text-60);
+}
+
+.hero-footer {
+  margin-top: auto;
+  padding-bottom: 24px;
+}
+
+/* Scoped under .hero on purpose. The legacy App.css still defines
+   .onet-attribution and .error-text at single-class specificity, and it is
+   imported after screens.css, so an unscoped rule here would lose the cascade
+   and the licence-mandated attribution would ship in the old grey. Task 14
+   deletes the legacy rules; the scoping stays correct either way. */
+.hero .onet-attribution {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.hero .onet-attribution p {
+  margin: 0;
+  max-width: 480px;
+  text-align: center;
+  font: 300 10.5px/1.5 var(--font-body);
+  color: var(--bone-40);
+}
+
+.hero .onet-attribution a {
+  color: var(--gold-70);
+}
+
+.hero .error-text {
+  margin: 12px 0 0;
+  font: 400 13px/1.5 var(--font-body);
+  color: var(--error);
+  border: none;
+  padding: 0;
+  max-width: none;
+  text-align: center;
+}
+
+.instrument {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.instrument--wide {
+  max-width: 640px;
+}
+
+.skip-action {
+  margin-top: 24px;
+}
+
+.demo-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  max-width: 760px;
+  width: 100%;
+  text-align: left;
+}
+
+.demo-question {
+  font: 600 15px/1.4 var(--font-body);
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
+.demo-choices {
+  display: flex;
+  flex-direction: column;
+}
+
+.demo-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--gold-15);
+  cursor: pointer;
+}
+
+.demo-choice input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.demo-choice-ring {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--gold-50);
+  flex-shrink: 0;
+  transition: background var(--t-fast) ease, box-shadow var(--t-fast) ease;
+}
+
+.demo-choice input:checked + .demo-choice-ring {
+  background: var(--gold);
+  box-shadow: 0 0 12px var(--gold-focus);
+}
+
+.demo-choice input:focus-visible + .demo-choice-ring {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.demo-choice-label {
+  font: 400 14px/1 var(--font-body);
+  color: var(--text-72);
+}
+
+.demo-choice input:checked ~ .demo-choice-label {
+  color: var(--text);
+}
+
+.demo-input {
+  width: 100%;
+  padding: 10px 0;
+  border: none;
+  border-bottom: 1px solid var(--gold-35);
+  background: transparent;
+  color: var(--text);
+  font: 400 15px/1.4 var(--font-body);
+  border-radius: 0;
+  outline: none;
+}
+
+.demo-input:focus {
+  border-bottom-color: var(--gold);
+}
+
+/* `outline: none` above is emitted after the global :focus-visible rule and
+   wins at equal specificity, so without this the underline inputs — the whole
+   of demographics and the journey question — had no focus indicator at all.
+   Section 8 makes the ring the accessibility floor. */
+.demo-input:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.demo-submit {
+  margin-top: 34px;
+}
+
+.screen-footnote {
+  margin: 24px 0 0;
+  max-width: 600px;
+  font: 400 12.5px/1.5 var(--font-body);
+  color: var(--text-40);
+}
+
+/* The tournament headline is the one that runs uppercase and larger. */
+.screen--tournament .screen-title {
+  font-size: 44px;
+  line-height: 1.05;
+  text-transform: uppercase;
+  margin-bottom: 34px;
+}
+
+.rank-confirm {
+  margin-top: 26px;
+}
+
+.intent-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 26px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.intent-pill {
+  padding: 10px 18px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--gold-20);
+  background: var(--pill-idle);
+  color: var(--text-60);
+  font: 500 11px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: color var(--t-fast) ease, border-color var(--t-fast) ease, background var(--t-fast) ease;
+}
+
+.intent-pill--on {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--ink-on-gold);
+}
+
+.experience-split {
+  position: relative;
+  width: 100%;
+  max-width: 820px;
+  transition: opacity var(--t-base) ease;
+}
+
+.experience-split--locked {
+  opacity: 0.4;
+}
+
+/* The stroke lives here, not on the element: it is a colour, so it is a token
+   (--gold-30 is the spec's dashed-rule value). */
+.dotted-rule line {
+  stroke: var(--gold-30);
+}
+
+.dotted-rule {
+  display: block;
+}
+
+.experience-halves {
+  display: flex;
+  padding: 26px 0;
+  text-align: left;
+}
+
+.experience-half {
+  flex: 1;
+  padding-right: 30px;
+}
+
+.experience-half--b {
+  padding-right: 0;
+  padding-left: 30px;
+}
+
+.experience-rule {
+  width: 1px;
+  align-self: stretch;
+  background: var(--gold-25);
+  flex-shrink: 0;
+}
+
+.ghost-numeral {
+  font: 900 46px/1 var(--font-display);
+  color: var(--gold-35);
+  margin-bottom: 10px;
+}
+
+.experience-copy {
+  margin: 0 0 18px;
+  font: 400 15px/1.6 var(--font-body);
+  color: var(--text-72);
+}
+
+.experience-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.experience-actions .btn {
+  font-size: 12px;
+  padding: 10px 16px;
+}
+
+.link-action {
+  font: 400 12px/1.4 var(--font-body);
+  color: var(--gold-70);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  background: none;
+  padding: 0;
+}
+
+.link-action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn--locked {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.cv-paste {
+  width: 100%;
+  max-width: 640px;
+  min-height: 220px;
+  resize: vertical;
+  padding: 16px 18px;
+  margin-bottom: 22px;
+  border-radius: var(--radius-field);
+  background: var(--field);
+  border: 1px solid var(--field-border);
+  color: var(--text);
+  font: 400 14px/1.6 var(--font-body);
+  outline: none;
+}
+
+.cv-paste:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-focus);
+}
+
+.journey-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  max-width: 560px;
+  text-align: left;
+}
+
+.journey-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--gold-18);
+}
+
+.journey-number {
+  font: 400 11px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  color: var(--gold-60);
+}
+
+.journey-label {
+  flex: 1;
+  font: 600 16px/1.3 var(--font-body);
+  color: var(--text);
+}
+
+.journey-time {
+  font: 400 11px/1 var(--font-mono);
+  color: var(--text-40);
+}
+
+.journey-begin,
+.summary-cta {
+  margin-top: 30px;
+}
+
+/* Scoped under .screen: App.css still defines .summary-archetype,
+   .summary-tagline and .summary-persona at single-class specificity and is
+   imported after screens.css, so unscoped rules here would lose outright.
+   Task 14 deletes the legacy rules; the scoping stays correct either way. */
+.screen .summary-archetype {
+  margin: 0;
+  font: 900 34px/1.1 var(--font-display);
+  letter-spacing: -0.02em;
+  color: var(--gold);
+}
+
+.screen .summary-tagline {
+  margin: 8px 0 24px;
+  font: 400 14px/1.6 var(--font-body);
+  color: var(--text-72);
+}
+
+.screen .summary-persona {
+  margin: 24px 0;
+  max-width: 520px;
+  font: 400 14px/1.7 var(--font-body);
+  color: var(--text-60);
+}
+
+/* Both radars are ResponsiveContainer width="100%" inside .screen-body, a
+   centred flex column — so "100%" resolves against the item's shrink-to-fit
+   width, which is just the chart title. The six-axis work-values radar
+   collapsed to 178px and clipped four of its own axis labels at every
+   viewport width. Pin the box; the graph's profile panel constrains
+   .profile-chart itself and is not under .screen. */
+.screen .profile-chart {
+  width: min(100%, 460px);
+}
+
+.output-decision {
+  width: min(1100px, calc(100vw - 64px));
+  padding: 26px 0 22px;
+  text-align: center;
+  background: var(--ink-screen);
+  border-radius: var(--radius-surface);
+}
+
+.output-field {
+  margin: 0 0 30px;
+  font: 900 40px/1.05 var(--font-display);
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.output-columns {
+  display: flex;
+  align-items: stretch;
+  border-top: 1px solid var(--gold-25);
+  border-bottom: 1px solid var(--gold-25);
+  text-align: left;
+}
+
+.output-column {
+  flex: 1;
+  padding: 30px;
+  border-right: 1px solid var(--gold-25);
+}
+
+.output-column:last-child {
+  border-right: none;
+}
+
+.output-tag {
+  margin: 0 0 14px;
+  font: 500 10px/1 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.output-title {
+  margin: 0;
+  font: 700 22px/1.15 var(--font-display);
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.output-body {
+  margin: 12px 0 0;
+  font: 300 13.5px/1.6 var(--font-body);
+  color: var(--text-60);
+}
+
+.output-fit {
+  color: var(--gold-70);
+}
+
+.output-meta {
+  margin: 10px 0 0;
+  font: 400 12px/1 var(--font-body);
+  color: var(--text-45);
+}
+
+.output-trace {
+  margin: 12px 0 10px;
+  padding-left: 18px;
+  font: 300 13.5px/1.6 var(--font-body);
+  color: var(--text-60);
+}
+
+.output-actions {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 26px;
+  flex-wrap: wrap;
+}
+
+/* ---------------------------------------------------------------------------
+   Breakpoints (spec section 8).
+
+   These live at the end of screens.css, not next to the components they
+   override, because Vite emits ui.css before screens.css: a media query adds
+   no specificity, so an unmediated `.hero-title { font: 900 68px ... }` in
+   screens.css silently beat `@media (max-width: 900px) { .hero-title {
+   font-size: 40px } }` in ui.css and the headline stayed 68px at every width.
+   Keeping every breakpoint in the last stylesheet is what makes them win.
+   --------------------------------------------------------------------------- */
+
+@media (max-width: 1200px) {
+  .hero-title {
+    font-size: 54px;
+  }
+
+  .screen-title {
+    font-size: 34px;
+  }
+
+  .screen--tournament .screen-title {
+    font-size: 36px;
+  }
+
+  .split-title {
+    font-size: 28px;
+  }
+}
+
+@media (max-width: 900px) {
+  .screen {
+    padding: 76px 24px 48px;
+  }
+
+  .hero-body {
+    padding: 40px 24px 0;
+  }
+
+  .hero-title {
+    font-size: 40px;
+  }
+
+  .screen-title {
+    font-size: 28px;
+  }
+
+  .demo-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .split,
+  .experience-halves,
+  .output-columns {
+    flex-direction: column;
+  }
+
+  .split-rule,
+  .experience-rule {
+    width: 100%;
+    height: 1px;
+  }
+
+  .split-rule-label {
+    display: none;
+  }
+
+  .experience-half,
+  .experience-half--b {
+    padding: 0 0 24px;
+  }
+
+  .output-column {
+    border-right: none;
+    border-bottom: 1px solid var(--gold-25);
+  }
+
+  /* .output-columns draws its own bottom rule, so the last column's would
+     stack on it as a 2px line where the design has 1px. */
+  .output-column:last-child {
+    border-bottom: none;
+  }
+
+  /* Stacking .output-columns roughly triples the dock's height, and the graph
+     page does not scroll — at this width the eyebrow, the field headline and
+     the whole "Oriented field" column sat above the viewport with no way to
+     reach them. The cap that fixes it now lives on .graph-question-dock, which
+     measures the canvas instead of the viewport and so cannot reach over the
+     page header. */
+
+  .likert {
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+  }
+
+  .likert-option {
+    width: 84px;
+  }
+}
