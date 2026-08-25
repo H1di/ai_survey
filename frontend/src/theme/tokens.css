@@ -42,6 +42,9 @@
 
   /* State */
   --positive: #7cffb2;
+  /* The one soft step of the positive colour: the profession's fill on the
+     work-values radar, the counterpart of --gold-18 for "you". */
+  --positive-16: rgba(124, 255, 178, 0.16);
   --error: #ff9b9b;
 
   /* Backgrounds composed from the ramp */

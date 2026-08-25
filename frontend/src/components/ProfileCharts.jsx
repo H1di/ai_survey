@@ -11,15 +11,16 @@ import {
   Cell,
   ResponsiveContainer,
 } from "recharts";
+import { useMemo } from "react";
 import { bigFiveTakeaways, WORK_VALUE_AXES } from "../lifePath";
+import { readChartPalette } from "../theme/chartPalette";
 import "./ProfileCharts.css";
 
-// The design's ramp. Charts are the one place a soft fill earns its keep.
-const ACCENT = "#ffd98c";
-const ACCENT_SOFT = "rgba(255, 217, 140, 0.18)";
-const JOB_ACCENT = "#7cffb2";
-const JOB_SOFT = "rgba(124, 255, 178, 0.16)";
-const MUTED = "rgba(255, 255, 255, 0.55)";
+// recharts wants colours as props, so the tokens are resolved off the document
+// once per mount instead of being copied into this file. See theme/chartPalette.js.
+function useChartPalette() {
+  return useMemo(() => readChartPalette(), []);
+}
 
 // Axis keys mirror the O/C/E/A/N naming the backend sends to the AI, so a
 // mentioned trait can be matched to its axis and highlighted via
@@ -33,14 +34,14 @@ const BIG_FIVE_AXES = [
   { key: "N", label: "Emotional Steadiness" },
 ];
 
-function RadarTick({ payload, x, y, textAnchor, highlighted }) {
+function RadarTick({ payload, x, y, textAnchor, highlighted, palette }) {
   return (
     <text
       x={x}
       y={y}
       textAnchor={textAnchor}
       fontSize={10}
-      fill={highlighted.has(payload.value) ? ACCENT : MUTED}
+      fill={highlighted.has(payload.value) ? palette.accent : palette.muted}
       fontWeight={highlighted.has(payload.value) ? 600 : 400}
     >
       {payload.value}
@@ -49,6 +50,7 @@ function RadarTick({ payload, x, y, textAnchor, highlighted }) {
 }
 
 export function PersonalityRadarChart({ scores, highlightKeys = [] }) {
+  const palette = useChartPalette();
   if (!scores) return null;
 
   const data = BIG_FIVE_AXES.map((axis) => ({
@@ -66,16 +68,16 @@ export function PersonalityRadarChart({ scores, highlightKeys = [] }) {
       <ResponsiveContainer width="100%" height={210}>
         {/* cx nudged left so the right-anchored "Conscientiousness" label fits the panel */}
         <RadarChart data={data} outerRadius="62%" cx="46%">
-          <PolarGrid stroke="rgba(255,217,140,.25)" />
+          <PolarGrid stroke={palette.grid} />
           <PolarAngleAxis
             dataKey="trait"
-            tick={(props) => <RadarTick {...props} highlighted={highlighted} />}
+            tick={(props) => <RadarTick {...props} highlighted={highlighted} palette={palette} />}
           />
           <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
           <Radar
             dataKey="value"
-            stroke={ACCENT}
-            fill={ACCENT_SOFT}
+            stroke={palette.accent}
+            fill={palette.accentSoft}
             fillOpacity={1}
             isAnimationActive={false}
           />
@@ -106,6 +108,7 @@ const RIASEC_AXES = [
 ];
 
 export function RiasecBarChart({ scores, code, inferred }) {
+  const palette = useChartPalette();
   if (!scores) return null;
 
   const data = RIASEC_AXES.map((axis) => ({
@@ -121,19 +124,24 @@ export function RiasecBarChart({ scores, code, inferred }) {
       </p>
       <ResponsiveContainer width="100%" height={200}>
         <BarChart data={data} layout="vertical" margin={{ top: 0, right: 12, bottom: 0, left: 0 }}>
-          <XAxis type="number" domain={[0, 100]} tickCount={6} tick={{ fontSize: 10, fill: MUTED }} />
+          <XAxis
+            type="number"
+            domain={[0, 100]}
+            tickCount={6}
+            tick={{ fontSize: 10, fill: palette.muted }}
+          />
           <YAxis
             type="category"
             dataKey="name"
             width={158}
             interval={0}
-            tick={{ fontSize: 11, fill: MUTED }}
+            tick={{ fontSize: 11, fill: palette.muted }}
             tickLine={false}
             axisLine={false}
           />
           <Bar dataKey="value" barSize={10} radius={[0, 2, 2, 0]} isAnimationActive={false}>
             {data.map((entry) => (
-              <Cell key={entry.id} fill={entry.value >= 65 ? ACCENT : ACCENT_SOFT} />
+              <Cell key={entry.id} fill={entry.value >= 65 ? palette.accent : palette.accentSoft} />
             ))}
           </Bar>
         </BarChart>
@@ -150,6 +158,7 @@ export function RiasecBarChart({ scores, code, inferred }) {
 // Six-axis Minnesota Work Values radar. `user` alone shows the person's
 // hierarchy; passing `job` overlays the profession for a shape comparison.
 export function WorkValuesRadar({ user, job, title = "Work values" }) {
+  const palette = useChartPalette();
   if (!user) return null;
   const data = WORK_VALUE_AXES.map((axis) => ({
     key: axis.key,
@@ -163,18 +172,15 @@ export function WorkValuesRadar({ user, job, title = "Work values" }) {
       <p className="profile-chart-title">{title}</p>
       <ResponsiveContainer width="100%" height={230}>
         <RadarChart data={data} outerRadius="64%" cx="50%">
-          <PolarGrid stroke="rgba(255,217,140,.25)" />
-          <PolarAngleAxis
-            dataKey="label"
-            tick={{ fontSize: 10, fill: MUTED }}
-          />
+          <PolarGrid stroke={palette.grid} />
+          <PolarAngleAxis dataKey="label" tick={{ fontSize: 10, fill: palette.muted }} />
           <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
           {job && (
             <Radar
               name="This profession"
               dataKey="job"
-              stroke={JOB_ACCENT}
-              fill={JOB_SOFT}
+              stroke={palette.job}
+              fill={palette.jobSoft}
               fillOpacity={1}
               isAnimationActive={false}
             />
@@ -182,8 +188,8 @@ export function WorkValuesRadar({ user, job, title = "Work values" }) {
           <Radar
             name="You"
             dataKey="you"
-            stroke={ACCENT}
-            fill={ACCENT_SOFT}
+            stroke={palette.accent}
+            fill={palette.accentSoft}
             fillOpacity={job ? 0.55 : 1}
             isAnimationActive={false}
           />
@@ -191,8 +197,8 @@ export function WorkValuesRadar({ user, job, title = "Work values" }) {
       </ResponsiveContainer>
       {job && (
         <p className="profile-panel-note">
-          <span style={{ color: ACCENT }}>■</span> You &nbsp;
-          <span style={{ color: JOB_ACCENT }}>■</span> This profession
+          <span style={{ color: palette.accent }}>■</span> You &nbsp;
+          <span style={{ color: palette.job }}>■</span> This profession
         </p>
       )}
     </div>
