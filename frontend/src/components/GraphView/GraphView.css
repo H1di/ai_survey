@@ -33,6 +33,46 @@
   fill: var(--gold);
 }
 
+/* Our output node type is literally named "output", which collides with React
+   Flow's built-in node names — the library then paints its own card (white
+   background, 1px border, 150px, 10px padding, centred 12px text) on the
+   wrapper behind our transparent node, and its hover/selected box-shadows on
+   top. Every node here draws itself, so the built-in chrome is removed for all
+   four reserved names rather than only the one we happen to use today. */
+.react-flow__node-input,
+.react-flow__node-default,
+.react-flow__node-output,
+.react-flow__node-group {
+  width: auto;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: inherit;
+  font-size: inherit;
+  text-align: left;
+  box-shadow: none;
+}
+
+.react-flow__node-input.selectable:hover,
+.react-flow__node-default.selectable:hover,
+.react-flow__node-output.selectable:hover,
+.react-flow__node-group.selectable:hover,
+.react-flow__node-input.selectable.selected,
+.react-flow__node-input.selectable:focus,
+.react-flow__node-input.selectable:focus-visible,
+.react-flow__node-default.selectable.selected,
+.react-flow__node-default.selectable:focus,
+.react-flow__node-default.selectable:focus-visible,
+.react-flow__node-output.selectable.selected,
+.react-flow__node-output.selectable:focus,
+.react-flow__node-output.selectable:focus-visible,
+.react-flow__node-group.selectable.selected,
+.react-flow__node-group.selectable:focus,
+.react-flow__node-group.selectable:focus-visible {
+  box-shadow: none;
+}
+
 /* Handles are load-bearing for edge attachment but stay invisible. */
 .react-flow__handle {
   opacity: 0;

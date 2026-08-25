@@ -7,9 +7,16 @@ export const ME_NODE = { id: "me", type: "me", position: { x: 0, y: 0 }, data: {
 // Vertical story: Me -> output iteration chain (horizontal trail) -> the
 // accepted output grows 4 advice cards and its roadmap chain.
 const OUTPUT_Y = 240;
-const OUTPUT_GAP_X = 380;
+// Node positions are left edges, so the widths below are what centres one row
+// under another. They mirror NodeComponent.css and spec 5.11: a 480px output
+// card, 220px advice cells, 360px roadmap rows, an 80px loading dot.
+const OUTPUT_W = 480;
+const ADVICE_W = 220;
+const ROADMAP_W = 360;
+const LOADING_W = 80;
+// Siblings are spaced against the card's width plus an 80px alley.
+const OUTPUT_GAP_X = OUTPUT_W + 80;
 const ADVICE_Y = 520;
-const ADVICE_GAP = 300;
 const ROADMAP_START_Y = 780;
 const ROADMAP_GAP = 200;
 
@@ -100,7 +107,10 @@ export function buildLifePathGraph({
         jobTitle: output.jobTitle,
         orientedField: output.orientedField,
         fit: output.valuesFit ? output.valuesFit.overall : null,
-        topValues: output.topValues || [],
+        thesis: output.thesis,
+        // Spec 5.11's meta row is salary · outlook, not the work values —
+        // those keep their own section in the details panel.
+        market: usMarketLine(output),
         accepted: isAccepted,
         latest: isLatest,
         onOpen: () => onOutputOpen(output),
@@ -121,12 +131,15 @@ export function buildLifePathGraph({
     return { nodes, edges };
   }
   const anchorX = outputX(acceptedIndex);
+  // Everything below the accepted card hangs off the card's centre, not off
+  // its left rule — the design stacks them as one column.
+  const centerX = anchorX + OUTPUT_W / 2;
 
   if (detailPending) {
     nodes.push({
       id: "detail-loading",
       type: "loading",
-      position: { x: anchorX, y: ADVICE_Y },
+      position: { x: centerX - LOADING_W / 2, y: ADVICE_Y },
       data: {},
     });
     edges.push({
@@ -143,7 +156,12 @@ export function buildLifePathGraph({
       nodes.push({
         id: nodeId,
         type: "advice",
-        position: { x: anchorX + (index - (ADVICE_BLOCKS.length - 1) / 2) * ADVICE_GAP, y: ADVICE_Y },
+        // The cells abut: spec 5.11 bounds the row with rules top, bottom and
+        // between, and each cell's own right border is the rule between.
+        position: {
+          x: centerX - (ADVICE_BLOCKS.length * ADVICE_W) / 2 + index * ADVICE_W,
+          y: ADVICE_Y,
+        },
         draggable: true,
         style: { "--appear-delay": `${edgeDelay + EDGE_DRAW_MS}ms` },
         data: {
@@ -166,7 +184,7 @@ export function buildLifePathGraph({
     nodes.push({
       id: "roadmap-loading",
       type: "loading",
-      position: { x: anchorX, y: ROADMAP_START_Y },
+      position: { x: centerX - LOADING_W / 2, y: ROADMAP_START_Y },
       data: {},
     });
     edges.push({
@@ -187,7 +205,7 @@ export function buildLifePathGraph({
       nodes.push({
         id: nodeId,
         type: "roadmap",
-        position: { x: anchorX, y: ROADMAP_START_Y + index * ROADMAP_GAP },
+        position: { x: centerX - ROADMAP_W / 2, y: ROADMAP_START_Y + index * ROADMAP_GAP },
         draggable: true,
         style: { "--appear-delay": `${edgeDelay + EDGE_DRAW_MS}ms` },
         data: {

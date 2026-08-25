@@ -23,13 +23,23 @@
   z-index: 1;
 }
 
+/* Three slots, not a flex row: the spec's centre header has to stay centred
+   on the page, not on whatever the wordmark and the profile toggle leave
+   between them. */
 .graph-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   padding: 16px 24px;
   border-bottom: 1px solid var(--gold-20);
   flex-shrink: 0;
+  gap: 16px;
+}
+
+/* The wordmark leads the row (spec 5.11), Restart sits after it. */
+.graph-header-lead {
+  display: flex;
+  align-items: center;
   gap: 16px;
 }
 
@@ -42,15 +52,18 @@
   position: static;
 }
 
-.graph-hint {
-  font: 400 11px/1 var(--font-mono);
-  letter-spacing: 0.06em;
-  color: var(--text-40);
+.graph-headline {
+  font: 500 10px/1 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold-70);
+  text-align: center;
 }
 
 .graph-header-side {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 16px;
 }
 
@@ -78,6 +91,11 @@
   flex: 1;
 }
 
+/* Anchored to the bottom of .graph-canvas, so `100%` here is the page minus
+   its header: a card taller than the space left shrinks and scrolls itself
+   instead of growing up over the header and taking its clicks. The element
+   between the dock and the card is Motion's wrapper, hence the `> *` — it
+   only needs to stop being the flex item that refuses to shrink. */
 .graph-question-dock {
   position: absolute;
   left: 50%;
@@ -85,7 +103,17 @@
   transform: translateX(-50%);
   z-index: 1;
   width: min(1100px, calc(100vw - 48px));
+  max-height: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
   pointer-events: none;
+}
+
+.graph-question-dock > * {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* The dock stays click-through so the empty space around the card never
@@ -96,25 +124,26 @@
    responding — jsdom does not implement pointer-events, so nothing caught it. */
 .graph-question-dock .output-decision {
   pointer-events: auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* Small screens: the header stacks into two clean rows instead of a broken
    grid, and the hint gets its own line. */
 @media (max-width: 600px) {
   .graph-header {
-    flex-wrap: wrap;
+    grid-template-columns: 1fr auto;
     row-gap: 8px;
     padding: 12px 16px;
   }
 
-  .graph-header-side {
-    flex: 1 1 100%;
-    justify-content: space-between;
-  }
-
-  .graph-hint {
-    flex: 1;
-    text-align: right;
+  /* The headline drops to its own row underneath rather than squeezing
+     between the wordmark and the toggle. */
+  .graph-headline {
+    grid-column: 1 / -1;
+    order: 3;
+    text-align: left;
   }
 
   .graph-question-dock {

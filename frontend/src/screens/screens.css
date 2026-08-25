@@ -730,16 +730,12 @@
     border-bottom: none;
   }
 
-  /* Stacking .output-columns roughly triples the dock's height. The dock is
-     absolutely positioned against the graph page and the page itself does not
-     scroll, so at this width the eyebrow, the field headline and the whole
-     "Oriented field" column sat above the viewport with no way to reach them.
-     Cap the card to the viewport and let it scroll itself. */
-  .output-decision {
-    max-height: calc(100dvh - 32px);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
+  /* Stacking .output-columns roughly triples the dock's height, and the graph
+     page does not scroll — at this width the eyebrow, the field headline and
+     the whole "Oriented field" column sat above the viewport with no way to
+     reach them. The cap that fixes it now lives on .graph-question-dock, which
+     measures the canvas instead of the viewport and so cannot reach over the
+     page header. */
 
   .likert {
     flex-wrap: wrap;

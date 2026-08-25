@@ -887,13 +887,11 @@ function App() {
   const selectedRoadmap = acceptedOutputId ? roadmaps[acceptedOutputId] : null;
   const roadmapVisible = Boolean(selectedRoadmap);
 
-  const treeHint = !outputs.length
-    ? "Generating your first path…"
-    : !acceptedOutputId
-      ? "Review the suggestion — accept it or ask for a different direction"
-      : roadmapVisible
-        ? "Your roadmap — click any step for details"
-        : "Accepted — building your next steps";
+  // Spec 5.11's centre header. The mockup only ever draws the accepted graph;
+  // the leading word keeps the line honest on the way there.
+  const graphHeadline = `${
+    !outputs.length ? "generating" : !acceptedOutputId ? "exploring" : "accepted"
+  } · your life path graph`;
 
   let focusKey = "start";
   let focusNodeIds = ["me"];
@@ -1154,10 +1152,13 @@ function App() {
         <div className="graph-page">
           <BranchCanvas preset="graph" className="graph-branch" reducedMotion={REDUCED_MOTION} />
           <div className="graph-header">
-            <button type="button" className="screen-back" onClick={resetAll}>
-              ← Restart
-            </button>
-            <Wordmark />
+            <span className="graph-header-lead">
+              <Wordmark />
+              <button type="button" className="screen-back" onClick={resetAll}>
+                ← Restart
+              </button>
+            </span>
+            <span className="graph-headline">{graphHeadline}</span>
             <span className="graph-header-side">
               {!aiEnabled && <span className="demo-notice demo-notice-inline">Demo mode</span>}
               <button
@@ -1167,7 +1168,6 @@ function App() {
               >
                 {profileOpen ? "Hide profile" : "My profile"}
               </button>
-              <span className="graph-hint">{treeHint}</span>
             </span>
           </div>
 
@@ -1185,30 +1185,34 @@ function App() {
                 onClose={() => setProfileOpen(false)}
               />
             )}
-          </div>
 
-          <div className="graph-question-dock">
-            <AnimatePresence mode="wait">
-              {dockCard && (
-                <Motion.div
-                  key={dockCard.key}
-                  initial={{ y: 12, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  exit={{
-                    y: 12,
-                    opacity: 0,
-                    transition: { duration: REDUCED_MOTION ? 0 : 0.25 },
-                  }}
-                  transition={
-                    REDUCED_MOTION
-                      ? { duration: 0 }
-                      : { duration: 0.35, ease: [0.22, 1, 0.36, 1] }
-                  }
-                >
-                  {dockCard.content}
-                </Motion.div>
-              )}
-            </AnimatePresence>
+            {/* The dock lives inside .graph-canvas, not .graph-page: it is
+                capped against its containing block, and the canvas is the part
+                of the page below the header — so a tall card can never grow
+                over the header and swallow its controls. */}
+            <div className="graph-question-dock">
+              <AnimatePresence mode="wait">
+                {dockCard && (
+                  <Motion.div
+                    key={dockCard.key}
+                    initial={{ y: 12, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{
+                      y: 12,
+                      opacity: 0,
+                      transition: { duration: REDUCED_MOTION ? 0 : 0.25 },
+                    }}
+                    transition={
+                      REDUCED_MOTION
+                        ? { duration: 0 }
+                        : { duration: 0.35, ease: [0.22, 1, 0.36, 1] }
+                    }
+                  >
+                    {dockCard.content}
+                  </Motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           <AnimatePresence>

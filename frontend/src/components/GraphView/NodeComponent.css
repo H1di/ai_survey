@@ -1,10 +1,13 @@
+/* The legacy card base. Every Invector variant below declares its own box, so
+   the old 200-240px clamp only ever silenced them: it capped .node--output at
+   240px (the spec's 480px card) and .node--roadmap at 240px (the spec's 360px
+   row), and .node--me carried a reset for exactly that reason. Sizing belongs
+   to the variants. */
 .node {
   background: var(--ink-screen);
   border: 1px solid var(--gold-20);
   border-radius: 2px;
   padding: 20px 24px;
-  min-width: 200px;
-  max-width: 240px;
   cursor: default;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
@@ -16,8 +19,6 @@
 .node--me {
   width: 96px;
   height: 96px;
-  min-width: 0;
-  max-width: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -84,7 +85,7 @@
 .node-title {
   font: 900 34px/1.1 var(--font-display);
   letter-spacing: -0.01em;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   color: var(--text);
   /* O*NET titles are not written for a 220px column — "Industrial-Organizational
      Psychologists" is one 274px word at this size. Without this it paints
@@ -243,13 +244,15 @@
 /* Output + advice nodes (v2 output loop) */
 .node--output {
   /* `width` is the layout contract: buildLifePathGraph spaces siblings by
-     OUTPUT_GAP_X against this number, so it stays fixed and the spec's
-     max-width: 480px — which a fixed width makes inert anyway — is dropped
-     rather than left as a dead declaration. */
-  width: 250px;
+     OUTPUT_GAP_X against this number, so it is the spec's 480px card as a
+     fixed width (a max-width a fixed width would make inert) and OUTPUT_GAP_X
+     moves with it. */
+  width: 480px;
   padding: 8px 0 0 30px;
   border: none;
-  border-left: 2px solid var(--gold);
+  /* Dim by default, full strength on the branch the dock is talking about —
+     the rule is the state. See the block below. */
+  border-left: 2px solid var(--gold-40);
   border-radius: 0;
   background: none;
   cursor: pointer;
@@ -257,33 +260,72 @@
   animation: node-pop 180ms ease-out both;
   animation-delay: var(--appear-delay, 0ms);
 }
-.node--output-latest { box-shadow: 0 0 0 2px var(--gold-40); }
-.node--output-accepted { box-shadow: 0 0 0 2px var(--positive); }
-.node-fit-badge {
-  display: inline-block;
-  margin-top: 6px;
-  padding: 0;
+
+/* Spec 5.11's output is a left rule, not a card: the accepted one is marked by
+   the word "Accepted" in its meta row. The card-era rectangles — a 2px ring in
+   gold or green and .node's hover glow — drew a box around a node that has
+   none, so the left rule carries both states instead. */
+.node--output-latest,
+.node--output-accepted,
+.node--output:hover {
+  border-left-color: var(--gold);
+}
+
+.node--output:hover {
+  box-shadow: none;
+}
+/* Spec 5.11's output header: the field tag, a gold interpunct and the fit on
+   one baseline. The eyebrow's own bottom margin belongs to the row here. */
+.node-output-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.node-output-head .node-archetype {
+  margin-bottom: 0;
+}
+
+.node-head-dot {
+  font: 700 10px/1 var(--font-display);
+  color: var(--gold-50);
+}
+
+.node-fit {
   font: 700 10px/1 var(--font-display);
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--gold);
-  background: none;
 }
-.node-top-values,
+
+.node-thesis {
+  margin: 0 0 18px;
+  font: 400 13.5px/1.7 var(--font-body);
+  color: var(--text-60);
+}
+
+/* Meta row: the same US-flagged salary · outlook the details panel shows,
+   plus the accepted mark. Both halves are optional — salary and outlook come
+   from the live O*NET API and are absent without a key. */
+.node-meta {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font: 400 12px/1 var(--font-body);
+  color: var(--text-45);
+}
+
 .node-advice-count,
 .node-roadmap-timeframe {
   font: 400 11px/1 var(--font-mono);
   color: var(--text-45);
 }
-.node-top-values,
 .node-advice-count {
   display: inline-block;
   margin-top: 6px;
 }
 .node-accepted-tag {
-  display: inline-block;
-  margin-top: 6px;
-  margin-left: 6px;
   font: 700 11px/1 var(--font-display);
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -303,6 +345,14 @@
   text-align: left;
   animation: node-pop 180ms ease-out both;
   animation-delay: var(--appear-delay, 0ms);
+}
+
+/* Spec 5.11 gives the advice cell its own ramp — .node-title's 34px/900 is
+   the output node's and was inherited straight into a 220px cell. */
+.node--advice .node-title {
+  font: 700 15px/1.2 var(--font-display);
+  letter-spacing: 0;
+  margin-bottom: 0;
 }
 
 .node--roadmap {

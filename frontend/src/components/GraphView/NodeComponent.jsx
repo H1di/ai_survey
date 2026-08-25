@@ -16,18 +16,9 @@ export function MeNode() {
   );
 }
 
-// Short human labels for the Minnesota work-value keys shown on output nodes.
-const VALUE_LABELS = {
-  achievement: 'Achievement',
-  independence: 'Independence',
-  recognition: 'Recognition',
-  relationships: 'Relationships',
-  support: 'Support',
-  working_conditions: 'Working Conditions',
-};
-
 export function OutputNode({ data }) {
-  const { jobTitle, orientedField, fit, topValues, accepted, latest, onOpen } = data;
+  const { jobTitle, orientedField, fit, thesis, market, accepted, latest, onOpen } = data;
+  const hasFit = fit !== null && fit !== undefined;
 
   return (
     <button
@@ -38,17 +29,28 @@ export function OutputNode({ data }) {
       onClick={onOpen}
     >
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
-      <p className="node-archetype">{orientedField}</p>
+      {/* Spec 5.11 composes the field tag and the fit as one header row, with
+          a gold interpunct between them — not as two stacked lines. */}
+      <span className="node-output-head">
+        <span className="node-archetype">{orientedField}</span>
+        {hasFit && (
+          <>
+            <span className="node-head-dot" aria-hidden="true">·</span>
+            <span className="node-fit">{fit}% values fit</span>
+          </>
+        )}
+      </span>
       <h3 className="node-title">{jobTitle}</h3>
-      {fit !== null && fit !== undefined && (
-        <span className="node-fit-badge">{fit}% values fit</span>
+      {thesis && <p className="node-thesis">{thesis}</p>}
+      {(market || accepted) && (
+        <span className="node-meta">
+          {market && <span className="node-market">{market}</span>}
+          {market && accepted && (
+            <span className="node-meta-dot" aria-hidden="true">·</span>
+          )}
+          {accepted && <span className="node-accepted-tag">Accepted</span>}
+        </span>
       )}
-      {topValues && topValues.length > 0 && (
-        <p className="node-top-values">
-          {topValues.map((key) => VALUE_LABELS[key] || key).join(' · ')}
-        </p>
-      )}
-      {accepted && <span className="node-accepted-tag">Accepted</span>}
       <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
     </button>
   );
@@ -60,7 +62,7 @@ export function AdviceNode({ data }) {
   return (
     <button type="button" className="node node--advice" onClick={onOpen}>
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
-      <p className="node-archetype">Next steps</p>
+      {/* Spec 5.11's advice cell is a title over the count — no eyebrow. */}
       <h3 className="node-title">{label}</h3>
       <span className="node-advice-count">{count} suggestions</span>
       <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
