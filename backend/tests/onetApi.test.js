@@ -123,3 +123,120 @@ test("failed lookups are not cached — a later call retries", async () => {
   const extras = await api.fetchCareerExtras(SOC);
   assert.equal(extras.outlook.category, "Bright");
 });
+
+// --- observability: getStatus() + throttled failure logging -----------------
+
+// Capture console.error for the duration of `fn`, returning the collected lines
+// (same seam errorHandling.test.js uses).
+async function captureErr(fn) {
+  const original = console.error;
+  const lines = [];
+  console.error = (...args) => lines.push(args);
+  try {
+    await fn();
+  } finally {
+    console.error = original;
+  }
+  return lines;
+}
+
+test("without an API key getStatus reports no live key and no lookup, without fetching", async () => {
+  const fetchImpl = fakeFetch(() => ok(outlookPayload()));
+  const api = createOnetApi({ apiKey: undefined, fetchImpl });
+
+  await api.fetchCareerExtras(SOC);
+  assert.deepEqual(api.getStatus(), {
+    liveKey: false,
+    lastLookupOk: null,
+    lastLookupAt: null,
+    lastError: null,
+    cachedOccupations: 0,
+  });
+  assert.equal(fetchImpl.calls.length, 0);
+});
+
+test("a successful lookup records ok, the timestamp, and the cache size", async () => {
+  const clock = 1_700_000_000_000;
+  const fetchImpl = fakeFetch(() => ok(outlookPayload()));
+  const api = createOnetApi({ apiKey: "k", fetchImpl, now: () => clock });
+
+  await api.fetchCareerExtras(SOC);
+  assert.deepEqual(api.getStatus(), {
+    liveKey: true,
+    lastLookupOk: true,
+    lastLookupAt: clock,
+    lastError: null,
+    cachedOccupations: 1,
+  });
+});
+
+test("a failed lookup records the failure and its message", async () => {
+  const clock = 42;
+  const api = createOnetApi({
+    apiKey: "k",
+    fetchImpl: fakeFetch(() => status(500)),
+    now: () => clock,
+  });
+
+  await captureErr(() => api.fetchCareerExtras(SOC));
+  const state = api.getStatus();
+  assert.equal(state.liveKey, true);
+  assert.equal(state.lastLookupOk, false);
+  assert.equal(state.lastLookupAt, clock);
+  assert.match(state.lastError, /500/);
+  assert.equal(state.cachedOccupations, 0);
+});
+
+test("a success after a failure clears the stale error", async () => {
+  let healthy = false;
+  const api = createOnetApi({
+    apiKey: "k",
+    fetchImpl: fakeFetch(() => (healthy ? ok(outlookPayload()) : status(500))),
+  });
+
+  await captureErr(() => api.fetchCareerExtras(SOC));
+  assert.ok(api.getStatus().lastError);
+
+  healthy = true;
+  await api.fetchCareerExtras(SOC);
+  const state = api.getStatus();
+  assert.equal(state.lastLookupOk, true);
+  assert.equal(state.lastError, null);
+});
+
+test("a cache hit is not a lookup and does not move the status timestamp", async () => {
+  let clock = 1000;
+  const fetchImpl = fakeFetch(() => ok(outlookPayload()));
+  const api = createOnetApi({ apiKey: "k", fetchImpl, now: () => clock });
+
+  await api.fetchCareerExtras(SOC);
+  assert.equal(api.getStatus().lastLookupAt, 1000);
+
+  clock = 2000;
+  await api.fetchCareerExtras(SOC);
+  assert.equal(fetchImpl.calls.length, 1);
+  assert.equal(api.getStatus().lastLookupAt, 1000);
+});
+
+test("failure logging is throttled to once per 15 minutes, not once per process", async () => {
+  let clock = 0;
+  const api = createOnetApi({
+    apiKey: "k",
+    fetchImpl: fakeFetch(() => status(500)),
+    now: () => clock,
+  });
+
+  const early = await captureErr(async () => {
+    await api.fetchCareerExtras(SOC);
+    clock = 60_000; // still inside the window
+    await api.fetchCareerExtras(SOC);
+  });
+  assert.equal(early.length, 1);
+  assert.match(String(early[0][0]), /\[onetApi\] live lookup failed \(snapshot-only mode\):/);
+
+  const later = await captureErr(async () => {
+    clock = 16 * 60_000; // past the interval
+    await api.fetchCareerExtras(SOC);
+  });
+  assert.equal(later.length, 1);
+});

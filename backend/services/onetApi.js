@@ -6,6 +6,9 @@ const BASE_URL = "https://api-v2.onetcenter.org";
 const REQUEST_TIMEOUT_MS = 5_000;
 const RETRY_DELAY_MS = 250; // O*NET asks for >=200ms before retrying a 429
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // occupation data is static enough
+// A wrong key fails on every lookup forever. Logging once per process hides
+// that after boot; logging every time floods. Once per window is the middle.
+const FAILURE_LOG_INTERVAL_MS = 15 * 60 * 1000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -35,7 +38,12 @@ function createOnetApi({
   retryDelayMs = RETRY_DELAY_MS,
 } = {}) {
   const cache = new Map(); // soc -> { at, extras }
-  let loggedFailure = false;
+  let lastFailureLogAt = null; // throttles the log line, not the state below
+  // Cached liveness, surfaced by getStatus() for /api/health. Only real
+  // lookups move these — a cache hit is not a lookup.
+  let lastLookupOk = null;
+  let lastLookupAt = null;
+  let lastError = null;
 
   async function request(url, isRetry = false) {
     const response = await fetchImpl(url, {
@@ -62,17 +70,35 @@ function createOnetApi({
       const payload = await request(`${baseUrl}/mnm/careers/${soc}/job_outlook`);
       const extras = normalizeExtras(payload);
       cache.set(soc, { at: now(), extras });
+      lastLookupOk = true;
+      lastLookupAt = now();
+      lastError = null; // a stale error next to a success reads as a live outage
       return extras;
     } catch (error) {
-      if (!loggedFailure) {
-        loggedFailure = true;
+      lastLookupOk = false;
+      lastLookupAt = now();
+      lastError = error.message;
+      if (lastFailureLogAt === null || now() - lastFailureLogAt >= FAILURE_LOG_INTERVAL_MS) {
+        lastFailureLogAt = now();
         console.error("[onetApi] live lookup failed (snapshot-only mode):", error.message);
       }
       return null;
     }
   }
 
-  return { fetchCareerExtras };
+  // Cached in-process liveness for /api/health. Never triggers a request, and
+  // reports the key as a boolean only — the key itself never leaves here.
+  function getStatus() {
+    return {
+      liveKey: Boolean(apiKey),
+      lastLookupOk,
+      lastLookupAt,
+      lastError,
+      cachedOccupations: cache.size,
+    };
+  }
+
+  return { fetchCareerExtras, getStatus };
 }
 
 module.exports = { createOnetApi };
