@@ -3,6 +3,8 @@ import { AnimatePresence, motion as Motion } from "framer-motion";
 import GraphView from "./components/GraphView";
 import { DetailPanel } from "./components/GraphView/NodeComponent";
 import Wordmark from "./ui/Wordmark";
+import { HomeNavContext } from "./ui/homeNav";
+import ConfirmDialog from "./ui/ConfirmDialog";
 import BranchCanvas from "./ui/BranchCanvas";
 import ScreenShell from "./ui/ScreenShell";
 import EntryScreen from "./screens/EntryScreen";
@@ -164,6 +166,8 @@ function App() {
 
   const [profile, setProfile] = useState(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  // Set while the wordmark is asking whether it may drop the session.
+  const [confirmHome, setConfirmHome] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(true);
   // Journey intro rail: shown once right after the entry screen, never on resume.
   const [showRail, setShowRail] = useState(false);
@@ -815,6 +819,7 @@ function App() {
 
   const resetAll = () => {
     localStorage.removeItem(SESSION_STORAGE_KEY);
+    setConfirmHome(false);
     setRestoring(false);
     setStage("entry");
     setDreamAnswer("");
@@ -968,314 +973,335 @@ function App() {
     );
   }
 
+  // The wordmark is the way home from anywhere in the flow. "Home" is the
+  // entry screen and there is no router, so going there does what Restart
+  // does: the session is dropped and the hero comes back. Because a logo
+  // reads as navigation and not as a reset, it asks first. On the entry
+  // screen itself no handler is published, so the mark stays plain text.
+  const homeNav = stage === "entry" ? null : () => setConfirmHome(true);
+
   return (
-    <main className="app-shell">
-      {stage === "entry" && (
-        <EntryScreen
-          value={dreamAnswer}
-          onChange={setDreamAnswer}
-          onStart={handleStartSession}
-          busy={busy.start}
-          error={error}
-          reducedMotion={REDUCED_MOTION}
-          onOpenInfo={handleOpenMethodology}
-        />
-      )}
+    <HomeNavContext.Provider value={homeNav}>
+      <main className="app-shell">
+        {stage === "entry" && (
+          <EntryScreen
+            value={dreamAnswer}
+            onChange={setDreamAnswer}
+            onStart={handleStartSession}
+            busy={busy.start}
+            error={error}
+            reducedMotion={REDUCED_MOTION}
+            onOpenInfo={handleOpenMethodology}
+          />
+        )}
 
-      {stage === "survey" && (
-        <section className="questions-screen">
-          {!aiEnabled && (
-            <p className="demo-notice">
-              Demo mode — suggestions come from fixed rules, not AI.
-            </p>
-          )}
+        {stage === "survey" && (
+          <section className="questions-screen">
+            {!aiEnabled && (
+              <p className="demo-notice">
+                Demo mode — suggestions come from fixed rules, not AI.
+              </p>
+            )}
 
-          {showRail && step === "demographics" && (
-            <JourneyIntroScreen onBegin={() => setShowRail(false)} />
-          )}
+            {showRail && step === "demographics" && (
+              <JourneyIntroScreen onBegin={() => setShowRail(false)} />
+            )}
 
-          {!showRail && step === "demographics" && demographicQuestions.length > 0 && (
-            <DemographicsScreen
-              questions={demographicQuestions}
-              drafts={demoDrafts}
-              onDraftChange={handleDemoDraftChange}
-              busy={busy.demo}
-              onSubmit={handleSubmitDemographics}
-              footer={surveyFooter}
-            />
-          )}
-
-          {step === "big_five" && currentBigFiveItem && (
-            <BigFiveScreen
-              item={currentBigFiveItem}
-              savedValue={bigFiveAnswers[currentBigFiveItem.id] ?? null}
-              index={bigFiveIndex}
-              total={bigFiveItems.length}
-              busy={busy.bigFive}
-              onAnswer={handleSubmitBigFive}
-              onBack={handleBackBigFive}
-              canGoBack={bigFiveIndex > 0}
-              footer={surveyFooter}
-            />
-          )}
-
-          {step === "riasec" && !riasecItems.length && (
-            <ScreenShell
-              eyebrow="step 3 · riasec interests"
-              title="Preparing the interests quiz…"
-              footer={surveyFooter}
-            />
-          )}
-
-          {step === "riasec" && riasecItems[riasecIndex] && (
-            <RiasecScreen
-              item={riasecItems[riasecIndex]}
-              savedValue={riasecAnswers[riasecItems[riasecIndex].id] ?? null}
-              index={riasecIndex}
-              total={riasecItems.length}
-              busy={busy.riasec || busy.riasecSkip}
-              onAnswer={handleSubmitRiasec}
-              onBack={() => setRiasecIndex((i) => Math.max(0, i - 1))}
-              canGoBack={riasecIndex > 0}
-              onSkip={handleSkipRiasec}
-              canSkip={Object.keys(riasecAnswers).length === 0}
-              footer={surveyFooter}
-            />
-          )}
-
-          {step === "values" && valuesComparison && (
-            <ValuesTournamentScreen
-              comparison={valuesComparison}
-              progress={progress?.values || null}
-              busy={busy.values}
-              onChoose={handleValuesAnswer}
-              footer={surveyFooter}
-            />
-          )}
-
-          {step === "values" && !valuesComparison && valuesRankDraft.length === 6 && (
-            <ValuesHierarchyScreen
-              ranking={valuesRankDraft}
-              onReorder={(from, to) => setValuesRankDraft((list) => moveRankItemTo(list, from, to))}
-              busy={busy.valuesConfirm}
-              onConfirm={handleValuesConfirm}
-              footer={surveyFooter}
-            />
-          )}
-
-          {step === "cv" && careerJourneyQuestions.length > 0 && (
-            <ExperienceScreen
-              mode={cvMode}
-              intent={cvIntent}
-              intentBusy={busy.cvIntent}
-              onSelectIntent={handleSelectCvIntent}
-              cvDraft={cvDraft}
-              onCvDraftChange={setCvDraft}
-              onStartPaste={() => setCvMode("paste")}
-              onSubmitCvText={handleSubmitCvText}
-              onUploadFile={handleUploadCv}
-              uploadFormats={cvUploadFormats}
-              busy={busy.cv || busy.journey}
-              journeyQuestion={careerJourneyQuestions[journeyIndex]}
-              journeyIndex={journeyIndex}
-              journeyTotal={careerJourneyQuestions.length}
-              journeyDraft={journeyDraft}
-              onJourneyDraftChange={setJourneyDraft}
-              onSubmitJourney={() => {
-                // Answering the B-side question is the commitment to the
-                // journey path — without this the eyebrow's counter never
-                // starts, even as journeyIndex advances underneath it. Guard on
-                // the same emptiness handleSubmitJourney checks, or Enter on an
-                // empty field commits the path and records nothing.
-                if (!journeyDraft.trim()) return;
-                setCvMode("journey");
-                handleSubmitJourney(journeyDraft);
-              }}
-              onStartJourney={() => setCvMode("journey")}
-              onBackToChoice={() => {
-                setCvMode("choice");
-                setCvDraft("");
-              }}
-              onJourneyBack={handleJourneyBack}
-              footer={surveyFooter}
-            />
-          )}
-
-          {step === "summary" && (
-            <SummaryScreen
-              archetype={deriveArchetype({
-                riasecCode: profile?.riasecCode,
-                bigFiveScores: profile?.bigFiveScores,
-              })}
-              bigFiveScores={profile?.bigFiveScores}
-              personaSummary={profile?.personaSummary}
-              userValues={profile?.userValues}
-              busy={busy.summary}
-              onContinue={handleSummaryContinue}
-              footer={surveyFooter}
-            />
-          )}
-
-          {step === "tree" && (
-            <ScreenShell
-              eyebrow="assessment complete"
-              title="Assessment complete."
-              sub="You're ready to generate your first life path branch."
-              glow="center"
-              footer={surveyFooter}
-            >
-              <button
-                type="button"
-                className="btn btn--gold summary-cta"
-                onClick={handleEnterLifePath}
-                disabled={busy.enterTree}
-              >
-                {busy.enterTree ? "Preparing…" : "Run Life Path Engine"}
-              </button>
-            </ScreenShell>
-          )}
-
-          {error && (
-            <div className="error-row">
-              <p className="error-text">{error}</p>
-              {retryAction && (
-                <button type="button" className="ghost-action" onClick={() => retryAction()}>
-                  Try again
-                </button>
-              )}
-            </div>
-          )}
-        </section>
-      )}
-
-      {stage === "tree" && (
-        <div className="graph-page">
-          <BranchCanvas preset="graph" className="graph-branch" reducedMotion={REDUCED_MOTION} />
-          <div className="graph-header">
-            <span className="graph-header-lead">
-              <Wordmark />
-              <button type="button" className="screen-back" onClick={resetAll}>
-                ← Restart
-              </button>
-            </span>
-            <span className="graph-headline">{graphHeadline}</span>
-            <span className="graph-header-side">
-              {!aiEnabled && <span className="demo-notice demo-notice-inline">Demo mode</span>}
-              <button
-                type="button"
-                className={`graph-profile-toggle ${profileOpen ? "active" : ""}`}
-                onClick={() => setProfileOpen((open) => !open)}
-              >
-                {profileOpen ? "Hide profile" : "My profile"}
-              </button>
-            </span>
-          </div>
-
-          <div className="graph-canvas">
-            <GraphView
-              nodes={graph.nodes}
-              edges={graph.edges}
-              focusKey={focusKey}
-              focusNodeIds={focusNodeIds}
-            />
-            {profileOpen && (
-              <ProfilePanel
-                profile={profile}
-                userValues={profile?.userValues}
-                onClose={() => setProfileOpen(false)}
+            {!showRail && step === "demographics" && demographicQuestions.length > 0 && (
+              <DemographicsScreen
+                questions={demographicQuestions}
+                drafts={demoDrafts}
+                onDraftChange={handleDemoDraftChange}
+                busy={busy.demo}
+                onSubmit={handleSubmitDemographics}
+                footer={surveyFooter}
               />
             )}
 
-            {/* The dock lives inside .graph-canvas, not .graph-page: it is
-                capped against its containing block, and the canvas is the part
-                of the page below the header — so a tall card can never grow
-                over the header and swallow its controls. */}
-            <div className="graph-question-dock">
-              <AnimatePresence mode="wait">
-                {dockCard && (
-                  <Motion.div
-                    key={dockCard.key}
-                    initial={{ y: 12, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    exit={{
-                      y: 12,
-                      opacity: 0,
-                      transition: { duration: REDUCED_MOTION ? 0 : 0.25 },
-                    }}
-                    transition={
-                      REDUCED_MOTION
-                        ? { duration: 0 }
-                        : { duration: 0.35, ease: [0.22, 1, 0.36, 1] }
-                    }
-                  >
-                    {dockCard.content}
-                  </Motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-
-          <AnimatePresence>
-            {stageDetail && (
-              <Motion.div
-                key="stage-detail"
-                initial={{ x: 20, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                exit={{ x: 20, opacity: 0 }}
-                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <DetailPanel
-                  data={{
-                    path: {
-                      archetype: `Step ${stageDetail.index + 1}${stageDetail.stage.timeframe ? ` · ${stageDetail.stage.timeframe}` : ""}`,
-                      title: stageDetail.stage.title,
-                      description: stageDetail.stage.description,
-                      careerTrajectory: stageDetail.stage.milestone || null,
-                    },
-                    onClose: () => setStageDetail(null),
-                  }}
-                />
-              </Motion.div>
+            {step === "big_five" && currentBigFiveItem && (
+              <BigFiveScreen
+                item={currentBigFiveItem}
+                savedValue={bigFiveAnswers[currentBigFiveItem.id] ?? null}
+                index={bigFiveIndex}
+                total={bigFiveItems.length}
+                busy={busy.bigFive}
+                onAnswer={handleSubmitBigFive}
+                onBack={handleBackBigFive}
+                canGoBack={bigFiveIndex > 0}
+                footer={surveyFooter}
+              />
             )}
-          </AnimatePresence>
 
-          {error && (
-            <div className="error-row graph-error">
-              <p className="error-text">{error}</p>
-              {retryAction && (
-                <button type="button" className="ghost-action" onClick={() => retryAction()}>
-                  Try again
+            {step === "riasec" && !riasecItems.length && (
+              <ScreenShell
+                eyebrow="step 3 · riasec interests"
+                title="Preparing the interests quiz…"
+                footer={surveyFooter}
+              />
+            )}
+
+            {step === "riasec" && riasecItems[riasecIndex] && (
+              <RiasecScreen
+                item={riasecItems[riasecIndex]}
+                savedValue={riasecAnswers[riasecItems[riasecIndex].id] ?? null}
+                index={riasecIndex}
+                total={riasecItems.length}
+                busy={busy.riasec || busy.riasecSkip}
+                onAnswer={handleSubmitRiasec}
+                onBack={() => setRiasecIndex((i) => Math.max(0, i - 1))}
+                canGoBack={riasecIndex > 0}
+                onSkip={handleSkipRiasec}
+                canSkip={Object.keys(riasecAnswers).length === 0}
+                footer={surveyFooter}
+              />
+            )}
+
+            {step === "values" && valuesComparison && (
+              <ValuesTournamentScreen
+                comparison={valuesComparison}
+                progress={progress?.values || null}
+                busy={busy.values}
+                onChoose={handleValuesAnswer}
+                footer={surveyFooter}
+              />
+            )}
+
+            {step === "values" && !valuesComparison && valuesRankDraft.length === 6 && (
+              <ValuesHierarchyScreen
+                ranking={valuesRankDraft}
+                onReorder={(from, to) => setValuesRankDraft((list) => moveRankItemTo(list, from, to))}
+                busy={busy.valuesConfirm}
+                onConfirm={handleValuesConfirm}
+                footer={surveyFooter}
+              />
+            )}
+
+            {step === "cv" && careerJourneyQuestions.length > 0 && (
+              <ExperienceScreen
+                mode={cvMode}
+                intent={cvIntent}
+                intentBusy={busy.cvIntent}
+                onSelectIntent={handleSelectCvIntent}
+                cvDraft={cvDraft}
+                onCvDraftChange={setCvDraft}
+                onStartPaste={() => setCvMode("paste")}
+                onSubmitCvText={handleSubmitCvText}
+                onUploadFile={handleUploadCv}
+                uploadFormats={cvUploadFormats}
+                busy={busy.cv || busy.journey}
+                journeyQuestion={careerJourneyQuestions[journeyIndex]}
+                journeyIndex={journeyIndex}
+                journeyTotal={careerJourneyQuestions.length}
+                journeyDraft={journeyDraft}
+                onJourneyDraftChange={setJourneyDraft}
+                onSubmitJourney={() => {
+                  // Answering the B-side question is the commitment to the
+                  // journey path — without this the eyebrow's counter never
+                  // starts, even as journeyIndex advances underneath it. Guard on
+                  // the same emptiness handleSubmitJourney checks, or Enter on an
+                  // empty field commits the path and records nothing.
+                  if (!journeyDraft.trim()) return;
+                  setCvMode("journey");
+                  handleSubmitJourney(journeyDraft);
+                }}
+                onStartJourney={() => setCvMode("journey")}
+                onBackToChoice={() => {
+                  setCvMode("choice");
+                  setCvDraft("");
+                }}
+                onJourneyBack={handleJourneyBack}
+                footer={surveyFooter}
+              />
+            )}
+
+            {step === "summary" && (
+              <SummaryScreen
+                archetype={deriveArchetype({
+                  riasecCode: profile?.riasecCode,
+                  bigFiveScores: profile?.bigFiveScores,
+                })}
+                bigFiveScores={profile?.bigFiveScores}
+                personaSummary={profile?.personaSummary}
+                userValues={profile?.userValues}
+                busy={busy.summary}
+                onContinue={handleSummaryContinue}
+                footer={surveyFooter}
+              />
+            )}
+
+            {step === "tree" && (
+              <ScreenShell
+                eyebrow="assessment complete"
+                title="Assessment complete."
+                sub="You're ready to generate your first life path branch."
+                glow="center"
+                footer={surveyFooter}
+              >
+                <button
+                  type="button"
+                  className="btn btn--gold summary-cta"
+                  onClick={handleEnterLifePath}
+                  disabled={busy.enterTree}
+                >
+                  {busy.enterTree ? "Preparing…" : "Run Life Path Engine"}
                 </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+              </ScreenShell>
+            )}
 
-      {DEV_MODE && (
-        <DevPanel
-          step={step}
-          pathStage={pathStage}
-          sessionId={sessionId}
-          busy={busy.dev}
-          onJump={handleDevJump}
-        />
-      )}
-
-      <AnimatePresence>
-        {infoView && (
-          <Motion.div
-            key="info-view"
-            initial={{ x: 20, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 20, opacity: 0 }}
-            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <InfoPanel view={infoView} onClose={() => setInfoView(null)} />
-          </Motion.div>
+            {error && (
+              <div className="error-row">
+                <p className="error-text">{error}</p>
+                {retryAction && (
+                  <button type="button" className="ghost-action" onClick={() => retryAction()}>
+                    Try again
+                  </button>
+                )}
+              </div>
+            )}
+          </section>
         )}
-      </AnimatePresence>
-    </main>
+
+        {stage === "tree" && (
+          <div className="graph-page">
+            <BranchCanvas preset="graph" className="graph-branch" reducedMotion={REDUCED_MOTION} />
+            <div className="graph-header">
+              <span className="graph-header-lead">
+                <Wordmark />
+                <button type="button" className="screen-back" onClick={resetAll}>
+                  ← Restart
+                </button>
+              </span>
+              <span className="graph-headline">{graphHeadline}</span>
+              <span className="graph-header-side">
+                {!aiEnabled && <span className="demo-notice demo-notice-inline">Demo mode</span>}
+                <button
+                  type="button"
+                  className={`graph-profile-toggle ${profileOpen ? "active" : ""}`}
+                  onClick={() => setProfileOpen((open) => !open)}
+                >
+                  {profileOpen ? "Hide profile" : "My profile"}
+                </button>
+              </span>
+            </div>
+
+            <div className="graph-canvas">
+              <GraphView
+                nodes={graph.nodes}
+                edges={graph.edges}
+                focusKey={focusKey}
+                focusNodeIds={focusNodeIds}
+              />
+              {profileOpen && (
+                <ProfilePanel
+                  profile={profile}
+                  userValues={profile?.userValues}
+                  onClose={() => setProfileOpen(false)}
+                />
+              )}
+
+              {/* The dock lives inside .graph-canvas, not .graph-page: it is
+                  capped against its containing block, and the canvas is the part
+                  of the page below the header — so a tall card can never grow
+                  over the header and swallow its controls. */}
+              <div className="graph-question-dock">
+                <AnimatePresence mode="wait">
+                  {dockCard && (
+                    <Motion.div
+                      key={dockCard.key}
+                      initial={{ y: 12, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      exit={{
+                        y: 12,
+                        opacity: 0,
+                        transition: { duration: REDUCED_MOTION ? 0 : 0.25 },
+                      }}
+                      transition={
+                        REDUCED_MOTION
+                          ? { duration: 0 }
+                          : { duration: 0.35, ease: [0.22, 1, 0.36, 1] }
+                      }
+                    >
+                      {dockCard.content}
+                    </Motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+
+            <AnimatePresence>
+              {stageDetail && (
+                <Motion.div
+                  key="stage-detail"
+                  initial={{ x: 20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  exit={{ x: 20, opacity: 0 }}
+                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <DetailPanel
+                    data={{
+                      path: {
+                        archetype: `Step ${stageDetail.index + 1}${stageDetail.stage.timeframe ? ` · ${stageDetail.stage.timeframe}` : ""}`,
+                        title: stageDetail.stage.title,
+                        description: stageDetail.stage.description,
+                        careerTrajectory: stageDetail.stage.milestone || null,
+                      },
+                      onClose: () => setStageDetail(null),
+                    }}
+                  />
+                </Motion.div>
+              )}
+            </AnimatePresence>
+
+            {error && (
+              <div className="error-row graph-error">
+                <p className="error-text">{error}</p>
+                {retryAction && (
+                  <button type="button" className="ghost-action" onClick={() => retryAction()}>
+                    Try again
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {DEV_MODE && (
+          <DevPanel
+            step={step}
+            pathStage={pathStage}
+            sessionId={sessionId}
+            busy={busy.dev}
+            onJump={handleDevJump}
+          />
+        )}
+
+        {confirmHome && (
+          <ConfirmDialog
+            eyebrow="leave the assessment"
+            title="Start over from the beginning?"
+            body="Going back to the start page ends this session. Your answers and every generated path are dropped, and there is no way back to them."
+            confirmLabel="Yes, start over"
+            cancelLabel="Stay here"
+            onConfirm={resetAll}
+            onCancel={() => setConfirmHome(false)}
+          />
+        )}
+
+        <AnimatePresence>
+          {infoView && (
+            <Motion.div
+              key="info-view"
+              initial={{ x: 20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 20, opacity: 0 }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <InfoPanel view={infoView} onClose={() => setInfoView(null)} />
+            </Motion.div>
+          )}
+        </AnimatePresence>
+      </main>
+    </HomeNavContext.Provider>
   );
 }
 

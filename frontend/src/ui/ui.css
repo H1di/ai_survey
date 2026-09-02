@@ -27,6 +27,22 @@
   color: var(--gold-60);
 }
 
+/* The mark doubles as the link home (App publishes the handler through
+   HomeNavContext). The global button reset already drops border/background, so
+   only the box and the hover feedback are left to declare. */
+.wordmark--link {
+  padding: 0;
+  text-align: left;
+}
+
+.wordmark--link:hover .wordmark-text {
+  color: var(--gold);
+}
+
+.wordmark--link:hover .wordmark-dot {
+  box-shadow: 0 0 20px var(--gold);
+}
+
 .screen {
   position: relative;
   min-height: 100vh;
@@ -371,4 +387,78 @@
   min-width: 34px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* --- Confirm dialog ---
+   Above the profile panel (z 140) and the detail panel, below the dev pill
+   (z 9999) so manual testing can still jump steps with the dialog open. */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(6px);
+  animation: confirm-overlay-in var(--t-base) var(--ease-out);
+}
+
+.confirm-card {
+  width: min(440px, 100%);
+  padding: 32px;
+  border: 1px solid var(--gold-25);
+  border-radius: var(--radius-surface);
+  background: var(--glow-center), var(--ink-screen);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  text-align: left;
+  animation: confirm-card-in var(--t-base) var(--ease-out);
+}
+
+.confirm-eyebrow {
+  margin: 0 0 14px;
+  font: 500 10px/1 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold-70);
+}
+
+.confirm-title {
+  margin: 0 0 12px;
+  font: 700 24px/1.2 var(--font-display);
+  color: var(--bone);
+}
+
+.confirm-body {
+  margin: 0 0 28px;
+  font-size: 14px;
+  color: var(--text-60);
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@keyframes confirm-overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes confirm-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confirm-overlay,
+  .confirm-card {
+    animation: none;
+  }
 }
