@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import GraphView from "./components/GraphView";
 import { DetailPanel } from "./components/GraphView/NodeComponent";
@@ -606,12 +606,20 @@ function App() {
     }
   };
 
+  // The engine now runs unattended on the `tree` screen, where the rail is
+  // still live — so the step can change while the request is in flight. The
+  // completion reads it through this ref: applying the snapshot after a rail
+  // click would drag the user back out of the step they just opened.
+  const stepRef = useRef(step);
+  stepRef.current = step;
+
   const handleEnterLifePath = async () => {
     if (!sessionId) return;
     setError("");
     setBusy((p) => ({ ...p, enterTree: true }));
     try {
       const data = await fetchFirstOutput({ sessionId });
+      if (stepRef.current !== "tree") return;
       applySessionSnapshot(data);
       setRetryAction(null);
       setStage("tree");
@@ -622,6 +630,18 @@ function App() {
       setBusy((p) => ({ ...p, enterTree: false }));
     }
   };
+
+  // `tree` has no screen of its own: reaching it is the request for the 1st
+  // output, so generation starts the moment the step opens (after Summary, or
+  // on a reload that lands here before an output exists). A failure sets the
+  // error and stops the effect re-firing; the error row's Try again is the way
+  // back in.
+  useEffect(() => {
+    if (step === "tree" && sessionId && outputs.length === 0 && !busy.enterTree && !error) {
+      handleEnterLifePath();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, sessionId, outputs.length, busy.enterTree, error]);
 
   const currentBigFiveItem = bigFiveItems[bigFiveIndex] || null;
 
@@ -1131,20 +1151,15 @@ function App() {
 
             {step === "tree" && (
               <ScreenShell
-                eyebrow="assessment complete"
-                title="Assessment complete."
-                sub="You're ready to generate your first life path branch."
+                eyebrow="life path engine"
+                title="Building your first life path…"
+                sub="Matching your profile against the O*NET occupation set."
                 glow="center"
                 footer={surveyFooter}
               >
-                <button
-                  type="button"
-                  className="btn btn--gold summary-cta"
-                  onClick={handleEnterLifePath}
-                  disabled={busy.enterTree}
-                >
-                  {busy.enterTree ? "Preparing…" : "Run Life Path Engine"}
-                </button>
+                <div className="screen-loading-dots" aria-live="polite" aria-label="Generating">
+                  <span /><span /><span />
+                </div>
               </ScreenShell>
             )}
 

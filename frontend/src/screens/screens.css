@@ -533,6 +533,34 @@
   margin-top: 30px;
 }
 
+/* The `tree` step has no CTA — the 1st output generates on arrival — so the
+   screen carries only this pulse while the engine runs. Own keyframes on
+   purpose: the graph's identical dots live in NodeComponent.css, which this
+   screen never renders. */
+.screen-loading-dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 34px;
+}
+
+.screen-loading-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold-40);
+  animation: screen-loading-pulse 1.2s infinite;
+}
+
+.screen-loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.screen-loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes screen-loading-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
 /* Scoped under .screen: App.css still defines .summary-archetype,
    .summary-tagline and .summary-persona at single-class specificity and is
    imported after screens.css, so unscoped rules here would lose outright.
