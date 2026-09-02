@@ -52,6 +52,13 @@ services:
         sync: false
       - key: OPENAI_MODEL
         value: gpt-4.1-mini
+      # O*NET Web Services — живой US salary/outlook поверх снапшота. Секрет,
+      # задан вручную в Dashboard (sync: false — Blueprint не трогает значение).
+      # Объявлен здесь, чтобы переменная не потерялась при пересинке Blueprint.
+      # Без ключа приложение работает на одном снапшоте. Рабочий ключ от битого
+      # отличается по GET /api/health → onet.liveKey / onet.lastLookupOk.
+      - key: ONET_API_KEY
+        sync: false
       # Durable sessions via Upstash Redis (optional). Set both in the Render
       # Dashboard; without them the app keeps sessions in memory and loses them
       # on restart / idle-sleep. Secrets, so never committed.
