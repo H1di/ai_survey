@@ -15,6 +15,9 @@ try {
 const bySoc = new Map(snapshot.occupations.map((o) => [o.soc, o]));
 
 const SNAPSHOT_VERSION = snapshot.version;
+// Exported so /api/health can report grounding coverage without re-requiring
+// the JSON. 0 means the snapshot is missing and occupation grounding is dead.
+const SNAPSHOT_OCCUPATION_COUNT = snapshot.occupations.length;
 const ONET_ATTRIBUTION =
   snapshot.attribution ||
   "This product includes information from the O*NET Database and O*NET Web Services by " +
@@ -99,4 +102,5 @@ module.exports = {
   ONET_ATTRIBUTION,
   JOB_ZONE_LABELS,
   SNAPSHOT_VERSION,
+  SNAPSHOT_OCCUPATION_COUNT,
 };

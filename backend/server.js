@@ -39,7 +39,14 @@ const {
 const { SessionStore, STEP_ORDER } = require("./sessionStore");
 const { DEV_PROFILE, seedTo } = require("./devSeed");
 const { createRedisClient } = require("./redisClient");
-const { getOccupation, getRelated, JOB_ZONE_LABELS, ONET_ATTRIBUTION } = require("./onet");
+const {
+  getOccupation,
+  getRelated,
+  JOB_ZONE_LABELS,
+  ONET_ATTRIBUTION,
+  SNAPSHOT_VERSION,
+  SNAPSHOT_OCCUPATION_COUNT,
+} = require("./onet");
 const { createOnetApi } = require("./services/onetApi");
 const { randomUUID, createHash, timingSafeEqual } = require("node:crypto");
 const { logError, resolveStatus } = require("./logger");
@@ -203,6 +210,14 @@ app.get("/api/health", (_req, res) => {
     model: MODEL,
     hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY),
     sessionStore: store.redis ? "redis" : "memory",
+    // Snapshot grounding + live-client liveness. getStatus() is cached
+    // in-process state (no request, no key) — it is what tells a wrong
+    // ONET_API_KEY (liveKey true, lastLookupOk false) from no key at all.
+    onet: {
+      snapshotVersion: SNAPSHOT_VERSION,
+      occupations: SNAPSHOT_OCCUPATION_COUNT,
+      ...onetApi.getStatus(),
+    },
   });
 });
 

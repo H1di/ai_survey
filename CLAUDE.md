@@ -87,7 +87,7 @@ After `tree`, a `pathStage` progression: `output → detail`. `session.userValue
 - `backend/riasec.js` — per-direction Holland weights + `rankDirections(riasecScores)` catalog ranking (direction-prompt hint); `inferRiasecScores` is the Big Five-only quiz-skip fallback
 - `backend/onet.js` — pure lookups + `rankOccupations` (Pearson) over the checked-in O*NET snapshot; exports `ONET_ATTRIBUTION` (CC-BY requirement) and `JOB_ZONE_LABELS`
 - `backend/data/onet-snapshot.json` — 923 occupations (O*NET 30.3): RIASEC profile, job zone, top skills/tech, related SOCs, the six `workValues` (merged from O*NET 28.0 by SOC — 30.3 dropped the descriptor), `directionId`; regenerate with `node scripts/build-onet-snapshot.js <db_30_3_text dir> <28.0 "Work Values.txt">` (embeds the SOC→direction mapping)
-- `backend/services/onetApi.js` — optional O*NET Web Services client (`ONET_API_KEY`, X-API-Key header): live US salary/outlook per SOC, 24h in-process cache, one 429 retry; absent key or any failure = silent null
+- `backend/services/onetApi.js` — optional O*NET Web Services client (`ONET_API_KEY`, X-API-Key header): live US salary/outlook per SOC, 24h in-process cache, one 429 retry; absent key or any failure = silent null — failures are logged at most once per 15 min (`FAILURE_LOG_INTERVAL_MS`, via the injected `now`), and `getStatus()` exposes cached liveness (`liveKey`/`lastLookupOk`/`lastLookupAt`/`lastError`/`cachedOccupations`) on `GET /api/health` alongside `SNAPSHOT_VERSION` + `SNAPSHOT_OCCUPATION_COUNT` from `onet.js` — that is how a bad key is told from no key; health stays unauthenticated, triggers no request, and **must never carry the key itself** (a boolean, never a prefix or hash)
 
 ### Frontend
 

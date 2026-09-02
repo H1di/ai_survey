@@ -127,6 +127,43 @@ cd frontend && npm test -- --run    # vitest over src/lifePath.js (24 tests)
 
 ## API Routes
 
+### Health
+- `GET /api/health` — unauthenticated, cached in-process state only (never
+  triggers an O\*NET request):
+```json
+{
+  "ok": true,
+  "model": "gpt-4.1-mini",
+  "hasOpenAIKey": false,
+  "sessionStore": "memory",
+  "onet": {
+    "snapshotVersion": "30.3",
+    "occupations": 923,
+    "liveKey": false,
+    "lastLookupOk": null,
+    "lastLookupAt": null,
+    "lastError": null,
+    "cachedOccupations": 0
+  }
+}
+```
+The `onet` block is the fastest way to tell **no key** from **a bad key** —
+the live client degrades to `null` either way, so the response bodies look
+identical:
+
+| `liveKey` | `lastLookupOk` | meaning |
+| --- | --- | --- |
+| `false` | `null` | no `ONET_API_KEY` — snapshot-only by configuration |
+| `true` | `null` | key set, no lookup attempted yet this process |
+| `true` | `false` | key set but **failing** — `lastError` names the cause (`O*NET responded 403` = bad key) |
+| `true` | `true` | live enrichment working; `cachedOccupations` is the 24h cache size |
+
+`snapshotVersion: "0"` with `occupations: 0` means the checked-in snapshot
+failed to load and occupation grounding is dead.
+
+The key itself is never reported — `liveKey` is a boolean, not a prefix or a
+hash, and the key travels only in the `X-API-Key` request header.
+
 ### Session + Assessment
 - `POST /api/session/start`
   - body: `{ "dreamAnswer": "..." }` — required, capped at 500 chars
