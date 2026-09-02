@@ -63,7 +63,6 @@ describe("EntryScreen", () => {
     expect(onOpenInfo).toHaveBeenCalledWith("how-it-works");
     fireEvent.click(screen.getByRole("button", { name: "the engine" }));
     expect(onOpenInfo).toHaveBeenCalledWith("the-engine");
-    expect(screen.getByRole("link", { name: "github" })).toHaveAttribute("href");
   });
 
   it("starts the assessment on click", () => {

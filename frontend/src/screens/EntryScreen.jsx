@@ -3,8 +3,6 @@ import BranchCanvas from "../ui/BranchCanvas";
 import OnetAttribution from "./OnetAttribution";
 import "./screens.css";
 
-const REPO_URL = "https://github.com/H1di/ai_survey";
-
 // The first screen: the branch grows behind the question that starts
 // everything. Line breaks follow the design exactly.
 export default function EntryScreen({
@@ -31,9 +29,6 @@ export default function EntryScreen({
           <button type="button" onClick={() => onOpenInfo("the-engine")}>
             the engine
           </button>
-          <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
-            github
-          </a>
         </nav>
       </div>
 
