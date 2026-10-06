@@ -1,7 +1,12 @@
 // Required by the O*NET Web Services developer terms: the "O*NET in-it"
 // badge linking to services.onetcenter.org plus the exact attribution
 // sentence with the USDOL/ETA trademark acknowledgment. Keep the wording
-// and the badge artwork as published — they are license conditions.
+// as published — it is a license condition. The badge is a local copy of
+// onetcenter.org/image/link/onet-in-it.svg adapted for the dark theme
+// (white backing rect removed, "o*net" → bone, swoosh → gold,
+// "in-it" on the swoosh → page ink); keep the shapes themselves untouched.
+import onetBadge from "../assets/onet-in-it.svg";
+
 export default function OnetAttribution() {
   return (
     <div className="onet-attribution">
@@ -12,7 +17,7 @@ export default function OnetAttribution() {
         title="This site incorporates information from O*NET Web Services. Click to learn more."
       >
         <img
-          src="https://www.onetcenter.org/image/link/onet-in-it.svg"
+          src={onetBadge}
           width="130"
           height="60"
           alt="O*NET in-it"

@@ -211,6 +211,19 @@
   gap: 6px;
 }
 
+.hero .onet-attribution img {
+  display: block;
+  width: 104px;
+  height: auto;
+  opacity: 0.72;
+  transition: opacity 0.2s ease;
+}
+
+.hero .onet-attribution a:hover img,
+.hero .onet-attribution a:focus-visible img {
+  opacity: 1;
+}
+
 .hero .onet-attribution p {
   margin: 0;
   max-width: 480px;
