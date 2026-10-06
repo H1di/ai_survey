@@ -23,7 +23,6 @@ const base = {
   journeyDraft: "",
   onJourneyDraftChange: () => {},
   onSubmitJourney: () => {},
-  onStartJourney: () => {},
 };
 
 describe("ExperienceScreen", () => {
@@ -33,7 +32,7 @@ describe("ExperienceScreen", () => {
     expect(screen.getByRole("heading", { name: "Where should we start from?" })).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Paste or upload a CV (.pdf/.docx/.html/.txt/.pptx, max 5 MB) — or answer seven career-journey questions if you don't have one."
+        "Paste or upload a CV — or answer seven career-journey questions if you don't have one."
       )
     ).toBeInTheDocument();
   });
@@ -54,12 +53,17 @@ describe("ExperienceScreen", () => {
 
   it("renders both halves of the split with the design's copy", () => {
     render(<ExperienceScreen {...base} intent="new" />);
-    expect(screen.getByText("A")).toBeInTheDocument();
-    expect(screen.getByText("B")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "With a CV" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Without a CV" })).toBeInTheDocument();
     expect(screen.getByText('"What is your current or most recent role?"')).toBeInTheDocument();
     expect(
       screen.getByPlaceholderText("e.g. shift manager at a cafe; student")
     ).toBeInTheDocument();
+  });
+
+  it("leaves the journey to the Without-a-CV half alone", () => {
+    render(<ExperienceScreen {...base} intent="new" />);
+    expect(screen.queryByRole("button", { name: /quick questions/i })).not.toBeInTheDocument();
   });
 
   it("submits the B-side answer", () => {
@@ -72,7 +76,7 @@ describe("ExperienceScreen", () => {
   it("cancels a locked file drop so the browser cannot navigate away", () => {
     const onUploadFile = vi.fn();
     render(<ExperienceScreen {...base} onUploadFile={onUploadFile} />);
-    const zone = screen.getByText("A").parentElement;
+    const zone = screen.getByRole("heading", { name: "With a CV" }).parentElement;
     // fireEvent returns false when a handler called preventDefault on a
     // cancelable event — which is the whole point here.
     expect(fireEvent.dragOver(zone)).toBe(false);

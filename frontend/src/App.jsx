@@ -1124,7 +1124,6 @@ function App() {
                   setCvMode("journey");
                   handleSubmitJourney(journeyDraft);
                 }}
-                onStartJourney={() => setCvMode("journey")}
                 onBackToChoice={() => {
                   setCvMode("choice");
                   setCvDraft("");

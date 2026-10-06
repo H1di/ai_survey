@@ -33,7 +33,6 @@ export default function ExperienceScreen({
   journeyDraft,
   onJourneyDraftChange,
   onSubmitJourney,
-  onStartJourney,
   onBackToChoice,
   onJourneyBack,
   footer,
@@ -85,7 +84,7 @@ export default function ExperienceScreen({
       eyebrow={eyebrow}
       headerSlot={mode === "journey" ? backControl(onJourneyBack) : null}
       title="Where should we start from?"
-      sub="Paste or upload a CV (.pdf/.docx/.html/.txt/.pptx, max 5 MB) — or answer seven career-journey questions if you don't have one."
+      sub="Paste or upload a CV — or answer seven career-journey questions if you don't have one."
       footer={footer}
     >
       <div className="intent-row">
@@ -121,7 +120,7 @@ export default function ExperienceScreen({
               if (file) onUploadFile(file);
             }}
           >
-            <div className="ghost-numeral">A</div>
+            <h3 className="experience-heading">With a CV</h3>
             <p className="experience-copy">
               Drop your CV file here,
               <br />
@@ -148,21 +147,13 @@ export default function ExperienceScreen({
                   }
                 />
               </label>
-              <button
-                type="button"
-                className="link-action"
-                disabled={locked}
-                onClick={onStartJourney}
-              >
-                No CV — ask me 7 quick questions instead
-              </button>
             </div>
           </div>
 
           <div className="experience-rule" />
 
           <div className="experience-half experience-half--b">
-            <div className="ghost-numeral">B</div>
+            <h3 className="experience-heading">Without a CV</h3>
             <p className="item-statement item-statement--italic item-statement--sm">
               &quot;{journeyQuestion.question}&quot;
             </p>

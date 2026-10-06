@@ -444,10 +444,10 @@
   flex-shrink: 0;
 }
 
-.ghost-numeral {
-  font: 900 46px/1 var(--font-display);
-  color: var(--gold-35);
-  margin-bottom: 10px;
+.experience-heading {
+  margin: 0 0 10px;
+  font: 700 20px/1.25 var(--font-display);
+  color: var(--text);
 }
 
 .experience-copy {
