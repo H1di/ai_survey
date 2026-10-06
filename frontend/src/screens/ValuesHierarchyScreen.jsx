@@ -9,7 +9,7 @@ export default function ValuesHierarchyScreen({ ranking, onReorder, busy, onConf
   return (
     <ScreenShell
       eyebrow="step 4b · confirm your hierarchy"
-      title="Your work values, ranked"
+      title="We assume these are your values"
       sub="The tournament result — reorder if something looks off, then confirm."
       footer={footer}
     >

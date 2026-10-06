@@ -17,7 +17,7 @@ describe("ValuesHierarchyScreen", () => {
   it("carries the step copy verbatim", () => {
     render(<ValuesHierarchyScreen {...base} />);
     expect(screen.getByText("step 4b · confirm your hierarchy")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Your work values, ranked" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "We assume these are your values" })).toBeInTheDocument();
     expect(
       screen.getByText("The tournament result — reorder if something looks off, then confirm.")
     ).toBeInTheDocument();
