@@ -76,8 +76,10 @@ export default function ExperienceScreen({
     );
   }
 
-  // Both paths stay locked until the intent question above them is answered.
+  // The split is not drawn until the intent question above it is answered —
+  // the choice comes first, then the two ways of describing your experience.
   const locked = !intent || busy;
+  const lastQuestion = journeyIndex >= journeyTotal - 1;
 
   return (
     <ScreenShell
@@ -87,12 +89,16 @@ export default function ExperienceScreen({
       sub="Paste or upload a CV — or answer seven career-journey questions if you don't have one."
       footer={footer}
     >
-      <div className="intent-row">
+      <div className="intent-segment" role="radiogroup" aria-label="Where should we start from?">
         {CV_INTENT_OPTIONS.map((option) => (
           <button
             key={option.value}
             type="button"
-            className={`intent-pill ${intent === option.value ? "intent-pill--on" : ""}`}
+            role="radio"
+            aria-checked={intent === option.value}
+            className={`intent-segment-option ${
+              intent === option.value ? "intent-segment-option--on" : ""
+            }`}
             disabled={intentBusy || busy}
             onClick={() => onSelectIntent(option.value)}
           >
@@ -101,83 +107,104 @@ export default function ExperienceScreen({
         ))}
       </div>
 
-      <div className={`experience-split ${intent ? "" : "experience-split--locked"}`}>
-        <DottedRule />
+      {!intent && <p className="intent-hint">Pick one to continue.</p>}
 
-        <div className="experience-halves">
-          <div
-            className="experience-half"
-            onDragOver={(event) => {
-              // Cancel unconditionally, locked or not. An un-cancelled dragover
-              // leaves the drop to the browser, which navigates the tab to the
-              // dropped file and destroys the in-progress session.
-              event.preventDefault();
-            }}
-            onDrop={(event) => {
-              event.preventDefault();
-              if (locked) return;
-              const file = event.dataTransfer?.files?.[0];
-              if (file) onUploadFile(file);
-            }}
-          >
-            <h3 className="experience-heading">With a CV</h3>
-            <p className="experience-copy">
-              Drop your CV file here,
-              <br />
-              or paste its text.
-            </p>
-            <div className="experience-actions">
-              <button
-                type="button"
-                className="btn btn--ghost"
-                disabled={locked}
-                onClick={onStartPaste}
-              >
-                Paste its text
-              </button>
-              <label className={`btn btn--ghost ${locked ? "btn--locked" : ""}`}>
-                Upload a file ({uploadFormats.join(", ")} — max 5 MB)
-                <input
-                  type="file"
-                  accept={uploadFormats.join(",")}
-                  hidden
+      {intent && (
+        <div className="experience-split">
+          <DottedRule />
+
+          <div className="experience-halves">
+            <div
+              className="experience-half"
+              onDragOver={(event) => {
+                // Cancel unconditionally, locked or not. An un-cancelled dragover
+                // leaves the drop to the browser, which navigates the tab to the
+                // dropped file and destroys the in-progress session.
+                event.preventDefault();
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                if (locked) return;
+                const file = event.dataTransfer?.files?.[0];
+                if (file) onUploadFile(file);
+              }}
+            >
+              <h3 className="experience-heading">With a CV</h3>
+              <p className="experience-copy">
+                Drop your CV file here,
+                <br />
+                or paste its text.
+              </p>
+              <div className="experience-actions">
+                <button
+                  type="button"
+                  className="btn btn--ghost"
                   disabled={locked}
-                  onChange={(event) =>
-                    event.target.files?.[0] && onUploadFile(event.target.files[0])
-                  }
+                  onClick={onStartPaste}
+                >
+                  Paste its text
+                </button>
+                <label className={`btn btn--ghost ${locked ? "btn--locked" : ""}`}>
+                  Upload a file ({uploadFormats.join(", ")} — max 5 MB)
+                  <input
+                    type="file"
+                    accept={uploadFormats.join(",")}
+                    hidden
+                    disabled={locked}
+                    onChange={(event) =>
+                      event.target.files?.[0] && onUploadFile(event.target.files[0])
+                    }
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="experience-rule" />
+
+            <div className="experience-half experience-half--b">
+              <h3 className="experience-heading">Without a CV</h3>
+              <p className="item-statement item-statement--italic item-statement--sm">
+                &quot;{journeyQuestion.question}&quot;
+              </p>
+              <form
+                key={journeyQuestion.id}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  onSubmitJourney();
+                }}
+              >
+                <input
+                  className="demo-input"
+                  value={journeyDraft}
+                  maxLength={400}
+                  disabled={locked}
+                  placeholder={journeyQuestion.placeholder}
+                  onChange={(event) => onJourneyDraftChange(event.target.value)}
                 />
-              </label>
+                <div className="journey-nav">
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    disabled={busy || mode !== "journey"}
+                    onClick={onJourneyBack}
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn--gold"
+                    disabled={locked || !journeyDraft.trim()}
+                  >
+                    {busy && mode === "journey" ? "Saving…" : lastQuestion ? "Finish →" : "Next →"}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
 
-          <div className="experience-rule" />
-
-          <div className="experience-half experience-half--b">
-            <h3 className="experience-heading">Without a CV</h3>
-            <p className="item-statement item-statement--italic item-statement--sm">
-              &quot;{journeyQuestion.question}&quot;
-            </p>
-            <form
-              key={journeyQuestion.id}
-              onSubmit={(event) => {
-                event.preventDefault();
-                onSubmitJourney();
-              }}
-            >
-              <input
-                className="demo-input"
-                value={journeyDraft}
-                maxLength={400}
-                disabled={locked}
-                placeholder={journeyQuestion.placeholder}
-                onChange={(event) => onJourneyDraftChange(event.target.value)}
-              />
-            </form>
-          </div>
+          <DottedRule />
         </div>
-
-        <DottedRule />
-      </div>
+      )}
     </ScreenShell>
   );
 }

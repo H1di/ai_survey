@@ -37,18 +37,42 @@ describe("ExperienceScreen", () => {
     ).toBeInTheDocument();
   });
 
-  it("offers both intents and reports the pick", () => {
+  it("offers both intents as one either/or switch and reports the pick", () => {
     const onSelectIntent = vi.fn();
     render(<ExperienceScreen {...base} onSelectIntent={onSelectIntent} />);
-    fireEvent.click(screen.getByRole("button", { name: "Use the skills I already have" }));
+    const group = screen.getByRole("radiogroup", { name: "Where should we start from?" });
+    expect(group).toBeInTheDocument();
+    const radios = screen.getAllByRole("radio");
+    expect(radios.map((r) => r.textContent)).toEqual([
+      "Something completely new",
+      "Use the skills I already have",
+    ]);
+    // Nothing is picked for the user.
+    radios.forEach((r) => expect(r).toHaveAttribute("aria-checked", "false"));
+    fireEvent.click(screen.getByRole("radio", { name: "Use the skills I already have" }));
     expect(onSelectIntent).toHaveBeenCalledWith("use_skills");
   });
 
-  it("locks both paths until an intent is chosen", () => {
+  it("marks the chosen intent as checked", () => {
+    render(<ExperienceScreen {...base} intent="new" />);
+    expect(screen.getByRole("radio", { name: "Something completely new" })).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
+    expect(
+      screen.getByRole("radio", { name: "Use the skills I already have" })
+    ).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("hides both paths until an intent is chosen, then reveals them", () => {
     const { rerender } = render(<ExperienceScreen {...base} />);
-    expect(screen.getByRole("button", { name: /Paste its text/i })).toBeDisabled();
+    expect(screen.queryByRole("heading", { name: "With a CV" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Without a CV" })).not.toBeInTheDocument();
+    expect(screen.getByText("Pick one to continue.")).toBeInTheDocument();
     rerender(<ExperienceScreen {...base} intent="new" />);
     expect(screen.getByRole("button", { name: /Paste its text/i })).toBeEnabled();
+    expect(screen.getByRole("heading", { name: "Without a CV" })).toBeInTheDocument();
+    expect(screen.queryByText("Pick one to continue.")).not.toBeInTheDocument();
   });
 
   it("renders both halves of the split with the design's copy", () => {
@@ -73,9 +97,46 @@ describe("ExperienceScreen", () => {
     expect(onSubmitJourney).toHaveBeenCalled();
   });
 
+  it("confirms the B-side answer with the Next button", () => {
+    const onSubmitJourney = vi.fn();
+    render(
+      <ExperienceScreen {...base} intent="new" journeyDraft="barista" onSubmitJourney={onSubmitJourney} />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Next →" }));
+    expect(onSubmitJourney).toHaveBeenCalled();
+  });
+
+  it("keeps Next disabled on an empty answer", () => {
+    render(<ExperienceScreen {...base} intent="new" journeyDraft="   " />);
+    expect(screen.getByRole("button", { name: "Next →" })).toBeDisabled();
+  });
+
+  it("labels the last question's confirm as Finish", () => {
+    render(<ExperienceScreen {...base} intent="new" mode="journey" journeyIndex={6} journeyDraft="x" />);
+    expect(screen.getByRole("button", { name: "Finish →" })).toBeEnabled();
+  });
+
+  it("steps back from the answer row only once the journey is running", () => {
+    const onJourneyBack = vi.fn();
+    const { rerender } = render(
+      <ExperienceScreen {...base} intent="new" onJourneyBack={onJourneyBack} />
+    );
+    const inlineBack = () =>
+      screen.getByRole("button", { name: "Next →" }).parentElement.querySelector("button");
+    expect(inlineBack()).toBeDisabled();
+    rerender(<ExperienceScreen {...base} intent="new" mode="journey" onJourneyBack={onJourneyBack} />);
+    fireEvent.click(inlineBack());
+    expect(onJourneyBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the header Back alongside the inline one during the journey", () => {
+    render(<ExperienceScreen {...base} intent="new" mode="journey" onJourneyBack={() => {}} />);
+    expect(screen.getAllByRole("button", { name: "← Back" })).toHaveLength(2);
+  });
+
   it("cancels a locked file drop so the browser cannot navigate away", () => {
     const onUploadFile = vi.fn();
-    render(<ExperienceScreen {...base} onUploadFile={onUploadFile} />);
+    render(<ExperienceScreen {...base} intent="new" busy onUploadFile={onUploadFile} />);
     const zone = screen.getByRole("heading", { name: "With a CV" }).parentElement;
     // fireEvent returns false when a handler called preventDefault on a
     // cancelable event — which is the whole point here.
