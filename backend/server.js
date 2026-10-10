@@ -82,7 +82,7 @@ const store = new SessionStore({ redis: createRedisClient() });
 store.startSweep();
 
 const PORT = Number(process.env.PORT) || 3001;
-const MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+const MODEL = process.env.OPENAI_MODEL || "gpt-6-luna";
 
 const aiEngine = createAiEngine({
   apiKey: process.env.OPENAI_API_KEY,

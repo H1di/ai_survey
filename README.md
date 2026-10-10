@@ -55,7 +55,7 @@ status and backlog see [`PROJECT_STATUS.md`](./PROJECT_STATUS.md).
   sweep, plus optional Upstash Redis durability (see Limitations). **Runs as a
   single instance** — session state, the single-flight lock, and rate-limit
   counters are process-local.
-- **AI** — OpenAI `gpt-4.1-mini`, `chat.completions` JSON mode, with a
+- **AI** — OpenAI `gpt-6-luna`, Responses API (reasoning off, JSON mode), with a
   deterministic fallback per generator.
 - **Occupation data** — a checked-in O\*NET 30.3 snapshot (with work values
   merged from O\*NET 28.0); optional live US salary/outlook with an `ONET_API_KEY`.
@@ -133,7 +133,7 @@ cd frontend && npm test -- --run    # vitest over src/lifePath.js (24 tests)
 ```json
 {
   "ok": true,
-  "model": "gpt-4.1-mini",
+  "model": "gpt-6-luna",
   "hasOpenAIKey": false,
   "sessionStore": "memory",
   "onet": {

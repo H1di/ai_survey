@@ -517,26 +517,25 @@ function normalizeCvAnalysisPayload(payload) {
   return analysis;
 }
 
-// Shared JSON-mode completion for every generator: sends the system+user
-// prompt, enforces the output-token ceiling, and parses the model's JSON so the
-// caller's normalizer can validate it (or throw into the deterministic
-// fallback). Values are no longer AI-scored — they come from the tournament.
-async function runJsonCompletion(client, { model, system, user, temperature = 0.7, maxTokens }) {
-  const completion = await client.chat.completions.create({
+// Shared JSON-mode call for every generator (Responses API, reasoning off):
+// sends the system+user prompt, enforces the output-token ceiling, and parses
+// the model's JSON so the caller's normalizer can validate it (or throw into
+// the deterministic fallback). No temperature is sent — reasoning-family
+// models don't take one. Values are no longer AI-scored — they come from the
+// tournament.
+async function runJsonCompletion(client, { model, system, user, maxTokens }) {
+  const response = await client.responses.create({
     model,
-    temperature,
+    reasoning: { effort: "none" },
+    instructions: system,
+    input: user,
     // Explicit output ceiling on every call — an unbounded response is the
     // one OpenAI cost knob nothing else in this file controls.
-    ...(Number.isFinite(maxTokens) ? { max_tokens: maxTokens } : {}),
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
+    ...(Number.isFinite(maxTokens) ? { max_output_tokens: maxTokens } : {}),
+    text: { format: { type: "json_object" } },
   });
 
-  const content = completion?.choices?.[0]?.message?.content;
-  return parseJsonObject(content);
+  return parseJsonObject(response?.output_text);
 }
 
 function createAiEngine({ apiKey, model }) {
@@ -571,7 +570,6 @@ function createAiEngine({ apiKey, model }) {
         model,
         system: prompts.system,
         user: prompts.user,
-        temperature: 0.8,
         maxTokens: 1500,
       });
       // Pin the output to a real shortlist occupation; its family grounds the
@@ -607,7 +605,6 @@ function createAiEngine({ apiKey, model }) {
         model,
         system: prompts.system,
         user: prompts.user,
-        temperature: 0.6,
         // ~9 bullets ≤220 chars + 4 skill names ≈ 450 tokens; ceiling ≥ 2×.
         maxTokens: 1000,
       });
@@ -631,7 +628,6 @@ function createAiEngine({ apiKey, model }) {
         model,
         system: prompts.system,
         user: prompts.user,
-        temperature: 0.7,
         maxTokens: 1500,
       });
       return normalizeOutputDetailPayload(parsed);
@@ -660,7 +656,6 @@ function createAiEngine({ apiKey, model }) {
         model,
         system: prompts.system,
         user: prompts.user,
-        temperature: 0.7,
         maxTokens: 1500,
       });
       return normalizeRoadmapPayload(parsed, profession);
@@ -677,7 +672,7 @@ function createAiEngine({ apiKey, model }) {
         bigFiveScores: session.bigFiveScores,
         dreamAnswer: session.dreamAnswer,
       });
-      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.4, maxTokens: 400 });
+      const parsed = await runJsonCompletion(client, { model, system, user, maxTokens: 400 });
       return normalizeRiasecScoresPayload(parsed);
     } catch (error) {
       console.error("[AI riasec inference fallback]", error.message);
@@ -692,9 +687,7 @@ function createAiEngine({ apiKey, model }) {
     if (!client) return empty;
     try {
       const { system, user } = buildCvParsePrompt(cvText);
-      // temperature 0: deterministic extraction — creative variance here only
-      // costs retries, never adds signal.
-      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0, maxTokens: 300 });
+      const parsed = await runJsonCompletion(client, { model, system, user, maxTokens: 300 });
       return normalizeCvAnalysisPayload(parsed);
     } catch (error) {
       console.error("[AI cv parse fallback]", error.message);
@@ -709,7 +702,7 @@ function createAiEngine({ apiKey, model }) {
         profileDigest: buildSessionDigest(session),
       });
       // 3-5 sentences ≤700 chars ≈ 200 tokens; ceiling ≥ 2×.
-      const parsed = await runJsonCompletion(client, { model, system, user, temperature: 0.6, maxTokens: 400 });
+      const parsed = await runJsonCompletion(client, { model, system, user, maxTokens: 400 });
       return normalizePersonaSummaryPayload(parsed);
     } catch (error) {
       console.error("[AI persona summary fallback]", error.message);

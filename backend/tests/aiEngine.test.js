@@ -243,15 +243,13 @@ test("keyless engine: inferRiasecProfile derives from Big Five", async () => {
 
 const { runJsonCompletion } = require("../aiEngine");
 
-test("runJsonCompletion forwards an explicit max_tokens ceiling", async () => {
+test("runJsonCompletion forwards an explicit max_output_tokens ceiling", async () => {
   let captured;
   const fakeClient = {
-    chat: {
-      completions: {
-        create: async (args) => {
-          captured = args;
-          return { choices: [{ message: { content: '{"ok":true}' } }] };
-        },
+    responses: {
+      create: async (args) => {
+        captured = args;
+        return { output_text: '{"ok":true}' };
       },
     },
   };
@@ -259,10 +257,10 @@ test("runJsonCompletion forwards an explicit max_tokens ceiling", async () => {
     model: "m",
     system: "s",
     user: "u",
-    temperature: 0,
     maxTokens: 300,
   });
-  assert.equal(captured.max_tokens, 300);
-  assert.equal(captured.temperature, 0);
+  assert.equal(captured.max_output_tokens, 300);
+  assert.equal(captured.reasoning.effort, "none");
+  assert.equal(captured.temperature, undefined);
   assert.equal(parsed.ok, true);
 });
