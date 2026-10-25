@@ -29,8 +29,7 @@ export function OutputNode({ data }) {
       onClick={onOpen}
     >
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
-      {/* Spec 5.11 composes the field tag and the fit as one header row, with
-          a gold interpunct between them — not as two stacked lines. */}
+      {/* Field tag and fit share one header row, split by a gold interpunct. */}
       <span className="node-output-head">
         <span className="node-archetype">{orientedField}</span>
         {hasFit && (
@@ -62,7 +61,6 @@ export function AdviceNode({ data }) {
   return (
     <button type="button" className="node node--advice" onClick={onOpen}>
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
-      {/* Spec 5.11's advice cell is a title over the count — no eyebrow. */}
       <h3 className="node-title">{label}</h3>
       <span className="node-advice-count">{count} suggestions</span>
       <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />

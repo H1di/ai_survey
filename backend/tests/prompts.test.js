@@ -32,7 +32,7 @@ test("direction-era and branch templates are removed, Page 2 templates kept", ()
   assert.equal(prompts.buildRiasecItemsPrompt, undefined);
 });
 
-// --- output loop (Phase 3) ---
+// --- output loop ---
 
 test("oriented field prompt: schema, hint and exclusions", () => {
   const { system, user } = prompts.buildOrientedFieldPrompt({
@@ -61,7 +61,7 @@ test("output detail prompt demands the four advice blocks", () => {
   assert.match(user, /Agronomist/);
 });
 
-// --- profile digest (Phase 1) ---
+// --- profile digest ---
 
 const DIGEST_FIXTURE = {
   dreamAnswer: "open a bakery",

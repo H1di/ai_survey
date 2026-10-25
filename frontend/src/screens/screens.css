@@ -199,11 +199,6 @@
   padding-bottom: 24px;
 }
 
-/* Scoped under .hero on purpose. The legacy App.css still defines
-   .onet-attribution and .error-text at single-class specificity, and it is
-   imported after screens.css, so an unscoped rule here would lose the cascade
-   and the licence-mandated attribution would ship in the old grey. Task 14
-   deletes the legacy rules; the scoping stays correct either way. */
 .hero .onet-attribution {
   display: flex;
   flex-direction: column;
@@ -607,10 +602,6 @@
   50% { opacity: 1; transform: scale(1); }
 }
 
-/* Scoped under .screen: App.css still defines .summary-archetype,
-   .summary-tagline and .summary-persona at single-class specificity and is
-   imported after screens.css, so unscoped rules here would lose outright.
-   Task 14 deletes the legacy rules; the scoping stays correct either way. */
 .screen .summary-archetype {
   margin: 0;
   font: 900 34px/1.1 var(--font-display);

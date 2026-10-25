@@ -30,7 +30,7 @@ function fakeSession(overrides = {}) {
   };
 }
 
-// --- output loop (Phase 3) ---
+// --- output loop ---
 
 test("keyless first output: grounded in the top-ranked direction", async () => {
   const output = await engine.generateFirstOutput({ session: fakeSession() });
@@ -261,6 +261,7 @@ test("runJsonCompletion forwards an explicit max_output_tokens ceiling", async (
   });
   assert.equal(captured.max_output_tokens, 300);
   assert.equal(captured.reasoning.effort, "none");
+  assert.equal(captured.store, false);
   assert.equal(captured.temperature, undefined);
   assert.equal(parsed.ok, true);
 });

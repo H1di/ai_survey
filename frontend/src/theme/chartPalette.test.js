@@ -25,8 +25,6 @@ describe("readChartPalette", () => {
       --gold: #ffd98c;
       --gold-18: rgba(255, 217, 140, 0.18);
       --gold-25: rgba(255, 217, 140, 0.25);
-      --positive: #7cffb2;
-      --positive-16: rgba(124, 255, 178, 0.16);
       --text-55: rgba(255, 255, 255, 0.55);
     }`);
 
@@ -37,8 +35,6 @@ describe("readChartPalette", () => {
       accent: "#ffd98c",
       accentSoft: "rgba(255,217,140,0.18)",
       grid: "rgba(255,217,140,0.25)",
-      job: "#7cffb2",
-      jobSoft: "rgba(124,255,178,0.16)",
       muted: "rgba(255,255,255,0.55)",
     });
   });

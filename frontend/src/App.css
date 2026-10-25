@@ -1,17 +1,12 @@
-/* No padding, matching the mockup's zero-padding body: .hero, .screen and
-   .graph-page are each min-height/height 100vh and carry their own padding.
-   The legacy 48px inset framed every full-bleed screen in --ink-page, forced a
-   ~96px page scroll on every step, and pushed the graph's bottom dock — Yes /
-   No included — below the fold. */
+/* No padding: .hero, .screen and .graph-page are each full-viewport and carry
+   their own, so an inset here would push the graph's bottom dock below the fold. */
 .app-shell {
   min-height: 100vh;
   color: var(--text);
   background: var(--ink-page);
 }
 
-/* Stage wrapper only. The Invector screens are full-bleed and cap their own
-   content blocks, so the legacy 1080px box letterboxed every survey step in
-   --ink-page while the hero and the graph page ran edge to edge. */
+/* Stage wrapper only: the screens are full-bleed and cap their own content. */
 .questions-screen {
   width: 100%;
   animation: fade-in 220ms ease;
@@ -82,7 +77,7 @@
   appearance: none;
   border: 1px solid var(--gold-25);
   background: var(--ink-page);
-  color: var(--text);
+  color: var(--text-60);
   font-family: inherit;
   font-size: 1rem;
   line-height: 1.2;
@@ -93,17 +88,12 @@
     transform 160ms ease, box-shadow 160ms ease;
 }
 
-.ghost-action {
-  background: var(--ink-page);
-  color: var(--text-60);
-}
-
 .ghost-action:hover:enabled {
   border-color: var(--gold-50);
   color: var(--gold);
 }
 
-/* Not hero-specific: also renders in the survey error row and on the graph page, where the .hero-scoped rule in screens.css does not reach. */
+/* Shared by the survey error row and the graph page. */
 .error-text {
   margin: 12px 0 0;
   color: var(--text);

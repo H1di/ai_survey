@@ -288,7 +288,7 @@ class FakeRedis {
   async del(key) {
     return this.store.delete(key) ? 1 : 0;
   }
-  async scan(_cursor, _opts) {
+  async scan() {
     return ["0", [...this.store.keys()]];
   }
 }

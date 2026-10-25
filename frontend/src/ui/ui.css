@@ -119,7 +119,7 @@
   border: 0;
 }
 
-/* The Back control the mockup omits but the product needs. */
+/* Per-step Back. */
 .screen-back {
   position: absolute;
   top: 56px;
@@ -278,12 +278,6 @@
   padding: 6px 4px;
 }
 
-/* Scoped under .screen for the same reason the hero's attribution is scoped:
-   the legacy App.css still defines .rank-list, .rank-row and .rank-label at
-   single-class specificity and is imported after ui.css, so unscoped rules
-   here would lose outright — its `border` shorthand and padding would repaint
-   these rows as the old grey boxes. Task 14 deletes the legacy rules; the
-   scoping stays correct either way. */
 .screen .rank-list {
   list-style: none;
   margin: 0;
@@ -343,10 +337,8 @@
   gap: 14px;
 }
 
-/* Restart lives with the footer chrome. The screen's top-left belongs to the
-   per-step Back (deviation 9) and the two are the same absolutely-positioned
-   box, so a Restart there covers Back and turns "go back one item" into
-   "destroy the session". */
+/* Restart lives with the footer chrome: the screen's top-left is the per-step
+   Back's absolutely-positioned box, and a Restart there would cover it. */
 .screen-restart {
   font: 400 11px/1 var(--font-mono);
   letter-spacing: 0.1em;

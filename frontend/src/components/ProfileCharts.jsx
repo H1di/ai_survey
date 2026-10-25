@@ -22,10 +22,8 @@ function useChartPalette() {
   return useMemo(() => readChartPalette(), []);
 }
 
-// Axis keys mirror the O/C/E/A/N naming the backend sends to the AI, so a
-// mentioned trait can be matched to its axis and highlighted via
-// `highlightKeys` later. N renders inverted as Emotional Steadiness (100 - N);
-// the stored score keeps raw N everywhere.
+// N renders inverted as Emotional Steadiness (100 - N); the stored score keeps
+// raw N everywhere.
 const BIG_FIVE_AXES = [
   { key: "O", label: "Openness" },
   { key: "C", label: "Conscientiousness" },
@@ -34,22 +32,7 @@ const BIG_FIVE_AXES = [
   { key: "N", label: "Emotional Steadiness" },
 ];
 
-function RadarTick({ payload, x, y, textAnchor, highlighted, palette }) {
-  return (
-    <text
-      x={x}
-      y={y}
-      textAnchor={textAnchor}
-      fontSize={10}
-      fill={highlighted.has(payload.value) ? palette.accent : palette.muted}
-      fontWeight={highlighted.has(payload.value) ? 600 : 400}
-    >
-      {payload.value}
-    </text>
-  );
-}
-
-export function PersonalityRadarChart({ scores, highlightKeys = [] }) {
+export function PersonalityRadarChart({ scores }) {
   const palette = useChartPalette();
   if (!scores) return null;
 
@@ -58,9 +41,6 @@ export function PersonalityRadarChart({ scores, highlightKeys = [] }) {
     trait: axis.label,
     value: axis.key === "N" ? 100 - (scores.N ?? 0) : scores[axis.key] ?? 0,
   }));
-  const highlighted = new Set(
-    BIG_FIVE_AXES.filter((a) => highlightKeys.includes(a.key)).map((a) => a.label)
-  );
 
   return (
     <div className="profile-chart">
@@ -69,10 +49,7 @@ export function PersonalityRadarChart({ scores, highlightKeys = [] }) {
         {/* cx nudged left so the right-anchored "Conscientiousness" label fits the panel */}
         <RadarChart data={data} outerRadius="62%" cx="46%">
           <PolarGrid stroke={palette.grid} />
-          <PolarAngleAxis
-            dataKey="trait"
-            tick={(props) => <RadarTick {...props} highlighted={highlighted} palette={palette} />}
-          />
+          <PolarAngleAxis dataKey="trait" tick={{ fontSize: 10, fill: palette.muted }} />
           <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
           <Radar
             dataKey="value"
@@ -107,7 +84,7 @@ const RIASEC_AXES = [
   { key: "C", label: "Conventional (organizing)" },
 ];
 
-export function RiasecBarChart({ scores, code, inferred }) {
+function RiasecBarChart({ scores, code, inferred }) {
   const palette = useChartPalette();
   if (!scores) return null;
 
@@ -155,16 +132,14 @@ export function RiasecBarChart({ scores, code, inferred }) {
   );
 }
 
-// Six-axis Minnesota Work Values radar. `user` alone shows the person's
-// hierarchy; passing `job` overlays the profession for a shape comparison.
-export function WorkValuesRadar({ user, job, title = "Work values" }) {
+// Six-axis Minnesota Work Values radar of the person's confirmed hierarchy.
+export function WorkValuesRadar({ user, title = "Work values" }) {
   const palette = useChartPalette();
   if (!user) return null;
   const data = WORK_VALUE_AXES.map((axis) => ({
     key: axis.key,
     label: axis.label,
     you: user[axis.key] ?? 0,
-    ...(job ? { job: job[axis.key] ?? 0 } : {}),
   }));
 
   return (
@@ -175,32 +150,16 @@ export function WorkValuesRadar({ user, job, title = "Work values" }) {
           <PolarGrid stroke={palette.grid} />
           <PolarAngleAxis dataKey="label" tick={{ fontSize: 10, fill: palette.muted }} />
           <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
-          {job && (
-            <Radar
-              name="This profession"
-              dataKey="job"
-              stroke={palette.job}
-              fill={palette.jobSoft}
-              fillOpacity={1}
-              isAnimationActive={false}
-            />
-          )}
           <Radar
             name="You"
             dataKey="you"
             stroke={palette.accent}
             fill={palette.accentSoft}
-            fillOpacity={job ? 0.55 : 1}
+            fillOpacity={1}
             isAnimationActive={false}
           />
         </RadarChart>
       </ResponsiveContainer>
-      {job && (
-        <p className="profile-panel-note">
-          <span style={{ color: palette.accent }}>■</span> You &nbsp;
-          <span style={{ color: palette.job }}>■</span> This profession
-        </p>
-      )}
     </div>
   );
 }

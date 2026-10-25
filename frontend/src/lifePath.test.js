@@ -80,7 +80,7 @@ describe("onetSection", () => {
   });
 
   it("omits salary/outlook lines keyless and returns null without a block", () => {
-    const { salary, outlook, ...bare } = onet;
+    const { salary: _salary, outlook: _outlook, ...bare } = onet;
     const section = onetSection({ onet: bare });
     expect(section.items.some((i) => i.includes("$"))).toBe(false);
     expect(section.items.some((i) => i.includes("outlook"))).toBe(false);
@@ -309,7 +309,7 @@ describe("buildLifePathGraph (output chain)", () => {
     expect(stages[1].data.last).toBe(true);
   });
 
-  // Node positions are left edges and the card is 480px wide (spec 5.11), so
+  // Node positions are left edges and the card is 480px wide, so
   // "centred" here means the row's own centre lands on the card's.
   it("abuts the advice cells and centres both rows under the accepted card", () => {
     const outputs = [OUTPUTS[0], { ...OUTPUTS[1], accepted: true, detail: DETAIL }];

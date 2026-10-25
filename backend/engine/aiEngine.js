@@ -9,16 +9,14 @@ const {
   buildWhyThisFitsPrompt,
   buildOutputDetailPrompt,
 } = require("./prompts");
-const {
-  WORK_VALUES_META,
-  buildFallbackProfessionValues,
-} = require("./workValues");
+const { WORK_VALUES_META } = require("./workValues");
 const { DIRECTIONS, getDirection } = require("./directions");
 const { rankDirections, inferRiasecScores } = require("./riasec");
 const { rankOccupations, getOccupation } = require("./onet");
 
-// SOC codes already shown this session — the occupation-level analog of the
-// old seed-title dedupe.
+const WORK_VALUE_LABELS = new Map(WORK_VALUES_META.map((m) => [m.id, m.label]));
+
+// SOC codes already shown this session.
 function usedSocs(session) {
   return (session.outputs || []).map((o) => o.socCode).filter(Boolean);
 }
@@ -43,47 +41,21 @@ function resolveShortlistSoc(payload, shortlist) {
 }
 
 function cleanText(value, fallback = "") {
-  if (typeof value !== "string") {
-    return fallback;
-  }
-
-  const normalized = value.replace(/\s+/g, " ").trim();
-  return normalized || fallback;
+  if (typeof value !== "string") return fallback;
+  return value.replace(/\s+/g, " ").trim() || fallback;
 }
 
+// The outermost {...} of the reply, tolerating a markdown fence or stray prose.
 function parseJsonObject(content) {
   if (!content || typeof content !== "string") {
     throw new Error("Empty model response.");
   }
-
-  const trimmed = content.trim();
-
-  try {
-    return JSON.parse(trimmed);
-  } catch (_error) {
-    // continue
+  const first = content.indexOf("{");
+  const last = content.lastIndexOf("}");
+  if (first === -1 || last <= first) {
+    throw new Error("Could not parse model JSON output.");
   }
-
-  const withoutFence = trimmed
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/, "")
-    .trim();
-
-  try {
-    return JSON.parse(withoutFence);
-  } catch (_error) {
-    // continue
-  }
-
-  const firstBrace = withoutFence.indexOf("{");
-  const lastBrace = withoutFence.lastIndexOf("}");
-
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    return JSON.parse(withoutFence.slice(firstBrace, lastBrace + 1));
-  }
-
-  throw new Error("Could not parse model JSON output.");
+  return JSON.parse(content.slice(first, last + 1));
 }
 
 function buildSessionDigest(session) {
@@ -246,12 +218,11 @@ function fallbackWhyThisFits(session, output) {
     },
   ];
 
-  const valueLabelOf = new Map(WORK_VALUES_META.map((m) => [m.id, m.label]));
   const topValue = session.userValues?.order?.[0];
   const values = [
     {
       point: topValue
-        ? `You ranked ${valueLabelOf.get(topValue) || topValue} as your top work value — weigh this job against that bar before anything else.`
+        ? `You ranked ${WORK_VALUE_LABELS.get(topValue) || topValue} as your top work value — weigh this job against that bar before anything else.`
         : "No confirmed work-value hierarchy — compare the role against what matters most to you.",
     },
   ];
@@ -425,11 +396,7 @@ function normalizeOutputDetailPayload(payload) {
 }
 
 function normalizeRoadmapPayload(payload, profession) {
-  let stages = Array.isArray(payload?.stages) ? payload.stages : [];
-
-  if (stages.length > 8) {
-    stages = stages.slice(0, 8);
-  }
+  const stages = Array.isArray(payload?.stages) ? payload.stages.slice(0, 8) : [];
   if (stages.length < 4) {
     throw new Error(`Expected at least 4 roadmap stages, got ${stages.length}.`);
   }
@@ -521,12 +488,14 @@ function normalizeCvAnalysisPayload(payload) {
 // sends the system+user prompt, enforces the output-token ceiling, and parses
 // the model's JSON so the caller's normalizer can validate it (or throw into
 // the deterministic fallback). No temperature is sent — reasoning-family
-// models don't take one. Values are no longer AI-scored — they come from the
-// tournament.
+// models don't take one.
 async function runJsonCompletion(client, { model, system, user, maxTokens }) {
   const response = await client.responses.create({
     model,
     reasoning: { effort: "none" },
+    // Never let OpenAI retain the response: prompts carry a minor's profile,
+    // dream and CV-derived text, and the Responses API stores by default.
+    store: false,
     instructions: system,
     input: user,
     // Explicit output ceiling on every call — an unbounded response is the
@@ -543,171 +512,135 @@ function createAiEngine({ apiKey, model }) {
   // instead of pinning the request for the SDK's 10-minute default.
   const client = apiKey ? new OpenAI({ apiKey, timeout: 30_000, maxRetries: 1 }) : null;
 
+  // Every generator has one shape: keyless → fallback; otherwise one JSON call
+  // whose payload `normalize` validates, and any failure (network, timeout,
+  // malformed payload) falls back deterministically.
+  async function generate(label, { prompt, maxTokens, normalize, fallback }) {
+    if (!client) return fallback();
+    try {
+      const { system, user } = prompt();
+      const parsed = await runJsonCompletion(client, { model, system, user, maxTokens });
+      return normalize(parsed);
+    } catch (error) {
+      console.error(`[AI ${label} fallback]`, error.message);
+      return fallback();
+    }
+  }
+
   // The oriented field / 1st Output. excludeDirectionIds carries the field
   // families the user rejected as "not suitable overall".
-  async function generateFirstOutput({ session, excludeDirectionIds = [] }) {
-    if (!client) {
-      return fallbackFirstOutput(session, excludeDirectionIds);
-    }
-    try {
-      const scores = sessionRiasec(session);
-      const ranked = rankDirections(scores, { excludeIds: excludeDirectionIds }).slice(0, 5);
-      const excludeFields = excludeDirectionIds
-        .map((id) => getDirection(id)?.label)
-        .filter(Boolean);
-      const shortlist = rankOccupations(scores, {
-        directionIds: ranked.map((r) => r.id),
-        excludeSocs: usedSocs(session),
-        limit: 15,
-      });
-      const prompts = buildOrientedFieldPrompt({
-        profileDigest: buildSessionDigest(session),
-        directionHint: ranked.map((r) => ({ id: r.id, label: getDirection(r.id)?.label || r.id })),
-        excludeFields,
-        occupationShortlist: shortlist,
-      });
-      const parsed = await runJsonCompletion(client, {
-        model,
-        system: prompts.system,
-        user: prompts.user,
-        maxTokens: 1500,
-      });
+  function generateFirstOutput({ session, excludeDirectionIds = [] }) {
+    let ranked = [];
+    let shortlist = [];
+    return generate("first output", {
+      maxTokens: 1500,
+      prompt: () => {
+        const scores = sessionRiasec(session);
+        ranked = rankDirections(scores, { excludeIds: excludeDirectionIds }).slice(0, 5);
+        shortlist = rankOccupations(scores, {
+          directionIds: ranked.map((r) => r.id),
+          excludeSocs: usedSocs(session),
+          limit: 15,
+        });
+        return buildOrientedFieldPrompt({
+          profileDigest: buildSessionDigest(session),
+          directionHint: ranked.map((r) => ({ id: r.id, label: getDirection(r.id)?.label || r.id })),
+          excludeFields: excludeDirectionIds.map((id) => getDirection(id)?.label).filter(Boolean),
+          occupationShortlist: shortlist,
+        });
+      },
       // Pin the output to a real shortlist occupation; its family grounds the
       // work-value fallback + notSuitable exclusions even for AI outputs.
-      const socCode = resolveShortlistSoc(parsed, shortlist);
-      const occupation = socCode ? getOccupation(socCode) : null;
-      return {
-        directionId: occupation?.directionId || ranked[0]?.id || null,
-        socCode,
-        ...normalizeOutputPayload(parsed),
-      };
-    } catch (error) {
-      console.error("[AI first output fallback]", error.message);
-      return fallbackFirstOutput(session, excludeDirectionIds);
-    }
+      normalize: (parsed) => {
+        const socCode = resolveShortlistSoc(parsed, shortlist);
+        const occupation = socCode ? getOccupation(socCode) : null;
+        return {
+          directionId: occupation?.directionId || ranked[0]?.id || null,
+          socCode,
+          ...normalizeOutputPayload(parsed),
+        };
+      },
+      fallback: () => fallbackFirstOutput(session, excludeDirectionIds),
+    });
   }
 
-  // Option B (user decision): a separate second call after the output is
-  // built — the core output prompt and schema stay untouched.
-  async function generateWhyThisFits({ session, output }) {
-    if (!client) return fallbackWhyThisFits(session, output);
-    try {
-      const valueLabelOf = new Map(WORK_VALUES_META.map((m) => [m.id, m.label]));
-      const prompts = buildWhyThisFitsPrompt({
-        profileDigest: buildSessionDigest(session),
-        output,
-        topValueLabel: session.userValues?.order?.[0]
-          ? valueLabelOf.get(session.userValues.order[0])
-          : "",
-        onetSkills: (output.socCode && getOccupation(output.socCode)?.skills) || [],
-      });
-      const parsed = await runJsonCompletion(client, {
-        model,
-        system: prompts.system,
-        user: prompts.user,
-        // ~9 bullets ≤220 chars + 4 skill names ≈ 450 tokens; ceiling ≥ 2×.
-        maxTokens: 1000,
-      });
-      return normalizeWhyThisFitsPayload(parsed);
-    } catch (error) {
-      console.error("[AI whyThisFits fallback]", error.message);
-      return fallbackWhyThisFits(session, output);
-    }
+  // A second call after the output is built, so the core output prompt and
+  // schema stay untouched.
+  function generateWhyThisFits({ session, output }) {
+    return generate("whyThisFits", {
+      // ~9 bullets ≤220 chars + 4 skill names ≈ 450 tokens; ceiling ≥ 2×.
+      maxTokens: 1000,
+      prompt: () => {
+        const topValue = session.userValues?.order?.[0];
+        return buildWhyThisFitsPrompt({
+          profileDigest: buildSessionDigest(session),
+          output,
+          topValueLabel: topValue ? WORK_VALUE_LABELS.get(topValue) : "",
+          onetSkills: (output.socCode && getOccupation(output.socCode)?.skills) || [],
+        });
+      },
+      normalize: normalizeWhyThisFitsPayload,
+      fallback: () => fallbackWhyThisFits(session, output),
+    });
   }
 
-  async function generateOutputDetail({ session, output }) {
-    if (!client) {
-      return fallbackOutputDetail(session, output);
-    }
-    try {
-      const prompts = buildOutputDetailPrompt({
-        profileDigest: buildSessionDigest(session),
-        output,
-      });
-      const parsed = await runJsonCompletion(client, {
-        model,
-        system: prompts.system,
-        user: prompts.user,
-        maxTokens: 1500,
-      });
-      return normalizeOutputDetailPayload(parsed);
-    } catch (error) {
-      console.error("[AI output detail fallback]", error.message);
-      return fallbackOutputDetail(session, output);
-    }
+  function generateOutputDetail({ session, output }) {
+    return generate("output detail", {
+      maxTokens: 1500,
+      prompt: () => buildOutputDetailPrompt({ profileDigest: buildSessionDigest(session), output }),
+      normalize: normalizeOutputDetailPayload,
+      fallback: () => fallbackOutputDetail(session, output),
+    });
   }
 
-  // Roadmap for the ACCEPTED output: profession/direction shims keep the
-  // existing prompt and normalizer unchanged.
-  async function generateRoadmap({ session, output }) {
+  // Roadmap for the ACCEPTED output, framed as a profession for the prompt.
+  function generateRoadmap({ session, output }) {
     const profession = { id: output.id, title: output.jobTitle, summary: output.thesis };
-
-    if (!client) {
-      return fallbackRoadmap(profession);
-    }
-
-    try {
-      const prompts = buildRoadmapPrompt({
-        profileDigest: buildSessionDigest(session),
-        direction: { label: output.orientedField },
-        profession,
-      });
-      const parsed = await runJsonCompletion(client, {
-        model,
-        system: prompts.system,
-        user: prompts.user,
-        maxTokens: 1500,
-      });
-      return normalizeRoadmapPayload(parsed, profession);
-    } catch (error) {
-      console.error("[AI roadmap fallback]", error.message);
-      return fallbackRoadmap(profession);
-    }
+    return generate("roadmap", {
+      maxTokens: 1500,
+      prompt: () =>
+        buildRoadmapPrompt({
+          profileDigest: buildSessionDigest(session),
+          direction: { label: output.orientedField },
+          profession,
+        }),
+      normalize: (parsed) => normalizeRoadmapPayload(parsed, profession),
+      fallback: () => fallbackRoadmap(profession),
+    });
   }
 
-  async function inferRiasecProfile({ session }) {
-    if (!client) return inferRiasecScores(session.bigFiveScores);
-    try {
-      const { system, user } = buildRiasecInferencePrompt({
-        bigFiveScores: session.bigFiveScores,
-        dreamAnswer: session.dreamAnswer,
-      });
-      const parsed = await runJsonCompletion(client, { model, system, user, maxTokens: 400 });
-      return normalizeRiasecScoresPayload(parsed);
-    } catch (error) {
-      console.error("[AI riasec inference fallback]", error.message);
-      return inferRiasecScores(session.bigFiveScores);
-    }
+  function inferRiasecProfile({ session }) {
+    return generate("riasec inference", {
+      maxTokens: 400,
+      prompt: () =>
+        buildRiasecInferencePrompt({
+          bigFiveScores: session.bigFiveScores,
+          dreamAnswer: session.dreamAnswer,
+        }),
+      normalize: normalizeRiasecScoresPayload,
+      fallback: () => inferRiasecScores(session.bigFiveScores),
+    });
   }
 
   // Keyless fallback returns an EMPTY signal on purpose: the profile digest
   // then quotes a raw excerpt instead of pretending a parse happened.
-  async function analyzeCV({ cvText }) {
-    const empty = { roles: [], skills: [], domains: [], seniority: "", keywords: [] };
-    if (!client) return empty;
-    try {
-      const { system, user } = buildCvParsePrompt(cvText);
-      const parsed = await runJsonCompletion(client, { model, system, user, maxTokens: 300 });
-      return normalizeCvAnalysisPayload(parsed);
-    } catch (error) {
-      console.error("[AI cv parse fallback]", error.message);
-      return empty;
-    }
+  function analyzeCV({ cvText }) {
+    return generate("cv parse", {
+      maxTokens: 300,
+      prompt: () => buildCvParsePrompt(cvText),
+      normalize: normalizeCvAnalysisPayload,
+      fallback: () => ({ roles: [], skills: [], domains: [], seniority: "", keywords: [] }),
+    });
   }
 
-  async function generatePersonaSummary({ session }) {
-    if (!client) return fallbackPersonaSummary(session);
-    try {
-      const { system, user } = buildPersonaSummaryPrompt({
-        profileDigest: buildSessionDigest(session),
-      });
+  function generatePersonaSummary({ session }) {
+    return generate("persona summary", {
       // 3-5 sentences ≤700 chars ≈ 200 tokens; ceiling ≥ 2×.
-      const parsed = await runJsonCompletion(client, { model, system, user, maxTokens: 400 });
-      return normalizePersonaSummaryPayload(parsed);
-    } catch (error) {
-      console.error("[AI persona summary fallback]", error.message);
-      return fallbackPersonaSummary(session);
-    }
+      maxTokens: 400,
+      prompt: () => buildPersonaSummaryPrompt({ profileDigest: buildSessionDigest(session) }),
+      normalize: normalizePersonaSummaryPayload,
+      fallback: () => fallbackPersonaSummary(session),
+    });
   }
 
   return {

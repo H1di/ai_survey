@@ -50,4 +50,4 @@ function logError(req, error) {
   );
 }
 
-module.exports = { logError, resolveStatus, redactUuids, routeOf };
+module.exports = { logError, resolveStatus };

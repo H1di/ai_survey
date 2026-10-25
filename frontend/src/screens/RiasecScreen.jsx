@@ -2,10 +2,7 @@ import ScreenShell from "../ui/ScreenShell";
 import LikertScale from "../ui/LikertScale";
 import "./screens.css";
 
-// The mockup shows no rating scale for this step, so its enjoyment anchors
-// stay as the product already words them.
-// Not exported: nothing outside this file consumes it, and exporting a
-// constant alongside a default-exported component breaks fast refresh.
+// Not exported: a constant next to a default-exported component breaks fast refresh.
 const ENJOYMENT_ANCHORS = [
   { value: 1, label: "Not at all" },
   { value: 2, label: "Not really" },

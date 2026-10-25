@@ -2,8 +2,7 @@ import ScreenShell from "../ui/ScreenShell";
 import { JOURNEY_RAIL } from "../lifePath";
 import "./screens.css";
 
-// Not in the mockup, but a real screen: what the assessment is about to ask,
-// and how long each part takes.
+// What the assessment is about to ask, and how long each part takes.
 export default function JourneyIntroScreen({ onBegin }) {
   return (
     <ScreenShell

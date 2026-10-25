@@ -2,14 +2,14 @@
 // dock-card state machine. Kept side-effect-free and out of App.jsx so both
 // can be unit-tested without rendering the whole app.
 
-export const ME_NODE = { id: "me", type: "me", position: { x: 0, y: 0 }, data: {} };
+const ME_NODE = { id: "me", type: "me", position: { x: 0, y: 0 }, data: {} };
 
 // Vertical story: Me -> output iteration chain (horizontal trail) -> the
 // accepted output grows 4 advice cards and its roadmap chain.
 const OUTPUT_Y = 240;
 // Node positions are left edges, so the widths below are what centres one row
-// under another. They mirror NodeComponent.css and spec 5.11: a 480px output
-// card, 220px advice cells, 360px roadmap rows, an 80px loading dot.
+// under another. They mirror NodeComponent.css: a 480px output card, 220px
+// advice cells, 360px roadmap rows, an 80px loading dot.
 const OUTPUT_W = 480;
 const ADVICE_W = 220;
 const ROADMAP_W = 360;
@@ -108,8 +108,8 @@ export function buildLifePathGraph({
         orientedField: output.orientedField,
         fit: output.valuesFit ? output.valuesFit.overall : null,
         thesis: output.thesis,
-        // Spec 5.11's meta row is salary · outlook, not the work values —
-        // those keep their own section in the details panel.
+        // The meta row is salary · outlook; work values keep their own section
+        // in the details panel.
         market: usMarketLine(output),
         accepted: isAccepted,
         latest: isLatest,
@@ -134,20 +134,13 @@ export function buildLifePathGraph({
   // Everything below the accepted card hangs off the card's centre, not off
   // its left rule — the design stacks them as one column.
   const centerX = anchorX + OUTPUT_W / 2;
+  const pushLoading = (id, y) => {
+    nodes.push({ id, type: "loading", position: { x: centerX - LOADING_W / 2, y }, data: {} });
+    edges.push({ id: `${accepted.id}-${id}`, source: accepted.id, target: id, type: "branch" });
+  };
 
   if (detailPending) {
-    nodes.push({
-      id: "detail-loading",
-      type: "loading",
-      position: { x: centerX - LOADING_W / 2, y: ADVICE_Y },
-      data: {},
-    });
-    edges.push({
-      id: `${accepted.id}-detail-loading`,
-      source: accepted.id,
-      target: "detail-loading",
-      type: "branch",
-    });
+    pushLoading("detail-loading", ADVICE_Y);
   } else if (accepted.detail) {
     ADVICE_BLOCKS.forEach((block, index) => {
       const items = accepted.detail[block.key] || [];
@@ -156,8 +149,7 @@ export function buildLifePathGraph({
       nodes.push({
         id: nodeId,
         type: "advice",
-        // The cells abut: spec 5.11 bounds the row with rules top, bottom and
-        // between, and each cell's own right border is the rule between.
+        // The cells abut: each cell's own right border is the rule between.
         position: {
           x: centerX - (ADVICE_BLOCKS.length * ADVICE_W) / 2 + index * ADVICE_W,
           y: ADVICE_Y,
@@ -180,20 +172,7 @@ export function buildLifePathGraph({
     });
   }
 
-  if (roadmapPending) {
-    nodes.push({
-      id: "roadmap-loading",
-      type: "loading",
-      position: { x: centerX - LOADING_W / 2, y: ROADMAP_START_Y },
-      data: {},
-    });
-    edges.push({
-      id: `${accepted.id}-roadmap-loading`,
-      source: accepted.id,
-      target: "roadmap-loading",
-      type: "branch",
-    });
-  }
+  if (roadmapPending) pushLoading("roadmap-loading", ROADMAP_START_Y);
 
   const roadmap = roadmaps[accepted.id];
   if (roadmap) {
@@ -229,15 +208,10 @@ export function buildLifePathGraph({
   return { nodes, edges };
 }
 
-// Which dock card the tree shows for a given session shape. Returns
-// "output-review" or null. Mirrors the render order in App.jsx — once an
-// output is accepted, the graph nodes carry the story and the dock stays
-// empty.
+// Which dock card the tree shows: "output-review" while an output awaits a
+// Yes/No, else null — once one is accepted the graph nodes carry the story.
 export function selectDockCard({ stage, outputs = [], acceptedOutputId }) {
-  if (stage !== "tree") return null;
-  if (!outputs.length) return null;
-  if (acceptedOutputId) return null;
-  return "output-review";
+  return stage === "tree" && outputs.length && !acceptedOutputId ? "output-review" : null;
 }
 
 // Display-only Career Discovery Journey rail. Labels are copy, not state:
@@ -353,8 +327,8 @@ export function deriveArchetype({ riasecCode, bigFiveScores } = {}) {
   return { name, tagline: `${interestLine} — ${trait}.` };
 }
 
-// Maps the structured whyThisFits block to InfoPanel sections. Outputs
-// generated before the block existed fall back to the legacy whyFit text.
+// Maps the structured whyThisFits block to InfoPanel sections, falling back to
+// the output's free-text whyFit when the block is missing.
 export function whyThisFitsSections(output) {
   const why = output?.whyThisFits;
   if (!why) {

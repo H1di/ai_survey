@@ -2,8 +2,7 @@ import Eyebrow from "../ui/Eyebrow";
 import { usMarketLine, whyThisFitsSections } from "../lifePath";
 import "./screens.css";
 
-// The Yes/No decision, as three ruled columns. The columns carry the real
-// output — the mockup's card bodies are its stand-in for exactly this data.
+// The Yes/No decision, as three ruled columns carrying the output itself.
 export default function OutputDecision({ output, busy, onAccept, onRegenerate, onOpenDetails }) {
   const market = usMarketLine(output);
   // Outputs generated before the structured explanation existed — and any

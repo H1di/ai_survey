@@ -10,8 +10,6 @@ export const CHART_TOKENS = {
   accent: "--gold",
   accentSoft: "--gold-18",
   grid: "--gold-25",
-  job: "--positive",
-  jobSoft: "--positive-16",
   muted: "--text-55",
 };
 
@@ -22,7 +20,7 @@ export const CHART_TOKENS = {
 export const FALLBACK_COLOR = "currentColor";
 
 // Resolves the chart palette off `root` (the document element by default).
-// Cheap enough to call per mount: one getComputedStyle and six lookups.
+// Cheap enough to call per mount: one getComputedStyle and four lookups.
 export function readChartPalette(root) {
   const element = root || (typeof document === "undefined" ? null : document.documentElement);
   if (!element) {

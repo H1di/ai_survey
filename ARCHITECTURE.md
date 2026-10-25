@@ -48,7 +48,7 @@
 
 | Модуль | Что делает | Вход → Выход |
 |---|---|---|
-| `server.js` | Все 21 роут, `trust proxy` (1 хоп в prod, `TRUST_PROXY` override), request-id middleware + leak-safe `fail`/`sendError` (см. `logger.js`), step-guard'ы, rate limiting (300/15 мин глобально, 30/15 мин AI-роуты), CORS-allowlist, multer (5 МБ), single-flight lock output/roadmap/cv-роутов (409 на параллель), `buildScoredOutput` — единственное место агрегации work-values оценок output'а. **Один инстанс** (Map/лок/лимиты — process-local) | HTTP → снапшот сессии |
+| `server.js` | Все 21 роут, `trust proxy` (1 хоп в prod, `TRUST_PROXY` override), request-id middleware + leak-safe `fail`/`sendError` (см. `logger.js`), step-guard'ы, rate limiting (300/15 мин глобально, 30/15 мин AI-роуты), CORS-allowlist, multer (5 МБ), single-flight lock output/roadmap/cv-роутов (409 на параллель), `buildOutput` — единственное место сборки output'а (work values, `valuesFit`, O*NET-блок, `whyThisFits`). **Один инстанс** (Map/лок/лимиты — process-local) | HTTP → снапшот сессии |
 | `core/logger.js` | Бездеп-логгер ошибок: `logError` — одна JSON-строка на ≥500 (route-шаблон / UUID-редакция, чтобы id сессии не утёк), `resolveStatus` (clamp 400..599) | (req, err) → лог |
 | `core/sessionStore.js` | In-memory `Map` сессий (авторитетный process-local набор — **один инстанс**); TTL 24 ч, sweep раз в час (unref'd); все мутаторы (`advanceStep`, `appendOutput`, `acceptOutput`, `finalizeValues`…); `serializeSessionState`; `schemaVersion` + миграция несовместимых сессий на `hydrate()`. Опциональный write-through + `hydrate()` в Redis, если передан клиент | session-объект ↔ снапшот |
 | `core/redisClient.js` | Фабрика Upstash-клиента: возвращает `null` без `UPSTASH_REDIS_REST_URL`/`_TOKEN` (→ чистый in-memory), иначе REST-клиент для durable сессий | env → Redis-клиент \| null |
@@ -203,8 +203,8 @@ flowchart TD
     end
 
     subgraph Values["Server-side агрегаты"]
-        SCOREVAL["resolveProfessionWorkValues<br/>(снапшот SOC / прототип)"]
-        DERIVE["buildScoredOutput: topValues,<br/>valuesFit(user, job) → {overall}"]
+        SCOREVAL["buildOutput: work values<br/>(снапшот SOC / прототип)"]
+        DERIVE["buildOutput: topValues,<br/>valuesFit(user, job) → {overall}"]
     end
 
     UI -->|"POST ответ / refine / accept"| API --> GUARD --> VALIDATE

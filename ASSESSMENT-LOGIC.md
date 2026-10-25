@@ -348,7 +348,7 @@ require-then-lock) — двойной сабмит не удвоит AI-расх
 
 **Роут:** `POST /api/output/first`. **Источники:** `riasec.js:rankDirections`,
 `onet.js:rankOccupations`, `aiEngine.js:resolveShortlistSoc`,
-`server.js:buildScoredOutput`.
+`server.js:buildOutput`.
 
 ```mermaid
 flowchart TD
@@ -356,7 +356,7 @@ flowchart TD
     D --> O["rankOccupations()<br/>Pearson по O*NET-снапшоту<br/>→ shortlist 15 профессий"]
     O --> AI["AI выбирает одну<br/>и возвращает socCode"]
     AI --> S["resolveShortlistSoc()<br/>членство: код → title → топ"]
-    S --> B["buildScoredOutput()<br/>work-values + valuesFit + O*NET"]
+    S --> B["buildOutput()<br/>work-values + valuesFit + O*NET"]
     B --> W["generateWhyThisFits()<br/>2-й AI-вызов: трассируемое объяснение"]
 ```
 
@@ -378,11 +378,11 @@ flowchart TD
 **Keyless-фоллбек:** без AI-ключа берётся лучшая по корреляции неиспользованная
 профессия напрямую (legacy `professionSeeds` — только если снапшот отсутствует).
 
-### 8.2 Скоринг output'а (`buildScoredOutput`)
+### 8.2 Скоринг output'а (`buildOutput`)
 
 Единственное место агрегации work-value оценок. Для выбранной профессии:
 
-- **`resolveProfessionWorkValues`** — измеренные O*NET work-values выбранного SOC
+- **work values в `buildOutput`** — измеренные O*NET work-values выбранного SOC
   (для ~40 из 923 профессий без них и любого keyless-джоба — прототип направления,
   см. §8.3).
 - **`deriveTopValues`** — топ-3 ценности профессии.

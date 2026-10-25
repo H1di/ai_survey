@@ -261,10 +261,8 @@
   animation-delay: var(--appear-delay, 0ms);
 }
 
-/* Spec 5.11's output is a left rule, not a card: the accepted one is marked by
-   the word "Accepted" in its meta row. The card-era rectangles — a 2px ring in
-   gold or green and .node's hover glow — drew a box around a node that has
-   none, so the left rule carries both states instead. */
+/* The output is a left rule, not a card: the rule carries the latest/accepted
+   and hover states; "Accepted" in the meta row names the accepted one. */
 .node--output-latest,
 .node--output-accepted,
 .node--output:hover {
@@ -274,8 +272,8 @@
 .node--output:hover {
   box-shadow: none;
 }
-/* Spec 5.11's output header: the field tag, a gold interpunct and the fit on
-   one baseline. The eyebrow's own bottom margin belongs to the row here. */
+/* Output header: field tag, gold interpunct and fit on one baseline. The
+   eyebrow's own bottom margin belongs to the row here. */
 .node-output-head {
   display: flex;
   align-items: center;
@@ -347,8 +345,7 @@
   animation-delay: var(--appear-delay, 0ms);
 }
 
-/* Spec 5.11 gives the advice cell its own ramp — .node-title's 34px/900 is
-   the output node's and was inherited straight into a 220px cell. */
+/* The advice cell's own type ramp; .node-title's 34px/900 is the output node's. */
 .node--advice .node-title {
   font: 700 15px/1.2 var(--font-display);
   letter-spacing: 0;

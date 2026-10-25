@@ -18,12 +18,7 @@ const {
   WORK_VALUE_CURVE_VERSION,
   WORK_VALUES_ORDER,
 } = require("./engine/workValues");
-const {
-  startTournament,
-  nextComparison,
-  finalOrder,
-  recordAnswer,
-} = require("./assessment/valuesTournament");
+const { startTournament, finalOrder, recordAnswer } = require("./assessment/valuesTournament");
 const {
   validateDemographicAnswer,
   validateBigFiveAnswer,
@@ -158,18 +153,21 @@ getCvUploadExtensions().then((list) => {
   cvUploadFormats = list;
 });
 
-// Single-flight guard for the AI-heavy output routes. A double-submit or a
+// Single-flight guard for the AI-heavy routes. A double-submit or a
 // retry-after-timeout on the same session+operation would otherwise race past
 // the pre-await state checks and create a duplicate output or double the
 // OpenAI spend; a second concurrent call for the same key gets 409 instead.
 const inFlightKeys = new Set();
-function acquireLock(key) {
-  if (inFlightKeys.has(key)) return false;
+const BUSY_MESSAGE = "Another change to this path is still processing.";
+
+async function withLock(req, res, key, fn, busyMessage = BUSY_MESSAGE) {
+  if (inFlightKeys.has(key)) return fail(res, req, 409, busyMessage);
   inFlightKeys.add(key);
-  return true;
-}
-function releaseLock(key) {
-  inFlightKeys.delete(key);
+  try {
+    return await fn();
+  } finally {
+    inFlightKeys.delete(key);
+  }
 }
 
 // Leak-safe error responders (see logger.js). `fail` is for intentional client
@@ -190,6 +188,52 @@ function sendError(res, req, error, fallbackMessage) {
   }
   logError(req, error);
   return res.status(500).json({ error: fallbackMessage, requestId: req && req.id });
+}
+
+function httpError(status, message) {
+  const error = new Error(message);
+  error.statusCode = status;
+  return error;
+}
+
+// Every route body runs inside this: anything it throws (an unknown session's
+// 404, a validator's 400, a failed AI call) goes out through sendError.
+const handle =
+  (fn, fallbackMessage = "Something went wrong.") =>
+  async (req, res) => {
+    try {
+      return await fn(req, res, req.body || {});
+    } catch (error) {
+      return sendError(res, req, error, fallbackMessage);
+    }
+  };
+
+const STEP_ERRORS = {
+  big_five: "Not currently in the Big Five step.",
+  riasec: "Not currently in the RIASEC step.",
+  values: "Not currently in the values step.",
+  cv: "Not currently in the CV step.",
+  tree: "Complete the assessment before this step.",
+};
+
+function assertStep(session, step) {
+  if (session.step !== step) throw httpError(400, STEP_ERRORS[step]);
+}
+
+// The body's session, which must sit on `step`.
+function sessionAt(body, step) {
+  const session = store.require(body.sessionId);
+  assertStep(session, step);
+  return session;
+}
+
+// A single-flight route. The session is required BEFORE locking so a missing
+// or unknown id 404s rather than sharing an `undefined:<op>` bucket.
+function lockedRoute(op, fn, fallbackMessage, busyMessage) {
+  return handle(async (req, res, body) => {
+    const session = store.require(body.sessionId);
+    return withLock(req, res, `${session.id}:${op}`, () => fn(req, res, session, body), busyMessage);
+  }, fallbackMessage);
 }
 
 function sendSessionSnapshot(res, session, { includeStatic = false } = {}) {
@@ -225,176 +269,123 @@ app.get("/api/health", (_req, res) => {
 
 app.post("/api/session/start", (req, res) => {
   const { dreamAnswer } = req.body || {};
-
   // The dream answer is quoted inside every AI prompt — cap it.
   const normalizedDream =
     typeof dreamAnswer === "string" ? dreamAnswer.trim().slice(0, 500) : "";
   if (!normalizedDream) {
     return fail(res, req, 400, "dreamAnswer is required.");
   }
-
   const session = store.createSession({ dreamAnswer: normalizedDream });
-
   return sendSessionSnapshot(res, session, { includeStatic: true });
 });
 
-app.get("/api/session/:sessionId", (req, res) => {
-  try {
-    const session = store.require(req.params.sessionId);
-    return sendSessionSnapshot(res, session, { includeStatic: true });
-  } catch (error) {
-    return sendError(res, req, error, "Something went wrong.");
-  }
-});
+app.get(
+  "/api/session/:sessionId",
+  handle((req, res) =>
+    sendSessionSnapshot(res, store.require(req.params.sessionId), { includeStatic: true })
+  )
+);
 
-app.post("/api/session/demographics", (req, res) => {
-  try {
-    const { sessionId, questionId, value } = req.body || {};
+app.post(
+  "/api/session/demographics",
+  handle((req, res, { sessionId, questionId, value }) => {
     const session = store.require(sessionId);
-
     if (session.step !== "demographics") {
       return fail(res, req, 400, "Session is past the demographics step.");
     }
-
-    const normalized = validateDemographicAnswer(questionId, value);
-    store.setDemographicAnswer(session, questionId, normalized);
-
-    const allAnswered = DEMOGRAPHIC_QUESTIONS.every(
-      (q) => session.demographics[q.id] !== undefined
-    );
-    if (allAnswered) {
+    store.setDemographicAnswer(session, questionId, validateDemographicAnswer(questionId, value));
+    if (DEMOGRAPHIC_QUESTIONS.every((q) => session.demographics[q.id] !== undefined)) {
       store.advanceStep(session, "big_five");
     }
-
     return sendSessionSnapshot(res, session);
-  } catch (error) {
-    return sendError(res, req, error, "Something went wrong.");
-  }
-});
+  })
+);
 
-app.post("/api/big-five/answer", (req, res) => {
-  try {
-    const { sessionId, itemId, value } = req.body || {};
-    const session = store.require(sessionId);
-
-    if (session.step !== "big_five") {
-      return fail(res, req, 400, "Not currently in the Big Five step.");
-    }
-
-    const normalized = validateBigFiveAnswer(session, itemId, value);
-    store.recordBigFiveAnswer(session, itemId, normalized);
-
-    const allAnswered = session.bigFiveItems.every(
-      (i) => session.bigFiveAnswers[i.id] !== undefined
-    );
-    if (allAnswered) {
+app.post(
+  "/api/big-five/answer",
+  handle((req, res, body) => {
+    const session = sessionAt(body, "big_five");
+    const { itemId, value } = body;
+    store.recordBigFiveAnswer(session, itemId, validateBigFiveAnswer(session, itemId, value));
+    if (session.bigFiveItems.every((i) => session.bigFiveAnswers[i.id] !== undefined)) {
       const scores = computeBigFiveScores(session);
-      const derived = deriveBigFiveTraits(scores);
-      store.setBigFiveScores(session, scores, derived);
+      store.setBigFiveScores(session, scores, deriveBigFiveTraits(scores));
       store.advanceStep(session, "riasec");
     }
-
     return sendSessionSnapshot(res, session);
-  } catch (error) {
-    return sendError(res, req, error, "Something went wrong.");
-  }
-});
+  })
+);
 
-app.post("/api/riasec/start", (req, res) => {
-  try {
-    const { sessionId } = req.body || {};
-    const session = store.require(sessionId);
-    if (session.step !== "riasec") {
-      return fail(res, req, 400, "Not currently in the RIASEC step.");
-    }
+app.post(
+  "/api/riasec/start",
+  handle((req, res, body) => {
+    const session = sessionAt(body, "riasec");
     if (!session.riasecItems.length) {
       store.setRiasecItems(session, getStaticRiasecItems());
     }
     // riasecItems just changed — one of the static-list snapshots.
     return sendSessionSnapshot(res, session, { includeStatic: true });
-  } catch (error) {
-    return sendError(res, req, error, "Something went wrong.");
-  }
-});
+  })
+);
 
-app.post("/api/riasec/answer", (req, res) => {
-  try {
-    const { sessionId, itemId, value } = req.body || {};
-    const session = store.require(sessionId);
-    if (session.step !== "riasec") {
-      return fail(res, req, 400, "Not currently in the RIASEC step.");
-    }
-    const normalized = validateRiasecAnswer(session, itemId, value);
-    store.recordRiasecAnswer(session, itemId, normalized);
-
+app.post(
+  "/api/riasec/answer",
+  handle((req, res, body) => {
+    const session = sessionAt(body, "riasec");
+    const { itemId, value } = body;
+    store.recordRiasecAnswer(session, itemId, validateRiasecAnswer(session, itemId, value));
     const { scores } = computeRiasecScores(session);
     if (scores) {
       store.setRiasecScores(session, scores, deriveRiasecCode(scores));
       store.advanceStep(session, "values");
     }
     return sendSessionSnapshot(res, session);
-  } catch (error) {
-    return sendError(res, req, error, "Something went wrong.");
-  }
-});
+  })
+);
 
-app.post("/api/riasec/skip", async (req, res) => {
-  try {
-    const { sessionId } = req.body || {};
-    const session = store.require(sessionId);
-    if (session.step !== "riasec") {
-      return fail(res, req, 400, "Not currently in the RIASEC step.");
-    }
+app.post(
+  "/api/riasec/skip",
+  handle(async (req, res, body) => {
+    const session = sessionAt(body, "riasec");
     const scores = await aiEngine.inferRiasecProfile({ session });
     store.setRiasecScores(session, scores, deriveRiasecCode(scores), { inferred: true });
     store.advanceStep(session, "values");
     return sendSessionSnapshot(res, session);
-  } catch (error) {
-    return sendError(res, req, error, "Failed to estimate your interests.");
-  }
-});
+  }, "Failed to estimate your interests.")
+);
 
 // --- Work-values tournament (adaptive pairwise comparison) -----------------
 
-app.post("/api/values/start", (req, res) => {
-  try {
-    const { sessionId } = req.body || {};
-    const session = store.require(sessionId);
-    if (session.step !== "values") {
-      return fail(res, req, 400, "Not currently in the values step.");
-    }
+app.post(
+  "/api/values/start",
+  handle((req, res, body) => {
+    const session = sessionAt(body, "values");
     if (!session.valuesTournament) {
       store.setValuesTournament(session, startTournament(WORK_VALUES_ORDER));
     }
     return sendSessionSnapshot(res, session);
-  } catch (error) {
-    return sendError(res, req, error, "Something went wrong.");
-  }
-});
+  })
+);
 
-app.post("/api/values/answer", (req, res) => {
-  try {
-    const { sessionId, comparisonId, winner } = req.body || {};
-    const session = store.require(sessionId);
-    if (session.step !== "values") {
-      return fail(res, req, 400, "Not currently in the values step.");
-    }
+app.post(
+  "/api/values/answer",
+  handle((req, res, body) => {
+    const session = sessionAt(body, "values");
     if (!session.valuesTournament) {
       return fail(res, req, 400, "Tournament has not started.");
     }
+    const { comparisonId, winner } = body;
     const result = recordAnswer(session.valuesTournament, { comparisonId, winner });
     // Stale/duplicate answers are a no-op: the snapshot is the single source of
     // truth, so returning current state lets the client reconcile silently.
     if (result.ok) store.setValuesTournament(session, result.state);
     return sendSessionSnapshot(res, session);
-  } catch (error) {
-    return sendError(res, req, error, "Something went wrong.");
-  }
-});
+  })
+);
 
-app.post("/api/values/confirm", (req, res) => {
-  try {
-    const { sessionId, order } = req.body || {};
+app.post(
+  "/api/values/confirm",
+  handle((req, res, { sessionId, order }) => {
     const session = store.require(sessionId);
     if (session.step !== "values") {
       // Idempotent: a double-submit after advancing just returns the snapshot.
@@ -409,8 +400,7 @@ app.post("/api/values/confirm", (req, res) => {
     const tournamentOrder = session.valuesTournament
       ? finalOrder(session.valuesTournament)
       : null;
-    const revisiting = Boolean(session.userValues);
-    if (!tournamentOrder && !revisiting) {
+    if (!tournamentOrder && !session.userValues) {
       return fail(res, req, 400, "Finish the comparisons before confirming.");
     }
 
@@ -430,10 +420,8 @@ app.post("/api/values/confirm", (req, res) => {
       nextStep: "cv",
     });
     return sendSessionSnapshot(res, session);
-  } catch (error) {
-    return sendError(res, req, error, "Something went wrong.");
-  }
-});
+  })
+);
 
 const cvUpload = multer({
   storage: multer.memoryStorage(),
@@ -442,135 +430,93 @@ const cvUpload = multer({
 
 // The "where should we start from" choice, made on the CV slide. Re-selection
 // while still on the cv step is allowed; not an AI route.
-app.post("/api/cv/intent", (req, res) => {
-  try {
-    const { sessionId, cvIntent } = req.body || {};
-    const session = store.require(sessionId);
-    if (session.step !== "cv") {
-      return fail(res, req, 400, "Not currently in the CV step.");
-    }
-    if (cvIntent !== "new" && cvIntent !== "use_skills") {
+app.post(
+  "/api/cv/intent",
+  handle((req, res, body) => {
+    const session = sessionAt(body, "cv");
+    if (body.cvIntent !== "new" && body.cvIntent !== "use_skills") {
       return fail(res, req, 400, "cvIntent must be 'new' or 'use_skills'.");
     }
-    store.setCvIntent(session, cvIntent);
+    store.setCvIntent(session, body.cvIntent);
     return sendSessionSnapshot(res, session);
-  } catch (error) {
-    return sendError(res, req, error, "Something went wrong.");
-  }
-});
+  })
+);
 
-app.post("/api/cv", cvUpload.single("file"), async (req, res) => {
-  // Require the session BEFORE locking so a missing/unknown id 404s rather than
-  // sharing an `undefined:cv` bucket, then single-flight the completion: a
-  // double-submit would otherwise double the AI spend (analyzeCV +
-  // generatePersonaSummary) and advance the step twice.
-  let session;
-  try {
-    session = store.require((req.body || {}).sessionId);
-  } catch (error) {
-    return sendError(res, req, error, "Something went wrong.");
-  }
-  const lockKey = `${session.id}:cv`;
-  if (!acquireLock(lockKey)) {
-    return fail(res, req, 409, "Another change to this path is still processing.");
-  }
-  try {
-    if (session.step !== "cv") {
-      return fail(res, req, 400, "Not currently in the CV step.");
-    }
-    if (!session.cvIntent) {
-      return fail(res, req, 400, "Choose where to start (cvIntent) first.");
-    }
-    let rawText = typeof req.body.cvText === "string" ? req.body.cvText : "";
-    if (req.file) {
-      rawText = await extractCvText(req.file);
-    }
+// Both CV completions share the `cv` lock, so a double-submit can't double the
+// AI spend or advance twice. Completing either path generates the persona shown
+// on the summary screen.
+function cvRoute(fn, fallbackMessage) {
+  return lockedRoute(
+    "cv",
+    (req, res, session, body) => {
+      assertStep(session, "cv");
+      if (!session.cvIntent) throw httpError(400, "Choose where to start (cvIntent) first.");
+      return fn(req, res, session, body);
+    },
+    fallbackMessage
+  );
+}
+
+app.post(
+  "/api/cv",
+  cvUpload.single("file"),
+  cvRoute(async (req, res, session, body) => {
+    const rawText = req.file
+      ? await extractCvText(req.file)
+      : typeof body.cvText === "string"
+        ? body.cvText
+        : "";
     const cvText = rawText.trim().slice(0, 6000);
     if (!cvText) {
       return fail(res, req, 400, "Provide cvText or upload a supported file (.pdf/.docx/.pptx/.html/.txt).");
     }
-    const analysis = await aiEngine.analyzeCV({ cvText });
-    store.setCvAnalysis(session, cvText, analysis);
-    // Persona is shown on the summary screen; user values already came from the
-    // values step. Advance to the character conclusion, not straight to tree.
+    store.setCvAnalysis(session, cvText, await aiEngine.analyzeCV({ cvText }));
     store.setPersonaSummary(session, await aiEngine.generatePersonaSummary({ session }));
     store.advanceStep(session, "summary");
     return sendSessionSnapshot(res, session);
-  } catch (error) {
-    return sendError(res, req, error, "Failed to analyse the CV.");
-  } finally {
-    releaseLock(lockKey);
-  }
-});
+  }, "Failed to analyse the CV.")
+);
 
-app.post("/api/cv/journey", async (req, res) => {
-  const { sessionId, questionId, value } = req.body || {};
-  // Require before locking (see /api/cv); single-flight so a double-submit of
-  // the final answer can't generate the persona or advance the step twice.
-  let session;
-  try {
-    session = store.require(sessionId);
-  } catch (error) {
-    return sendError(res, req, error, "Something went wrong.");
-  }
-  const lockKey = `${session.id}:cv`;
-  if (!acquireLock(lockKey)) {
-    return fail(res, req, 409, "Another change to this path is still processing.");
-  }
-  try {
-    if (session.step !== "cv") {
-      return fail(res, req, 400, "Not currently in the CV step.");
-    }
-    if (!session.cvIntent) {
-      return fail(res, req, 400, "Choose where to start (cvIntent) first.");
-    }
-    const normalized = validateCareerJourneyAnswer(questionId, value);
-    store.recordCareerJourneyAnswer(session, questionId, normalized);
-
-    const allAnswered = CAREER_JOURNEY_QUESTIONS.every(
-      (q) => session.careerJourneyAnswers[q.id] !== undefined
+app.post(
+  "/api/cv/journey",
+  cvRoute(async (req, res, session, { questionId, value }) => {
+    store.recordCareerJourneyAnswer(
+      session,
+      questionId,
+      validateCareerJourneyAnswer(questionId, value)
     );
-    if (allAnswered) {
-      // Persona shown on the summary screen; user values came from the values
-      // step. Advance to the character conclusion, not straight to tree.
+    if (CAREER_JOURNEY_QUESTIONS.every((q) => session.careerJourneyAnswers[q.id] !== undefined)) {
       store.setPersonaSummary(session, await aiEngine.generatePersonaSummary({ session }));
       store.advanceStep(session, "summary");
     }
     return sendSessionSnapshot(res, session);
-  } catch (error) {
-    return sendError(res, req, error, "Something went wrong.");
-  } finally {
-    releaseLock(lockKey);
-  }
-});
+  })
+);
 
 // The character-conclusion screen. Nothing to generate (persona was produced at
 // cv completion); acknowledging it advances to the Life Path Engine.
-app.post("/api/summary/continue", (req, res) => {
-  try {
-    const { sessionId } = req.body || {};
+app.post(
+  "/api/summary/continue",
+  handle((req, res, { sessionId }) => {
     const session = store.require(sessionId);
+    // Idempotent: a re-submit after advancing just returns the snapshot.
+    if (session.step === "tree") return sendSessionSnapshot(res, session);
     if (session.step !== "summary") {
-      // Idempotent: a re-submit after advancing just returns the snapshot.
-      if (session.step === "tree") return sendSessionSnapshot(res, session);
       return fail(res, req, 400, "Not currently in the summary step.");
     }
     store.advanceStep(session, "tree");
     return sendSessionSnapshot(res, session);
-  } catch (error) {
-    return sendError(res, req, error, "Something went wrong.");
-  }
-});
+  })
+);
 
 // Rail navigation: move between steps the user has already reached. Ungated on
 // purpose — the furthestStep check means it can never skip unanswered work, so
 // it exposes nothing a user could not reach by answering. It writes only
 // session.step: answers, scores, and outputs are left exactly as they are.
-app.post("/api/session/goto", (req, res) => {
-  try {
-    const { sessionId, step } = req.body || {};
+app.post(
+  "/api/session/goto",
+  handle((req, res, { sessionId, step }) => {
     const session = store.require(sessionId);
-
     if (!STEP_ORDER.includes(step)) {
       return fail(res, req, 400, "Unknown step.");
     }
@@ -578,13 +524,10 @@ app.post("/api/session/goto", (req, res) => {
     if (STEP_ORDER.indexOf(step) > STEP_ORDER.indexOf(furthest)) {
       return fail(res, req, 400, "You haven't reached that step yet.");
     }
-
     store.gotoStep(session, step);
     return sendSessionSnapshot(res, session, { includeStatic: true });
-  } catch (error) {
-    return sendError(res, req, error, "Something went wrong.");
-  }
-});
+  })
+);
 
 // --- Dev tools -------------------------------------------------------------
 // Stage switcher for manual testing: seeds a session forward to any step so a
@@ -608,8 +551,7 @@ function devTokenMatches(provided) {
 if (DEV_TOOLS_TOKEN) {
   app.post("/api/dev/jump", async (req, res, next) => {
     // next() falls through to Express's default 404, so a wrong token produces
-    // byte-for-byte the same response as a path that was never mounted. A
-    // distinct JSON error here would confirm the route exists.
+    // byte-for-byte the same response as a path that was never mounted.
     if (!devTokenMatches(req.get("x-dev-token"))) return next();
 
     const { sessionId, step } = req.body || {};
@@ -628,31 +570,19 @@ if (DEV_TOOLS_TOKEN) {
             dreamAnswer: existing ? existing.dreamAnswer : DEV_PROFILE.dreamAnswer,
           });
 
-    const lockKey = `${session.id}:dev`;
-    if (!acquireLock(lockKey)) {
-      return fail(res, req, 409, "Another change to this path is still processing.");
-    }
     try {
-      await seedTo(session, step, { store, aiEngine });
-      return sendSessionSnapshot(res, session, { includeStatic: true });
+      return await withLock(req, res, `${session.id}:dev`, async () => {
+        await seedTo(session, step, { store, aiEngine });
+        return sendSessionSnapshot(res, session, { includeStatic: true });
+      });
     } catch (error) {
       return sendError(res, req, error, "Could not seed the session.");
-    } finally {
-      releaseLock(lockKey);
     }
   });
 
   console.warn(
     "[dev-tools] DEV_TOOLS_TOKEN is set — POST /api/dev/jump is live. Unset it to remove the route."
   );
-}
-
-function requireCompletedAssessment(session) {
-  if (session.step !== "tree") {
-    const error = new Error("Complete the assessment before this step.");
-    error.statusCode = 400;
-    throw error;
-  }
 }
 
 // The real-occupation card for one output: snapshot facts always, live US
@@ -675,156 +605,106 @@ function buildOnetBlock(socCode, extras) {
   };
 }
 
-// A profession's work-value profile: measured O*NET snapshot values for the
-// chosen SOC win; the per-direction prototype fills the 40 occupations without
-// them (and any keyless fallback job). The AI never scores values.
-function resolveProfessionWorkValues({ socCode, directionId }) {
-  const occ = socCode ? getOccupation(socCode) : null;
-  if (occ?.workValues) return occ.workValues;
-  return buildFallbackProfessionValues(directionId);
-}
-
-// The single place output value aggregates are computed: resolve the
-// profession's work values, its top three, and the fit against the user's
-// confirmed hierarchy. The live O*NET lookup rides the same async path.
-async function buildScoredOutput(session, rawOutput) {
-  const onetExtras = await onetApi.fetchCareerExtras(rawOutput.socCode);
-  const workValues = resolveProfessionWorkValues({
-    socCode: rawOutput.socCode,
-    directionId: rawOutput.directionId,
-  });
-  return {
-    ...rawOutput,
+// The single place an output is assembled: the profession's work values
+// (measured O*NET values for the chosen SOC, else the per-direction prototype
+// for the ~40 occupations without them and any keyless job — the AI never
+// scores values), its top three, the fit against the user's confirmed
+// hierarchy, the O*NET card, and the traceable whyThisFits explanation.
+async function buildOutput(session, excludeDirectionIds) {
+  const raw = await aiEngine.generateFirstOutput({ session, excludeDirectionIds });
+  const onetExtras = await onetApi.fetchCareerExtras(raw.socCode);
+  const workValues =
+    (raw.socCode && getOccupation(raw.socCode)?.workValues) ||
+    buildFallbackProfessionValues(raw.directionId);
+  const output = {
+    ...raw,
     workValues,
     topValues: deriveTopValues(workValues),
-    valuesFit: session.userValues
-      ? valuesFit(session.userValues.scores, workValues)
-      : null,
-    onet: buildOnetBlock(rawOutput.socCode, onetExtras),
+    valuesFit: session.userValues ? valuesFit(session.userValues.scores, workValues) : null,
+    onet: buildOnetBlock(raw.socCode, onetExtras),
     accepted: null,
     detail: null,
   };
+  output.whyThisFits = await aiEngine.generateWhyThisFits({ session, output });
+  return output;
 }
 
-app.post("/api/output/first", async (req, res) => {
-  const { sessionId } = req.body || {};
-  const lockKey = `${sessionId}:output`;
-  if (!acquireLock(lockKey)) {
-    return fail(res, req, 409, "Another change to this path is still processing.");
-  }
-  try {
-    const session = store.require(sessionId);
-    requireCompletedAssessment(session);
+// The output loop runs only after the assessment, under one `output` lock so
+// first/refine/accept can never interleave.
+function outputRoute(fn, fallbackMessage) {
+  return lockedRoute(
+    "output",
+    (req, res, session, body) => {
+      assertStep(session, "tree");
+      return fn(req, res, session, body);
+    },
+    fallbackMessage
+  );
+}
 
+// The output the Yes/No acts on — refused once an output is accepted.
+function pendingOutput(session, outputId) {
+  if (session.acceptedOutputId) throw httpError(400, "An output is already accepted.");
+  const output = session.outputs.find((o) => o.id === outputId);
+  if (!output) throw httpError(400, "Unknown output.");
+  return output;
+}
+
+app.post(
+  "/api/output/first",
+  outputRoute(async (req, res, session) => {
     if (!session.outputs.length) {
-      const raw = await aiEngine.generateFirstOutput({ session, excludeDirectionIds: [] });
-      const scored = await buildScoredOutput(session, raw);
-      scored.whyThisFits = await aiEngine.generateWhyThisFits({ session, output: scored });
-      store.appendOutput(session, scored);
+      store.appendOutput(session, await buildOutput(session, []));
     }
-
     return sendSessionSnapshot(res, session);
-  } catch (error) {
-    return sendError(res, req, error, "Failed to generate your first output.");
-  } finally {
-    releaseLock(lockKey);
-  }
-});
+  }, "Failed to generate your first output.")
+);
 
-app.post("/api/output/refine", async (req, res) => {
-  const { sessionId, outputId } = req.body || {};
-  const lockKey = `${sessionId}:output`;
-  if (!acquireLock(lockKey)) {
-    return fail(res, req, 409, "Another change to this path is still processing.");
-  }
-  try {
-    const session = store.require(sessionId);
-    requireCompletedAssessment(session);
-
-    if (session.acceptedOutputId) {
-      return fail(res, req, 400, "An output is already accepted.");
-    }
-    const previous = session.outputs.find((o) => o.id === outputId);
-    if (!previous) {
-      return fail(res, req, 400, "Unknown output.");
-    }
-
+app.post(
+  "/api/output/refine",
+  outputRoute(async (req, res, session, { outputId }) => {
+    pendingOutput(session, outputId);
     // Refining means "this one is not for me": regenerate from a genuinely
     // different field family, excluding every family already shown.
     const used = session.outputs.map((o) => o.directionId).filter(Boolean);
-    const raw = await aiEngine.generateFirstOutput({ session, excludeDirectionIds: used });
-    const scored = await buildScoredOutput(session, raw);
-    scored.whyThisFits = await aiEngine.generateWhyThisFits({ session, output: scored });
-    const appended = store.appendOutput(session, scored);
+    const appended = store.appendOutput(session, await buildOutput(session, used));
     store.recordRefinement(session, {
       fromOutputId: outputId,
       notSuitable: true,
       toOutputId: appended.id,
     });
-
     return sendSessionSnapshot(res, session);
-  } catch (error) {
-    return sendError(res, req, error, "Failed to regenerate the output.");
-  } finally {
-    releaseLock(lockKey);
-  }
-});
+  }, "Failed to regenerate the output.")
+);
 
-app.post("/api/output/accept", async (req, res) => {
-  const { sessionId, outputId } = req.body || {};
-  const lockKey = `${sessionId}:output`;
-  if (!acquireLock(lockKey)) {
-    return fail(res, req, 409, "Another change to this path is still processing.");
-  }
-  try {
-    const session = store.require(sessionId);
-    requireCompletedAssessment(session);
-
-    if (session.acceptedOutputId) {
-      return fail(res, req, 400, "An output is already accepted.");
-    }
-    const output = session.outputs.find((o) => o.id === outputId);
-    if (!output) {
-      return fail(res, req, 400, "Unknown output.");
-    }
-
+app.post(
+  "/api/output/accept",
+  outputRoute(async (req, res, session, { outputId }) => {
+    const output = pendingOutput(session, outputId);
     const detail = await aiEngine.generateOutputDetail({ session, output });
     store.acceptOutput(session, outputId, detail);
-
     return sendSessionSnapshot(res, session);
-  } catch (error) {
-    return sendError(res, req, error, "Failed to build the advice blocks.");
-  } finally {
-    releaseLock(lockKey);
-  }
-});
+  }, "Failed to build the advice blocks.")
+);
 
-app.post("/api/roadmap/generate", async (req, res) => {
-  const { sessionId, outputId } = req.body || {};
-  const lockKey = `${sessionId}:roadmap`;
-  if (!acquireLock(lockKey)) {
-    return fail(res, req, 409, "The roadmap for this output is still building.");
-  }
-  try {
-    const session = store.require(sessionId);
-
-    if (!session.acceptedOutputId || session.acceptedOutputId !== outputId) {
-      return fail(res, req, 400, "Accept this output before building its roadmap.");
-    }
-    const output = session.outputs.find((o) => o.id === outputId);
-
-    if (!session.roadmaps[outputId]) {
-      const roadmap = await aiEngine.generateRoadmap({ session, output });
-      store.setRoadmap(session, roadmap);
-    }
-
-    return sendSessionSnapshot(res, session);
-  } catch (error) {
-    return sendError(res, req, error, "Failed to generate roadmap.");
-  } finally {
-    releaseLock(lockKey);
-  }
-});
+app.post(
+  "/api/roadmap/generate",
+  lockedRoute(
+    "roadmap",
+    async (req, res, session, { outputId }) => {
+      if (!session.acceptedOutputId || session.acceptedOutputId !== outputId) {
+        return fail(res, req, 400, "Accept this output before building its roadmap.");
+      }
+      if (!session.roadmaps[outputId]) {
+        const output = session.outputs.find((o) => o.id === outputId);
+        store.setRoadmap(session, await aiEngine.generateRoadmap({ session, output }));
+      }
+      return sendSessionSnapshot(res, session);
+    },
+    "Failed to generate roadmap.",
+    "The roadmap for this output is still building."
+  )
+);
 
 // --- Frontend --------------------------------------------------------------
 // Single-service deploy: when the Vite build is present, this process also

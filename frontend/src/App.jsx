@@ -56,12 +56,12 @@ import {
   WORK_VALUE_META,
 } from "./lifePath";
 import "./App.css";
+import "./components/GraphView/GraphPage.css";
 
 // Runs before React mounts: moves ?dev=<token> into sessionStorage and scrubs
 // it from the URL, so the panel's visibility is settled by first render.
 captureDevToken();
 const DEV_MODE = isDevMode();
-import "./components/GraphView/GraphPage.css";
 
 // One journey, one bar. Unknown-yet block sizes assume the short variants so
 // the bar can only get more accurate, never jump backwards. The CV block
@@ -112,13 +112,88 @@ function InfoPanel({ view, onClose }) {
   );
 }
 
+function ErrorRow({ error, retryAction, className = "" }) {
+  if (!error) return null;
+  return (
+    <div className={`error-row ${className}`.trim()}>
+      <p className="error-text">{error}</p>
+      {retryAction && (
+        <button type="button" className="ghost-action" onClick={() => retryAction()}>
+          Try again
+        </button>
+      )}
+    </div>
+  );
+}
+
 const REDUCED_MOTION =
   typeof window !== "undefined" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const SESSION_STORAGE_KEY = "lpe.sessionId";
 
-function App() {
+const PANEL_MOTION = {
+  initial: { x: 20, opacity: 0 },
+  animate: { x: 0, opacity: 1 },
+  exit: { x: 20, opacity: 0 },
+  transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] },
+};
+
+const ADVICE_VIEWS = {
+  aiRecommendations: { title: "AI Recommendations", format: (i) => `${i.title} — ${i.detail}` },
+  events: { title: "Events", format: (i) => `${i.name} — ${i.why}` },
+  universities: { title: "Universities & Majors", format: (i) => `${i.name}: ${i.program}` },
+  courses: { title: "Courses", format: (i) => `${i.name} (${i.provider}) — ${i.why}` },
+};
+
+// The hero nav opens the same side panel the graph uses, carrying the
+// methodology rather than marketing copy.
+const METHODOLOGY_VIEWS = {
+  "how-it-works": {
+    archetype: "how it works",
+    title: "Five instruments, one profile",
+    sections: [
+      {
+        heading: "What you answer",
+        items: [
+          "Four demographic questions.",
+          "The public-domain Mini-IPIP-20, rated 1–5, scored to OCEAN 0–100 plus Stability/Plasticity.",
+          "Twelve fixed activity statements, rated for enjoyment — never job titles — scored to a Holland code.",
+          "An adaptive Ford–Johnson merge-insertion tournament, ≤10 comparisons, ranking the six Minnesota work values.",
+          "Your CV, or seven career-journey questions if you don't have one.",
+        ],
+      },
+    ],
+  },
+  "the-engine": {
+    archetype: "the engine",
+    title: "Grounded in O*NET, traced to your answers",
+    sections: [
+      {
+        heading: "How a suggestion is built",
+        items: [
+          "Your Holland code ranks the field families; the O*NET snapshot ranks occupations inside them by measured interest profile.",
+          "The occupation must come from that shortlist — the engine cannot invent one.",
+          "Its six measured work values are scored against your confirmed hierarchy as a single fit percentage.",
+          "Every line of the explanation points back to a score, a rank, or a sentence you wrote.",
+        ],
+      },
+    ],
+  },
+};
+
+// Restart remounts the whole app under a new key: every piece of state goes
+// back to its initial value without a hand-kept list of setters.
+export default function App() {
+  const [generation, setGeneration] = useState(0);
+  const reset = () => {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+    setGeneration((g) => g + 1);
+  };
+  return <LifePathApp key={generation} onReset={reset} />;
+}
+
+function LifePathApp({ onReset }) {
   const [stage, setStage] = useState("entry");
   const [restoring, setRestoring] = useState(() =>
     Boolean(localStorage.getItem(SESSION_STORAGE_KEY))
@@ -159,8 +234,6 @@ function App() {
   const [acceptedOutputId, setAcceptedOutputId] = useState(null);
   const [roadmaps, setRoadmaps] = useState({});
 
-  // Refine panel view state: checked params map to their brief reasons.
-
   const [stageDetail, setStageDetail] = useState(null);
   const [infoView, setInfoView] = useState(null);
 
@@ -172,26 +245,8 @@ function App() {
   // Journey intro rail: shown once right after the entry screen, never on resume.
   const [showRail, setShowRail] = useState(false);
 
-  const [busy, setBusy] = useState({
-    start: false,
-    demo: false,
-    bigFive: false,
-    riasecStart: false,
-    riasec: false,
-    riasecSkip: false,
-    values: false,
-    valuesConfirm: false,
-    summary: false,
-    cv: false,
-    cvIntent: false,
-    journey: false,
-    enterTree: false,
-    accept: false,
-    roadmap: false,
-    refine: false,
-    dev: false,
-    goto: false,
-  });
+  // In-flight request flags keyed by action; a missing key means idle.
+  const [busy, setBusy] = useState({});
 
   const [error, setError] = useState("");
   // Re-runs the last failed AI-backed action; rendered next to the error text.
@@ -229,15 +284,15 @@ function App() {
     });
     setValuesComparison(data.valuesComparison || null);
     setValuesRanking(data.valuesRanking || null);
-    // Revisiting a confirmed values step: finalizeValues cleared the tournament
-    // and the auto-start effect is blocked by userValues, so there is nothing to
-    // render unless the confirmed hierarchy is put back into the draft.
-    if (
+    // The reorderable draft starts from the finished tournament's ranking. On a
+    // rail revisit finalizeValues has cleared the tournament and the auto-start
+    // effect is blocked by userValues, so the confirmed order seeds it instead.
+    if (data.valuesRanking) {
+      setValuesRankDraft((draft) => (draft.length === 6 ? draft : data.valuesRanking));
+    } else if (
       data.step === "values" &&
       !data.valuesComparison &&
-      data.userValues &&
-      data.userValues.order &&
-      data.userValues.order.length === 6
+      data.userValues?.order?.length === 6
     ) {
       setValuesRankDraft(data.userValues.order);
     }
@@ -266,6 +321,29 @@ function App() {
     setStage(inTree ? "tree" : "survey");
   };
 
+  // Every server call has one shape: clear the error, flag the busy key, and on
+  // failure show the message, offering `retry` as "Try again" when given.
+  // Resolves true on success so callers can chain.
+  const run = async (key, failMessage, task, retry) => {
+    setError("");
+    setRetryAction(null);
+    setBusy((p) => ({ ...p, [key]: true }));
+    try {
+      await task();
+      return true;
+    } catch (e) {
+      setError(e.message || failMessage);
+      if (retry) setRetryAction(() => retry);
+      return false;
+    } finally {
+      setBusy((p) => ({ ...p, [key]: false }));
+    }
+  };
+
+  // The common case: one request whose snapshot is applied wholesale.
+  const sync = (key, failMessage, call, retry) =>
+    run(key, failMessage, async () => applySessionSnapshot(await call()), retry);
+
   // Resume a stored session after reload; a dead/unknown id falls back to entry.
   useEffect(() => {
     const storedId = localStorage.getItem(SESSION_STORAGE_KEY);
@@ -291,77 +369,36 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Kick off the values tournament the moment the step opens (once).
-  useEffect(() => {
-    if (
-      step === "values" &&
-      sessionId &&
-      !valuesComparison &&
-      !(profile?.userValues) &&
-      !valuesRanking &&
-      !busy.values
-    ) {
-      handleValuesStart();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, sessionId, valuesComparison, valuesRanking]);
-
-  // Prefill the reorderable hierarchy once the comparisons resolve.
-  useEffect(() => {
-    if (valuesRanking && valuesRankDraft.length !== 6) {
-      setValuesRankDraft(valuesRanking);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [valuesRanking]);
-
-  const handleStartSession = async () => {
-    if (!dreamAnswer.trim()) {
-      return;
-    }
-    setError("");
-    setBusy((p) => ({ ...p, start: true }));
-    try {
-      const data = await startSession({
-        dreamAnswer: dreamAnswer.trim(),
-      });
+  const handleStartSession = () => {
+    if (!dreamAnswer.trim()) return;
+    return run("start", "Could not start.", async () => {
+      const data = await startSession({ dreamAnswer: dreamAnswer.trim() });
       applySessionSnapshot(data);
       localStorage.setItem(SESSION_STORAGE_KEY, data.sessionId);
       setStage("survey");
       setShowRail(true);
       setDemoDrafts({});
-    } catch (e) {
-      setError(e.message || "Could not start.");
-    } finally {
-      setBusy((p) => ({ ...p, start: false }));
-    }
+    });
   };
 
   const handleDemoDraftChange = (questionId, value) =>
     setDemoDrafts((drafts) => ({ ...drafts, [questionId]: value }));
 
   // All four answers land on one screen, but the route takes one at a time and
-  // advances the step the moment all four are present. On a first pass that is
-  // the last POST, and the loop is trivial. A rail revisit is where it bites:
-  //   * Every answer is already saved, so the FIRST post advances the step and
-  //     every later one 400s on the route's step guard — silently dropping the
-  //     user's other edits. Stepping back through /goto keeps them all.
-  //   * If the revisit changed nothing there is no post to make at all, and the
-  //     user would sit on a Continue button that does nothing. Re-posting one
-  //     unchanged answer is what makes the backend re-run its all-answered
-  //     check and move forward, which is the documented rail invariant:
-  //     completing a revisited step advances exactly as on the first pass.
-  // A failure mid-chain leaves the earlier answers saved; re-submitting sends
-  // only what the snapshot still lacks.
-  const handleSubmitDemographics = async () => {
+  // advances the step the moment all four are present. On a rail revisit every
+  // answer is already saved, so the first post advances the step and later ones
+  // would 400 on the step guard — stepping back through /goto keeps them all.
+  // An unchanged revisit re-posts one answer so the backend re-runs its
+  // all-answered check and moves forward, as on the first pass. A failure
+  // mid-chain leaves earlier answers saved; re-submitting sends only the rest.
+  const handleSubmitDemographics = () => {
     if (!sessionId) return;
     const changed = demographicsPayloads(demographicQuestions, demoDrafts, demoAnswers);
     const payloads = changed.length
       ? changed
       : demographicsPayloads(demographicQuestions, demoDrafts, {}).slice(0, 1);
     if (!payloads.length) return;
-    setError("");
-    setBusy((p) => ({ ...p, demo: true }));
-    try {
+    return run("demo", "Could not save.", async () => {
       let currentStep = step;
       for (const payload of payloads) {
         if (currentStep !== "demographics") {
@@ -373,199 +410,84 @@ function App() {
         applySessionSnapshot(data);
         currentStep = data.step;
       }
-    } catch (e) {
-      setError(e.message || "Could not save.");
-    } finally {
-      setBusy((p) => ({ ...p, demo: false }));
-    }
+    });
   };
 
-  const handleSubmitBigFive = async (value) => {
-    if (!sessionId) return;
+  const handleSubmitBigFive = (value) => {
     const item = bigFiveItems[bigFiveIndex];
-    if (!item) return;
-    setError("");
-    setBusy((p) => ({ ...p, bigFive: true }));
-    try {
-      const data = await submitBigFiveAnswer({ sessionId, itemId: item.id, value });
-      applySessionSnapshot(data);
-      if (bigFiveIndex < bigFiveItems.length - 1) {
-        setBigFiveIndex((i) => i + 1);
-      }
-    } catch (e) {
-      setError(e.message || "Could not save.");
-    } finally {
-      setBusy((p) => ({ ...p, bigFive: false }));
-    }
+    if (!sessionId || !item) return;
+    return run("bigFive", "Could not save.", async () => {
+      applySessionSnapshot(await submitBigFiveAnswer({ sessionId, itemId: item.id, value }));
+      if (bigFiveIndex < bigFiveItems.length - 1) setBigFiveIndex((i) => i + 1);
+    });
   };
 
-  const handleBackBigFive = () => {
-    setBigFiveIndex((i) => Math.max(0, i - 1));
-  };
-
-  const handleStartRiasec = async () => {
+  const handleStartRiasec = () => {
     if (!sessionId) return;
-    setError("");
-    setBusy((p) => ({ ...p, riasecStart: true }));
-    try {
-      const data = await startRiasec({ sessionId });
-      applySessionSnapshot(data);
-      setRetryAction(null);
-      setRiasecIndex(0);
-    } catch (e) {
-      setError(e.message || "Could not load the interests quiz.");
-      setRetryAction(() => handleStartRiasec);
-    } finally {
-      setBusy((p) => ({ ...p, riasecStart: false }));
-    }
+    return run(
+      "riasecStart",
+      "Could not load the interests quiz.",
+      async () => {
+        applySessionSnapshot(await startRiasec({ sessionId }));
+        setRiasecIndex(0);
+      },
+      handleStartRiasec
+    );
   };
 
-  // Item generation is server-side; kick it off the moment the step arrives.
-  useEffect(() => {
-    if (stage !== "survey" || step !== "riasec") return;
-    if (riasecItems.length || busy.riasecStart) return;
-    handleStartRiasec();
-    // busy flag + handler identity intentionally omitted: this effect must
-    // fire once per riasec-step entry, not on every busy-state flip.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage, step, riasecItems.length]);
-
-  const handleSubmitRiasec = async (value) => {
-    if (!sessionId) return;
+  const handleSubmitRiasec = (value) => {
     const item = riasecItems[riasecIndex];
-    if (!item) return;
-    setError("");
-    setBusy((p) => ({ ...p, riasec: true }));
-    try {
-      const data = await submitRiasecAnswer({ sessionId, itemId: item.id, value });
-      applySessionSnapshot(data);
+    if (!sessionId || !item) return;
+    return run("riasec", "Could not save.", async () => {
+      applySessionSnapshot(await submitRiasecAnswer({ sessionId, itemId: item.id, value }));
       if (riasecIndex < riasecItems.length - 1) setRiasecIndex((i) => i + 1);
-    } catch (e) {
-      setError(e.message || "Could not save.");
-    } finally {
-      setBusy((p) => ({ ...p, riasec: false }));
-    }
+    });
   };
 
-  const handleSkipRiasec = async () => {
-    if (!sessionId) return;
-    setError("");
-    setBusy((p) => ({ ...p, riasecSkip: true }));
-    try {
-      const data = await skipRiasec({ sessionId });
-      applySessionSnapshot(data);
-    } catch (e) {
-      setError(e.message || "Could not estimate interests.");
-    } finally {
-      setBusy((p) => ({ ...p, riasecSkip: false }));
-    }
-  };
+  const handleSkipRiasec = () =>
+    sessionId &&
+    sync("riasecSkip", "Could not estimate interests.", () => skipRiasec({ sessionId }));
 
-  const handleValuesStart = async () => {
-    if (!sessionId) return;
-    setError("");
-    setBusy((p) => ({ ...p, values: true }));
-    try {
-      const data = await startValues({ sessionId });
-      applySessionSnapshot(data);
-    } catch (e) {
-      setError(e.message || "Could not start the values step.");
-    } finally {
-      setBusy((p) => ({ ...p, values: false }));
-    }
-  };
+  const handleValuesStart = () =>
+    sessionId &&
+    sync("values", "Could not start the values step.", () => startValues({ sessionId }));
 
-  const handleValuesAnswer = async (winner) => {
-    if (!sessionId || !valuesComparison) return;
-    setError("");
-    setBusy((p) => ({ ...p, values: true }));
-    try {
-      const data = await submitValuesAnswer({
-        sessionId,
-        comparisonId: valuesComparison.comparisonId,
-        winner,
-      });
-      applySessionSnapshot(data);
-    } catch (e) {
-      setError(e.message || "Could not record your choice.");
-    } finally {
-      setBusy((p) => ({ ...p, values: false }));
-    }
-  };
+  const handleValuesAnswer = (winner) =>
+    sessionId &&
+    valuesComparison &&
+    sync("values", "Could not record your choice.", () =>
+      submitValuesAnswer({ sessionId, comparisonId: valuesComparison.comparisonId, winner })
+    );
 
-  const handleValuesConfirm = async () => {
+  const handleValuesConfirm = () => {
     if (!sessionId || valuesRankDraft.length !== 6) return;
-    setError("");
-    setBusy((p) => ({ ...p, valuesConfirm: true }));
-    try {
-      const data = await confirmValues({ sessionId, order: valuesRankDraft });
-      applySessionSnapshot(data);
+    return run("valuesConfirm", "Could not save your hierarchy.", async () => {
+      applySessionSnapshot(await confirmValues({ sessionId, order: valuesRankDraft }));
       setValuesRankDraft([]);
-    } catch (e) {
-      setError(e.message || "Could not save your hierarchy.");
-    } finally {
-      setBusy((p) => ({ ...p, valuesConfirm: false }));
-    }
+    });
   };
 
-  const handleSummaryContinue = async () => {
-    if (!sessionId) return;
-    setError("");
-    setBusy((p) => ({ ...p, summary: true }));
-    try {
-      const data = await continueSummary({ sessionId });
-      applySessionSnapshot(data);
-    } catch (e) {
-      setError(e.message || "Could not continue.");
-    } finally {
-      setBusy((p) => ({ ...p, summary: false }));
-    }
-  };
+  const handleSummaryContinue = () =>
+    sessionId && sync("summary", "Could not continue.", () => continueSummary({ sessionId }));
 
-  const handleSelectCvIntent = async (value) => {
-    if (!sessionId) return;
-    setError("");
-    setBusy((p) => ({ ...p, cvIntent: true }));
-    try {
-      const data = await postCvIntent({ sessionId, cvIntent: value });
-      applySessionSnapshot(data);
-    } catch (e) {
-      setError(e.message || "Could not save your choice.");
-    } finally {
-      setBusy((p) => ({ ...p, cvIntent: false }));
-    }
-  };
+  const handleSelectCvIntent = (value) =>
+    sessionId &&
+    sync("cvIntent", "Could not save your choice.", () =>
+      postCvIntent({ sessionId, cvIntent: value })
+    );
 
-  const handleSubmitCvText = async () => {
-    if (!sessionId || !cvDraft.trim()) return;
-    setError("");
-    setBusy((p) => ({ ...p, cv: true }));
-    try {
-      const data = await submitCvText({ sessionId, cvText: cvDraft.trim() });
-      applySessionSnapshot(data);
-      setRetryAction(null);
-    } catch (e) {
-      setError(e.message || "Could not analyse the CV.");
-      setRetryAction(() => handleSubmitCvText);
-    } finally {
-      setBusy((p) => ({ ...p, cv: false }));
-    }
-  };
+  const handleSubmitCvText = () =>
+    sessionId &&
+    cvDraft.trim() &&
+    sync(
+      "cv",
+      "Could not analyse the CV.",
+      () => submitCvText({ sessionId, cvText: cvDraft.trim() }),
+      handleSubmitCvText
+    );
 
-  const handleUploadCv = async (file) => {
-    if (!sessionId) return;
-    setError("");
-    setBusy((p) => ({ ...p, cv: true }));
-    try {
-      const data = await uploadCvFile({ sessionId, file });
-      applySessionSnapshot(data);
-      setRetryAction(null);
-    } catch (e) {
-      setError(e.message || "Could not read the file.");
-    } finally {
-      setBusy((p) => ({ ...p, cv: false }));
-    }
-  };
+  const handleUploadCv = (file) =>
+    sessionId && sync("cv", "Could not read the file.", () => uploadCvFile({ sessionId, file }));
 
   // Back on the journey: step to the previous question with its saved answer
   // restored, or leave the journey entirely from the first one. Answers live on
@@ -581,79 +503,46 @@ function App() {
     setJourneyIndex((i) => i - 1);
   };
 
-  const handleSubmitJourney = async (rawValue) => {
-    if (!sessionId) return;
+  const handleSubmitJourney = (rawValue) => {
     const q = careerJourneyQuestions[journeyIndex];
-    if (!q || !String(rawValue).trim()) return;
-    setError("");
-    setBusy((p) => ({ ...p, journey: true }));
-    try {
-      const data = await submitJourneyAnswer({
-        sessionId,
-        questionId: q.id,
-        value: String(rawValue).trim(),
-      });
+    const value = String(rawValue).trim();
+    if (!sessionId || !q || !value) return;
+    return run("journey", "Could not save.", async () => {
+      const data = await submitJourneyAnswer({ sessionId, questionId: q.id, value });
       applySessionSnapshot(data);
       if (journeyIndex < careerJourneyQuestions.length - 1) {
         const nextQ = careerJourneyQuestions[journeyIndex + 1];
         setJourneyDraft(data.careerJourneyAnswers?.[nextQ.id] || "");
         setJourneyIndex((i) => i + 1);
       }
-    } catch (e) {
-      setError(e.message || "Could not save.");
-    } finally {
-      setBusy((p) => ({ ...p, journey: false }));
-    }
+    });
   };
 
-  // The engine now runs unattended on the `tree` screen, where the rail is
-  // still live — so the step can change while the request is in flight. The
-  // completion reads it through this ref: applying the snapshot after a rail
-  // click would drag the user back out of the step they just opened.
+  // Generation runs unattended on the `tree` screen, where the rail is still
+  // live — the step can change while the request is in flight. Applying the
+  // snapshot after a rail click would drag the user back out of the step they
+  // just opened, so the completion checks the current step through this ref.
   const stepRef = useRef(step);
-  stepRef.current = step;
-
-  const handleEnterLifePath = async () => {
-    if (!sessionId) return;
-    setError("");
-    setBusy((p) => ({ ...p, enterTree: true }));
-    try {
-      const data = await fetchFirstOutput({ sessionId });
-      if (stepRef.current !== "tree") return;
-      applySessionSnapshot(data);
-      setRetryAction(null);
-      setStage("tree");
-    } catch (e) {
-      setError(e.message || "Could not start the Life Path Engine.");
-      setRetryAction(() => handleEnterLifePath);
-    } finally {
-      setBusy((p) => ({ ...p, enterTree: false }));
-    }
-  };
-
-  // `tree` has no screen of its own: reaching it is the request for the 1st
-  // output, so generation starts the moment the step opens (after Summary, or
-  // on a reload that lands here before an output exists). A failure sets the
-  // error and stops the effect re-firing; the error row's Try again is the way
-  // back in.
   useEffect(() => {
-    if (step === "tree" && sessionId && outputs.length === 0 && !busy.enterTree && !error) {
-      handleEnterLifePath();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, sessionId, outputs.length, busy.enterTree, error]);
+    stepRef.current = step;
+  }, [step]);
 
-  const currentBigFiveItem = bigFiveItems[bigFiveIndex] || null;
+  const handleEnterLifePath = () =>
+    sessionId &&
+    run(
+      "enterTree",
+      "Could not start the Life Path Engine.",
+      async () => {
+        const data = await fetchFirstOutput({ sessionId });
+        if (stepRef.current !== "tree") return;
+        applySessionSnapshot(data);
+        setStage("tree");
+      },
+      handleEnterLifePath
+    );
 
   const latestOutput = outputs.length ? outputs[outputs.length - 1] : null;
   const acceptedOutput = outputs.find((o) => o.id === acceptedOutputId) || null;
-
-  const ADVICE_VIEWS = {
-    aiRecommendations: { title: "AI Recommendations", format: (i) => `${i.title} — ${i.detail}` },
-    events: { title: "Events", format: (i) => `${i.name} — ${i.why}` },
-    universities: { title: "Universities & Majors", format: (i) => `${i.name}: ${i.program}` },
-    courses: { title: "Courses", format: (i) => `${i.name} (${i.provider}) — ${i.why}` },
-  };
 
   const handleOutputOpen = (output) => {
     setStageDetail(null);
@@ -690,213 +579,116 @@ function App() {
     });
   };
 
-  const handleGenerateRoadmap = async (outputId) => {
-    if (!sessionId) return;
-    setError("");
-    setBusy((p) => ({ ...p, roadmap: true }));
-    try {
-      const data = await generateRoadmap({ sessionId, outputId });
-      applySessionSnapshot(data);
-      setRetryAction(null);
-    } catch (e) {
-      setError(e.message || "Could not generate roadmap.");
-      setRetryAction(() => () => handleGenerateRoadmap(outputId));
-    } finally {
-      setBusy((p) => ({ ...p, roadmap: false }));
-    }
-  };
+  const handleGenerateRoadmap = (outputId) =>
+    sessionId &&
+    sync(
+      "roadmap",
+      "Could not generate roadmap.",
+      () => generateRoadmap({ sessionId, outputId }),
+      () => handleGenerateRoadmap(outputId)
+    );
 
+  // Yes-branch: the roadmap builds right after the advice blocks land.
   const handleAcceptOutput = async () => {
     if (!sessionId || !latestOutput) return;
     const outputId = latestOutput.id;
-    setError("");
-    setBusy((p) => ({ ...p, accept: true }));
-    try {
-      const data = await acceptOutput({ sessionId, outputId });
-      applySessionSnapshot(data);
-      setRetryAction(null);
-    } catch (e) {
-      setError(e.message || "Could not accept the output.");
-      setRetryAction(() => handleAcceptOutput);
-      setBusy((p) => ({ ...p, accept: false }));
-      return;
-    }
-    setBusy((p) => ({ ...p, accept: false }));
-    // Yes-branch: the roadmap builds right after the advice blocks land.
-    await handleGenerateRoadmap(outputId);
+    const accepted = await sync(
+      "accept",
+      "Could not accept the output.",
+      () => acceptOutput({ sessionId, outputId }),
+      handleAcceptOutput
+    );
+    if (accepted) await handleGenerateRoadmap(outputId);
   };
+
+  const handleNotSuitable = () =>
+    sessionId &&
+    latestOutput &&
+    sync(
+      "refine",
+      "Could not regenerate the output.",
+      () => refineOutput({ sessionId, outputId: latestOutput.id }),
+      handleNotSuitable
+    );
 
   // Rail navigation between steps already reached. The backend refuses anything
   // past furthestStep, so this cannot skip unanswered work; it only moves the
   // step, which is why the full snapshot can be applied wholesale.
-  const handleRailNavigate = async (targetStep) => {
-    if (!sessionId || targetStep === step) return;
-    setError("");
-    setBusy((p) => ({ ...p, goto: true }));
-    try {
-      const data = await sessionGoto({ sessionId, step: targetStep });
-      hydrateFromSnapshot(data);
-      setRetryAction(null);
-    } catch (e) {
-      setError(e.message || "Could not switch steps.");
-    } finally {
-      setBusy((p) => ({ ...p, goto: false }));
-    }
-  };
+  const handleRailNavigate = (targetStep) =>
+    sessionId &&
+    targetStep !== step &&
+    run("goto", "Could not switch steps.", async () =>
+      hydrateFromSnapshot(await sessionGoto({ sessionId, step: targetStep }))
+    );
 
   // Dev stage jump. The composite targets cannot call handleEnterLifePath /
   // handleAcceptOutput: those read sessionId and latestOutput from React state,
   // which has not re-rendered yet inside this same async function. So chain the
-  // api wrappers on ids taken straight from each response and hydrate once at
-  // the end.
-  const handleDevJump = async (target) => {
-    const step = target === "tree+output" || target === "detail" ? "tree" : target;
-    setError("");
-    setBusy((p) => ({ ...p, dev: true }));
-    try {
-      let data = await devJump({ sessionId: sessionId || undefined, step });
+  // api wrappers on ids taken straight from each response and hydrate once.
+  const handleDevJump = (target) =>
+    run("dev", "Dev jump failed.", async () => {
+      const composite = target === "tree+output" || target === "detail";
+      let data = await devJump({
+        sessionId: sessionId || undefined,
+        step: composite ? "tree" : target,
+      });
       const jumpedSessionId = data.sessionId;
       localStorage.setItem(SESSION_STORAGE_KEY, jumpedSessionId);
-
-      if (target === "tree+output" || target === "detail") {
-        data = await fetchFirstOutput({ sessionId: jumpedSessionId });
-      }
+      if (composite) data = await fetchFirstOutput({ sessionId: jumpedSessionId });
       if (target === "detail") {
         const outputId = data.outputs[data.outputs.length - 1].id;
-        data = await acceptOutput({ sessionId: jumpedSessionId, outputId });
-        // The real Yes-branch always builds the roadmap right after accepting;
-        // stopping short would leave a state no user ever sees.
+        await acceptOutput({ sessionId: jumpedSessionId, outputId });
+        // The real Yes-branch always builds the roadmap right after accepting.
         data = await generateRoadmap({ sessionId: jumpedSessionId, outputId });
       }
-
       hydrateFromSnapshot(data);
-      setRetryAction(null);
-    } catch (e) {
-      setError(e.message || "Dev jump failed.");
-    } finally {
-      setBusy((p) => ({ ...p, dev: false }));
-    }
-  };
-
-  const handleNotSuitable = async () => {
-    if (!sessionId || !latestOutput) return;
-    setError("");
-    setBusy((p) => ({ ...p, refine: true }));
-    try {
-      const data = await refineOutput({ sessionId, outputId: latestOutput.id, notSuitable: true });
-      applySessionSnapshot(data);
-      setRetryAction(null);
-    } catch (e) {
-      setError(e.message || "Could not regenerate the output.");
-      setRetryAction(() => handleNotSuitable);
-    } finally {
-      setBusy((p) => ({ ...p, refine: false }));
-    }
-  };
+    });
 
   const handleStageOpen = (stageItem, index) => {
     setInfoView(null);
     setStageDetail({ stage: stageItem, index });
   };
 
-  // The hero nav is real navigation: both entries open the same side panel the
-  // graph uses, carrying the methodology rather than marketing copy.
-  const METHODOLOGY_VIEWS = {
-    "how-it-works": {
-      archetype: "how it works",
-      title: "Five instruments, one profile",
-      sections: [
-        {
-          heading: "What you answer",
-          items: [
-            "Four demographic questions.",
-            "The public-domain Mini-IPIP-20, rated 1–5, scored to OCEAN 0–100 plus Stability/Plasticity.",
-            "Twelve fixed activity statements, rated for enjoyment — never job titles — scored to a Holland code.",
-            "An adaptive Ford–Johnson merge-insertion tournament, ≤10 comparisons, ranking the six Minnesota work values.",
-            "Your CV, or seven career-journey questions if you don't have one.",
-          ],
-        },
-      ],
-    },
-    "the-engine": {
-      archetype: "the engine",
-      title: "Grounded in O*NET, traced to your answers",
-      sections: [
-        {
-          heading: "How a suggestion is built",
-          items: [
-            "Your Holland code ranks the field families; the O*NET snapshot ranks occupations inside them by measured interest profile.",
-            "The occupation must come from that shortlist — the engine cannot invent one.",
-            "Its six measured work values are scored against your confirmed hierarchy as a single fit percentage.",
-            "Every line of the explanation points back to a score, a rank, or a sentence you wrote.",
-          ],
-        },
-      ],
-    },
-  };
-
   const handleOpenMethodology = (key) => setInfoView(METHODOLOGY_VIEWS[key] || null);
 
-  const resetAll = () => {
-    localStorage.removeItem(SESSION_STORAGE_KEY);
-    setConfirmHome(false);
-    setRestoring(false);
-    setStage("entry");
-    setDreamAnswer("");
-    setSessionId("");
-    setStep("entry");
-    setPathStage("output");
-    setFurthestStep("demographics");
-    setProgress(null);
-    setDemographicQuestions([]);
-    setDemoAnswers({});
-    setDemoDrafts({});
-    setBigFiveItems([]);
-    setBigFiveAnswers({});
-    setBigFiveIndex(0);
-    setRiasecItems([]);
-    setRiasecAnswers({});
-    setRiasecIndex(0);
-    setValuesComparison(null);
-    setValuesRanking(null);
-    setValuesRankDraft([]);
-    setCareerJourneyQuestions([]);
-    setJourneyIndex(0);
-    setJourneyAnswers({});
-    setJourneyDraft("");
-    setCvMode("choice");
-    setCvDraft("");
-    setCvIntent("");
-    setOutputs([]);
-    setAcceptedOutputId(null);
-    setRoadmaps({});
-    setStageDetail(null);
-    setInfoView(null);
-    setProfile(null);
-    setProfileOpen(false);
-    setError("");
-    setRetryAction(null);
-    setBusy({
-      start: false,
-      demo: false,
-      bigFive: false,
-      riasecStart: false,
-      riasec: false,
-      riasecSkip: false,
-      values: false,
-      valuesConfirm: false,
-      summary: false,
-      cv: false,
-      cvIntent: false,
-      journey: false,
-      enterTree: false,
-      accept: false,
-      roadmap: false,
-      refine: false,
-      goto: false,
-      dev: false,
-    });
-  };
+  // Kick off the values tournament the moment the step opens (once).
+  useEffect(() => {
+    if (
+      step === "values" &&
+      sessionId &&
+      !valuesComparison &&
+      !profile?.userValues &&
+      !valuesRanking &&
+      !busy.values
+    ) {
+      // Starts a request; the busy flag set here is its pending state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      handleValuesStart();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, sessionId, valuesComparison, valuesRanking]);
+
+  // The RIASEC items are served by the backend; fetch them the moment the step
+  // arrives. Fires once per step entry, not on every busy-state flip.
+  useEffect(() => {
+    if (stage !== "survey" || step !== "riasec") return;
+    if (riasecItems.length || busy.riasecStart) return;
+    handleStartRiasec();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, step, riasecItems.length]);
+
+  // `tree` has no screen of its own: reaching it is the request for the 1st
+  // output (after Summary, or on a reload that lands here before an output
+  // exists). A failure sets the error and stops the effect re-firing; the error
+  // row's Try again is the way back in.
+  useEffect(() => {
+    if (step === "tree" && sessionId && outputs.length === 0 && !busy.enterTree && !error) {
+      handleEnterLifePath();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, sessionId, outputs.length, busy.enterTree, error]);
+
+  const currentBigFiveItem = bigFiveItems[bigFiveIndex] || null;
 
   const graph = buildLifePathGraph({
     outputs,
@@ -912,8 +704,6 @@ function App() {
   const selectedRoadmap = acceptedOutputId ? roadmaps[acceptedOutputId] : null;
   const roadmapVisible = Boolean(selectedRoadmap);
 
-  // Spec 5.11's centre header. The mockup only ever draws the accepted graph;
-  // the leading word keeps the line honest on the way there.
   const graphHeadline = `${
     !outputs.length ? "generating" : !acceptedOutputId ? "exploring" : "accepted"
   } · your life path graph`;
@@ -976,10 +766,9 @@ function App() {
         busy={busy.goto}
         onNavigate={handleRailNavigate}
       />
-      {/* Restart sits with the rail, not in the screen's top-left: deviation 9
-          gives that slot to the per-step Back, and the two are the same
-          absolutely-positioned box. */}
-      <button type="button" className="screen-restart" onClick={resetAll}>
+      {/* Restart sits with the rail: the screen's top-left slot belongs to the
+          per-step Back. */}
+      <button type="button" className="screen-restart" onClick={onReset}>
         Restart
       </button>
     </>
@@ -993,11 +782,9 @@ function App() {
     );
   }
 
-  // The wordmark is the way home from anywhere in the flow. "Home" is the
-  // entry screen and there is no router, so going there does what Restart
-  // does: the session is dropped and the hero comes back. Because a logo
-  // reads as navigation and not as a reset, it asks first. On the entry
-  // screen itself no handler is published, so the mark stays plain text.
+  // The wordmark is the way home. There is no router, so home means Restart;
+  // a logo reads as navigation rather than a reset, so it asks first. On the
+  // entry screen no handler is published and the mark stays plain text.
   const homeNav = stage === "entry" ? null : () => setConfirmHome(true);
 
   return (
@@ -1046,7 +833,7 @@ function App() {
                 total={bigFiveItems.length}
                 busy={busy.bigFive}
                 onAnswer={handleSubmitBigFive}
-                onBack={handleBackBigFive}
+                onBack={() => setBigFiveIndex((i) => Math.max(0, i - 1))}
                 canGoBack={bigFiveIndex > 0}
                 footer={surveyFooter}
               />
@@ -1162,16 +949,7 @@ function App() {
               </ScreenShell>
             )}
 
-            {error && (
-              <div className="error-row">
-                <p className="error-text">{error}</p>
-                {retryAction && (
-                  <button type="button" className="ghost-action" onClick={() => retryAction()}>
-                    Try again
-                  </button>
-                )}
-              </div>
-            )}
+            <ErrorRow error={error} retryAction={retryAction} />
           </section>
         )}
 
@@ -1181,7 +959,7 @@ function App() {
             <div className="graph-header">
               <span className="graph-header-lead">
                 <Wordmark />
-                <button type="button" className="screen-back" onClick={resetAll}>
+                <button type="button" className="screen-back" onClick={onReset}>
                   ← Restart
                 </button>
               </span>
@@ -1244,13 +1022,7 @@ function App() {
 
             <AnimatePresence>
               {stageDetail && (
-                <Motion.div
-                  key="stage-detail"
-                  initial={{ x: 20, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  exit={{ x: 20, opacity: 0 }}
-                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                >
+                <Motion.div key="stage-detail" {...PANEL_MOTION}>
                   <DetailPanel
                     data={{
                       path: {
@@ -1266,16 +1038,7 @@ function App() {
               )}
             </AnimatePresence>
 
-            {error && (
-              <div className="error-row graph-error">
-                <p className="error-text">{error}</p>
-                {retryAction && (
-                  <button type="button" className="ghost-action" onClick={() => retryAction()}>
-                    Try again
-                  </button>
-                )}
-              </div>
-            )}
+            <ErrorRow error={error} retryAction={retryAction} className="graph-error" />
           </div>
         )}
 
@@ -1296,20 +1059,14 @@ function App() {
             body="Going back to the start page ends this session. Your answers and every generated path are dropped, and there is no way back to them."
             confirmLabel="Yes, start over"
             cancelLabel="Stay here"
-            onConfirm={resetAll}
+            onConfirm={onReset}
             onCancel={() => setConfirmHome(false)}
           />
         )}
 
         <AnimatePresence>
           {infoView && (
-            <Motion.div
-              key="info-view"
-              initial={{ x: 20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: 20, opacity: 0 }}
-              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-            >
+            <Motion.div key="info-view" {...PANEL_MOTION}>
               <InfoPanel view={infoView} onClose={() => setInfoView(null)} />
             </Motion.div>
           )}
@@ -1318,5 +1075,3 @@ function App() {
     </HomeNavContext.Provider>
   );
 }
-
-export default App;
