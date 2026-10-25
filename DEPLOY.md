@@ -24,11 +24,6 @@ https://ai-survey-backend-3g62.onrender.com
   `frontend/**` или `render.yaml` (`buildFilter`) — правки доков не тратят
   free-минуты билда.
 
-До 2026-10 фронт жил на Vercel (`ai-survey-frontend-bay.vercel.app`) с
-rewrite `/api/*` на Render. Теперь `frontend/vercel.json` только редиректит
-этот домен на Render, чтобы старые ссылки не умерли; Vercel-проект можно
-удалить, когда старые ссылки больше не нужны.
-
 ## Холодный старт и keep-alive
 
 Free tier засыпает после 15 минут без запросов; первый запрос будит сервис
@@ -78,8 +73,7 @@ tier):
 1. В Render Dashboard → **New** → **Blueprint** → выбрать репозиторий `H1di/ai_survey`.
 2. Render найдёт `render.yaml` в корне и предложит создать сервис `ai-survey-backend`
    (публичный URL Render выдаст сам; при занятом имени добавит суффикс —
-   тогда обнови `CORS_ORIGIN` в `render.yaml` и редирект в
-   `frontend/vercel.json` под фактический URL).
+   тогда обнови `CORS_ORIGIN` в `render.yaml` под фактический URL).
 3. При создании Render попросит заполнить переменные с `sync: false` — это
    `OPENAI_API_KEY`. Если ключа пока нет — можно оставить пустым, приложение
    само уйдёт в детерминированный fallback-режим (см. `backend/.env.example`).
@@ -101,8 +95,7 @@ render blueprint launch
 
 Если Render сообщит, что имя `ai-survey-backend` уже используется кем-то
 другим: выбери новое уникальное имя и обнови синхронно `render.yaml`
-(`services[0].name`, `CORS_ORIGIN`), редирект в `frontend/vercel.json` и URL
-keep-alive монитора.
+(`services[0].name`, `CORS_ORIGIN`) и URL keep-alive монитора.
 
 ## Что дальше
 

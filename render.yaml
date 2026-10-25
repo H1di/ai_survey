@@ -1,7 +1,5 @@
 # Render Blueprint — единственный сервис приложения (free plan): Express отдаёт
 # и API (/api/*), и собранный фронтенд (frontend/dist, SPA fallback).
-# Vercel больше не используется — frontend/vercel.json только редиректит
-# старый домен сюда.
 # Документация: https://render.com/docs/blueprint-spec
 #
 # ВАЖНО: имя сервиса ≠ его публичный URL. Render выдаёт URL один раз, при
@@ -17,7 +15,7 @@ services:
   # name — это идентичность сервиса внутри Blueprint, а не его адрес (см. шапку).
   # Должно совпадать с именем живого сервиса на Render — "ai-survey-backend".
   # Публичный URL живого сервиса — https://ai-survey-backend-3g62.onrender.com,
-  # он же прописан в CORS_ORIGIN ниже и в редиректе frontend/vercel.json.
+  # он же прописан в CORS_ORIGIN ниже.
   # Менять name нельзя: sync не переименует сервис, а создаст
   # новый, пустой.
   - type: web
