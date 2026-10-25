@@ -2,10 +2,11 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
-  "rewrites": [
+  "redirects": [
     {
-      "source": "/api/:path*",
-      "destination": "https://ai-survey-backend-3g62.onrender.com/api/:path*"
+      "source": "/:path*",
+      "destination": "https://ai-survey-backend-3g62.onrender.com/:path*",
+      "permanent": false
     }
   ]
 }
