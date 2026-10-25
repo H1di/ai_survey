@@ -49,6 +49,8 @@ const {
 } = require("./onet");
 const { createOnetApi } = require("./services/onetApi");
 const { randomUUID, createHash, timingSafeEqual } = require("node:crypto");
+const fs = require("node:fs");
+const path = require("node:path");
 const { logError, resolveStatus } = require("./logger");
 
 // Tests set their own env (and force fallback by blanking the key) — skip
@@ -823,6 +825,37 @@ app.post("/api/roadmap/generate", async (req, res) => {
     releaseLock(lockKey);
   }
 });
+
+// --- Frontend --------------------------------------------------------------
+// Single-service deploy: when the Vite build is present, this process also
+// serves the SPA, so the browser talks to one origin. Without a build (local
+// dev on Vite, most tests) nothing is mounted. /api never reaches the SPA
+// fallback: an unknown API path must keep Express's default 404, which the dev
+// gate's indistinguishability depends on.
+const FRONTEND_DIST = process.env.FRONTEND_DIST || path.join(__dirname, "../frontend/dist");
+const FRONTEND_INDEX = path.join(FRONTEND_DIST, "index.html");
+
+if (fs.existsSync(FRONTEND_INDEX)) {
+  app.use(
+    express.static(FRONTEND_DIST, {
+      index: false,
+      setHeaders(res, filePath) {
+        // Vite fingerprints everything under assets/, so those never change.
+        const hashed = filePath.startsWith(path.join(FRONTEND_DIST, "assets") + path.sep);
+        res.setHeader(
+          "Cache-Control",
+          hashed ? "public, max-age=31536000, immutable" : "no-cache"
+        );
+      },
+    })
+  );
+  // Extensionless non-API paths get the app shell; a missing file with an
+  // extension (a stale /assets/*.js) stays a real 404 instead of HTML.
+  app.get(/^(?!\/api(?:\/|$))[^.]*$/, (req, res) => {
+    res.setHeader("Cache-Control", "no-cache");
+    res.sendFile(FRONTEND_INDEX);
+  });
+}
 
 // Multer failures (size cap, malformed multipart) are user errors, not 500s.
 app.use((error, req, res, next) => {

@@ -1,4 +1,7 @@
-# Render Blueprint — деплоит только backend/ как Node Web Service (free plan).
+# Render Blueprint — единственный сервис приложения (free plan): Express отдаёт
+# и API (/api/*), и собранный фронтенд (frontend/dist, SPA fallback).
+# Vercel больше не используется — frontend/vercel.json только редиректит
+# старый домен сюда.
 # Документация: https://render.com/docs/blueprint-spec
 #
 # ВАЖНО: имя сервиса ≠ его публичный URL. Render выдаёт URL один раз, при
@@ -14,8 +17,8 @@ services:
   # name — это идентичность сервиса внутри Blueprint, а не его адрес (см. шапку).
   # Должно совпадать с именем живого сервиса на Render — "ai-survey-backend".
   # Публичный URL живого сервиса — https://ai-survey-backend-3g62.onrender.com,
-  # он же прописан в frontend/vercel.json (rewrites → destination) и в CORS_ORIGIN
-  # на стороне фронта. Менять name нельзя: sync не переименует сервис, а создаст
+  # он же прописан в CORS_ORIGIN ниже и в редиректе frontend/vercel.json.
+  # Менять name нельзя: sync не переименует сервис, а создаст
   # новый, пустой.
   - type: web
     name: ai-survey-backend
@@ -29,9 +32,17 @@ services:
     # boot if WEB_CONCURRENCY > 1.
     plan: free
     region: oregon
-    rootDir: backend
-    buildCommand: npm install
-    startCommand: npm start
+    # Root Directory = корень репозитория (rootDir не задан): билду нужны и
+    # backend/, и frontend/, а Render не видит файлов вне rootDir.
+    # NODE_ENV=production ниже действует и на билд, поэтому для фронта
+    # --include=dev — иначе npm пропустит vite.
+    buildCommand: npm ci --prefix backend && npm ci --include=dev --prefix frontend && npm run build --prefix frontend
+    startCommand: npm start --prefix backend
+    buildFilter:
+      paths:
+        - backend/**
+        - frontend/**
+        - render.yaml
     healthCheckPath: /api/health
     autoDeployTrigger: commit
     envVars:
@@ -41,10 +52,10 @@ services:
       # express-rate-limit keys on the real client IP, not the proxy's.
       - key: TRUST_PROXY
         value: "1"
-      # Домен фронтенда на Vercel — должен совпадать с project name,
-      # который используется при деплое фронта (см. DEPLOY.md).
+      # Фронт теперь same-origin, CORS в браузерном пути не участвует;
+      # держим значение правдивым — это собственный URL сервиса.
       - key: CORS_ORIGIN
-        value: https://ai-survey-frontend-bay.vercel.app
+        value: https://ai-survey-backend-3g62.onrender.com
       # Секрет — задаётся вручную в Render Dashboard (или через `render env set`),
       # никогда не коммитится. Без ключа приложение всё равно работает
       # (детерминированные fallback-ответы вместо реального OpenAI).

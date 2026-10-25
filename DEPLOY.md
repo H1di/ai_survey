@@ -2,20 +2,42 @@
 
 Этот файл написан так, чтобы Claude Code мог выполнить деплой сам, шаг за шагом,
 почти без вмешательства человека. Единственное, что нужно от человека — залогиниться
-в Render и Vercel (через браузер, один раз) и, по желанию, дать ключ OpenAI.
+в Render (через браузер, один раз) и, по желанию, дать ключ OpenAI.
 
 ## Что деплоим
 
-- **Backend** (`backend/`, Express API) → Render, free web service.
-- **Frontend** (`frontend/`, Vite + React) → Vercel, free hobby tier.
-- Домены выбраны заранее и захардкожены в конфигах, чтобы не было проблемы
-  "курицы и яйца" (backend должен знать домен фронта для CORS, фронт должен
-  знать домен бэка для прокси):
-  - Backend: `https://ai-survey-backend-3g62.onrender.com`
-  - Frontend: `https://ai-survey-frontend-bay.vercel.app`
+Один сервис — **Render free web service** `ai-survey-backend`:
+https://ai-survey-backend-3g62.onrender.com
 
-Если любое из этих имён окажется занято при деплое — см. раздел
-"Если имя занято" в конце файла.
+- Билд (из корня репозитория): ставит зависимости `backend/` и `frontend/`,
+  собирает Vite-фронт в `frontend/dist` (команда — в `render.yaml`).
+- Рантайм: `backend/server.js` отдаёт `/api/*` и, если `frontend/dist/index.html`
+  существует, статику фронта + SPA fallback для остальных путей без расширения
+  (блок «Frontend» в `server.js`; путь можно переопределить `FRONTEND_DIST`).
+  Фронт ходит на относительные `/api/...` — браузер видит один origin, CORS не
+  участвует.
+- Root Directory сервиса — **корень репозитория** (не `backend`): Render не
+  отдаёт билду файлы вне Root Directory, а фронт лежит в `frontend/`. Если
+  Blueprint sync не сбросил старое значение — очисти поле вручную
+  (Settings → Build & Deploy → Root Directory).
+- Автодеплой на push в `main`, но только при изменениях в `backend/**`,
+  `frontend/**` или `render.yaml` (`buildFilter`) — правки доков не тратят
+  free-минуты билда.
+
+До 2026-10 фронт жил на Vercel (`ai-survey-frontend-bay.vercel.app`) с
+rewrite `/api/*` на Render. Теперь `frontend/vercel.json` только редиректит
+этот домен на Render, чтобы старые ссылки не умерли; Vercel-проект можно
+удалить, когда старые ссылки больше не нужны.
+
+## Холодный старт и keep-alive
+
+Free tier засыпает после 15 минут без запросов; первый запрос будит сервис
+~30–60 сек — теперь это касается и открытия самой страницы. Лечится внешним
+пингом: бесплатный монитор (UptimeRobot / cron-job.org) делает
+`GET https://ai-survey-backend-3g62.onrender.com/api/health` каждые 10 минут.
+750 free-часов Render в месяц хватает на один сервис 24/7 (~744 ч), но
+**только на один** — второй free-сервис в том же workspace с таким пингом
+выбьет лимит.
 
 ## Хранение сессий: in-memory по умолчанию, Upstash Redis опционально
 
@@ -38,7 +60,7 @@ tier):
 `store.hydrate()` перечитывает сессии обратно в Map. Без переменных окружения
 поведение прежнее — чистый in-memory, и локально/в тестах Redis не нужен.
 
-## Шаг 1 — Backend на Render
+## Деплой с нуля (Render)
 
 > **Сервис уже задеплоен** как `ai-survey-backend`, а отвечает на
 > `https://ai-survey-backend-3g62.onrender.com` — суффикс `-3g62` Render добавил
@@ -56,13 +78,15 @@ tier):
 1. В Render Dashboard → **New** → **Blueprint** → выбрать репозиторий `H1di/ai_survey`.
 2. Render найдёт `render.yaml` в корне и предложит создать сервис `ai-survey-backend`
    (публичный URL Render выдаст сам; при занятом имени добавит суффикс —
-   тогда обнови `destination` в `frontend/vercel.json` под фактический URL).
+   тогда обнови `CORS_ORIGIN` в `render.yaml` и редирект в
+   `frontend/vercel.json` под фактический URL).
 3. При создании Render попросит заполнить переменные с `sync: false` — это
    `OPENAI_API_KEY`. Если ключа пока нет — можно оставить пустым, приложение
    само уйдёт в детерминированный fallback-режим (см. `backend/.env.example`).
 4. Deploy. Дождаться статуса "Live".
 5. Проверить: `curl https://ai-survey-backend-3g62.onrender.com/api/health` →
-   должен вернуть JSON со статусом ok.
+   JSON со статусом ok, а `https://ai-survey-backend-3g62.onrender.com/` —
+   стартовый экран приложения.
 
 ### Вариант B — Render CLI (если человек предпочитает терминал)
 ```bash
@@ -73,53 +97,15 @@ render login
 render blueprint launch
 ```
 
-## Шаг 2 — Frontend на Vercel
-
-Предварительно: человек один раз выполняет `vercel login` (открывается браузер).
-
-```bash
-cd frontend
-vercel link --yes --project ai-survey-frontend
-vercel --prod --yes
-```
-
-`frontend/vercel.json` уже содержит:
-- `rewrites` — проксирует все запросы `/api/*` на
-  `https://ai-survey-backend-3g62.onrender.com/api/*`, поэтому фронтенд-код
-  (`frontend/src/api.js`) не нужно менять — он и так ходит на относительные
-  `/api/...` пути.
-- `buildCommand`/`outputDirectory`/`framework` — стандартная Vite-сборка.
-
-После деплоя Vercel выдаст домен вида `ai-survey-frontend-bay.vercel.app` —
-он должен совпасть с тем, что уже прописан в `CORS_ORIGIN` бэкенда
-(см. `render.yaml`). Если Vercel присвоил другой домен — обнови
-`CORS_ORIGIN` в Render Dashboard (Environment → CORS_ORIGIN) и сделай
-Manual Deploy бэкенда заново.
-
-## Шаг 3 — Проверка сквозного сценария
-
-1. Открыть `https://ai-survey-frontend-bay.vercel.app`.
-2. Пройти entry → demographics → big five → riasec → job characteristics → cv.
-3. Убедиться, что граф на Page 3 генерируется (или fallback, если нет
-   OPENAI_API_KEY) без CORS-ошибок в консоли браузера.
-
 ## Если имя занято
 
-Если Render или Vercel сообщат, что имя `ai-survey-backend` /
-`ai-survey-frontend` уже используется кем-то другим:
+Если Render сообщит, что имя `ai-survey-backend` уже используется кем-то
+другим: выбери новое уникальное имя и обнови синхронно `render.yaml`
+(`services[0].name`, `CORS_ORIGIN`), редирект в `frontend/vercel.json` и URL
+keep-alive монитора.
 
-1. Выбери новое уникальное имя, например `ai-survey-backend-<username>`.
-2. Обнови везде синхронно:
-   - `render.yaml` → `services[0].name` и `envVars.CORS_ORIGIN`
-   - `frontend/vercel.json` → `rewrites[0].destination`
-   - команду `vercel link --project <новое-имя-фронта>`
-3. Закоммить изменения и передеплой оба сервиса.
+## Что дальше
 
-## Что дальше (не входит в MVP-деплой, но пригодится)
-
-- Персистентность сессий — **реализована через Upstash Redis** (см. раздел
-  «Хранение сессий» выше); осталось только завести базу и задать креды.
-- Платный tier Render (Starter, $7/мес), если холодные старты станут
-  проблемой для реальных пользователей.
-- Секреты для CI (GitHub Actions) не нужны — Render/Vercel сами следят
-  за репозиторием и передеплоивают на push в `main`.
+- Платный tier Render (Starter, $7/мес) — без засыпания, keep-alive не нужен.
+- Секреты для CI (GitHub Actions) не нужны — Render сам следит за репозиторием
+  и передеплоивает на push в `main`.

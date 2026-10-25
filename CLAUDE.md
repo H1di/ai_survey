@@ -33,6 +33,8 @@ cd backend && npm test
 
 The frontend dev server proxies `/api/*` to `http://localhost:3001` (see `frontend/vite.config.js`).
 
+Production is a single Render free web service (`render.yaml`, `DEPLOY.md`): the build compiles `frontend/dist`, and `backend/server.js` serves it next to `/api` (static + SPA fallback for extensionless non-`/api` paths, mounted only when the build exists; `FRONTEND_DIST` overrides the path). Unknown `/api` paths must keep Express's default 404 — the dev gate relies on it. `frontend/vercel.json` is only a redirect from the retired Vercel domain.
+
 ## Environment
 
 `backend/.env` (copy from `backend/.env.example`):
