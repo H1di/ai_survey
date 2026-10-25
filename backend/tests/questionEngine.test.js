@@ -7,12 +7,12 @@ const {
   computeRiasecScores,
   deriveRiasecCode,
   validateCareerJourneyAnswer,
-} = require("../questionEngine");
+} = require("../assessment/questionEngine");
 const {
   DEMOGRAPHIC_QUESTIONS,
   CAREER_JOURNEY_QUESTIONS,
-} = require("../questionPool");
-const { getStaticRiasecItems } = require("../riasecItems");
+} = require("../assessment/questionPool");
+const { getStaticRiasecItems } = require("../assessment/riasecItems");
 
 test("serializeRiasecItem strips the scoring type", () => {
   const item = { id: "ri_1", type: "R", text: "Fixing things" };

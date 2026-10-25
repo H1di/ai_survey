@@ -8,7 +8,7 @@
 // route, that test is what catches it.
 
 const { STEP_ORDER } = require("./sessionStore");
-const { getStaticRiasecItems } = require("./riasecItems");
+const { getStaticRiasecItems } = require("../assessment/riasecItems");
 const {
   validateDemographicAnswer,
   validateBigFiveAnswer,
@@ -18,8 +18,8 @@ const {
   deriveBigFiveTraits,
   computeRiasecScores,
   deriveRiasecCode,
-} = require("./questionEngine");
-const { rankToWorkValueScores, WORK_VALUE_CURVE_VERSION } = require("./workValues");
+} = require("../assessment/questionEngine");
+const { rankToWorkValueScores, WORK_VALUE_CURVE_VERSION } = require("../engine/workValues");
 
 // One fixed persona: Investigative-Artistic, high Openness, low Neuroticism.
 // Fixed rather than random so a bug reproduces and two runs are comparable.

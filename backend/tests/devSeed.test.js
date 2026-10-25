@@ -3,10 +3,10 @@ process.env.OPENAI_API_KEY = "";
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { SessionStore } = require("../sessionStore");
-const { createAiEngine } = require("../aiEngine");
-const { DEV_PROFILE, seedTo } = require("../devSeed");
-const { WORK_VALUES_ORDER } = require("../workValues");
+const { SessionStore } = require("../core/sessionStore");
+const { createAiEngine } = require("../engine/aiEngine");
+const { DEV_PROFILE, seedTo } = require("../core/devSeed");
+const { WORK_VALUES_ORDER } = require("../engine/workValues");
 
 const aiEngine = createAiEngine({ apiKey: undefined, model: "test" });
 

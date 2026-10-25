@@ -4,7 +4,7 @@
 // become 400s so the route never 500s on a user's weird file.
 const pdfParse = require("pdf-parse");
 const mammoth = require("mammoth");
-const { convertToMarkdown, isMarkitdownAvailable } = require("./services/markitdown");
+const { convertToMarkdown, isMarkitdownAvailable } = require("../services/markitdown");
 
 const BASE_EXTENSIONS = [".pdf", ".docx", ".txt", ".html", ".htm"];
 const MARKITDOWN_ONLY_EXTENSIONS = [".pptx"];

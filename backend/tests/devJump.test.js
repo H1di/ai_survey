@@ -7,8 +7,8 @@ process.env.RATE_LIMIT_AI_MAX = "1000000";
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { app } = require("../server");
-const { STEP_ORDER } = require("../sessionStore");
-const { FILLERS } = require("../devSeed");
+const { STEP_ORDER } = require("../core/sessionStore");
+const { FILLERS } = require("../core/devSeed");
 
 let server;
 let base;

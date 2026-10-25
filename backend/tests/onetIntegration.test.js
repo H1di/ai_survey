@@ -3,10 +3,10 @@ const assert = require("node:assert/strict");
 const {
   buildOrientedFieldPrompt,
   buildWhyThisFitsPrompt,
-} = require("../prompts");
-const { createAiEngine, resolveShortlistSoc } = require("../aiEngine");
-const { getOccupation } = require("../onet");
-const { getDirection } = require("../directions");
+} = require("../engine/prompts");
+const { createAiEngine, resolveShortlistSoc } = require("../engine/aiEngine");
+const { getOccupation } = require("../engine/onet");
+const { getDirection } = require("../engine/directions");
 
 const engine = createAiEngine({ apiKey: undefined, model: "test" });
 

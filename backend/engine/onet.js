@@ -7,7 +7,7 @@ const { RIASEC_KEYS } = require("./riasec");
 
 let snapshot = { version: "0", attribution: "", occupations: [] };
 try {
-  snapshot = require("./data/onet-snapshot.json");
+  snapshot = require("../data/onet-snapshot.json");
 } catch (error) {
   console.error("[onet] snapshot missing — occupation grounding disabled:", error.message);
 }

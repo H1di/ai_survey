@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { DIRECTIONS, DIRECTION_IDS, getDirection } = require("../directions");
+const { DIRECTIONS, DIRECTION_IDS, getDirection } = require("../engine/directions");
 
 test("catalog has 15 directions, each with id/label/examples and 3 profession seeds", () => {
   assert.equal(DIRECTIONS.length, 15);
@@ -29,7 +29,7 @@ test("getDirection finds by id and returns null for unknown", () => {
 });
 
 test("direction-tally era is gone", () => {
-  const directions = require("../directions");
+  const directions = require("../engine/directions");
   assert.equal(directions.computeDirection, undefined);
   assert.equal(directions.REFINE_REASONS, undefined);
   assert.equal(directions.REFINE_REASON_VALUES, undefined);

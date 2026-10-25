@@ -3,13 +3,13 @@ const dotenv = require("dotenv");
 const express = require("express");
 const multer = require("multer");
 const rateLimit = require("express-rate-limit");
-const { extractCvText, getCvUploadExtensions } = require("./cvExtract");
-const { createAiEngine } = require("./aiEngine");
-const { getStaticRiasecItems } = require("./riasecItems");
+const { extractCvText, getCvUploadExtensions } = require("./assessment/cvExtract");
+const { createAiEngine } = require("./engine/aiEngine");
+const { getStaticRiasecItems } = require("./assessment/riasecItems");
 const {
   DEMOGRAPHIC_QUESTIONS,
   CAREER_JOURNEY_QUESTIONS,
-} = require("./questionPool");
+} = require("./assessment/questionPool");
 const {
   deriveTopValues,
   valuesFit,
@@ -17,13 +17,13 @@ const {
   rankToWorkValueScores,
   WORK_VALUE_CURVE_VERSION,
   WORK_VALUES_ORDER,
-} = require("./workValues");
+} = require("./engine/workValues");
 const {
   startTournament,
   nextComparison,
   finalOrder,
   recordAnswer,
-} = require("./valuesTournament");
+} = require("./assessment/valuesTournament");
 const {
   validateDemographicAnswer,
   validateBigFiveAnswer,
@@ -35,10 +35,10 @@ const {
   deriveBigFiveTraits,
   buildProgress,
   summarizeAnswersForClient,
-} = require("./questionEngine");
-const { SessionStore, STEP_ORDER } = require("./sessionStore");
-const { DEV_PROFILE, seedTo } = require("./devSeed");
-const { createRedisClient } = require("./redisClient");
+} = require("./assessment/questionEngine");
+const { SessionStore, STEP_ORDER } = require("./core/sessionStore");
+const { DEV_PROFILE, seedTo } = require("./core/devSeed");
+const { createRedisClient } = require("./core/redisClient");
 const {
   getOccupation,
   getRelated,
@@ -46,12 +46,12 @@ const {
   ONET_ATTRIBUTION,
   SNAPSHOT_VERSION,
   SNAPSHOT_OCCUPATION_COUNT,
-} = require("./onet");
+} = require("./engine/onet");
 const { createOnetApi } = require("./services/onetApi");
 const { randomUUID, createHash, timingSafeEqual } = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
-const { logError, resolveStatus } = require("./logger");
+const { logError, resolveStatus } = require("./core/logger");
 
 // Tests set their own env (and force fallback by blanking the key) — skip
 // .env entirely so it can't refill a real key underneath them.

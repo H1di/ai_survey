@@ -5,8 +5,8 @@ const {
   DIRECTION_RIASEC,
   inferRiasecScores,
   rankDirections,
-} = require("../riasec");
-const { DIRECTION_IDS } = require("../directions");
+} = require("../engine/riasec");
+const { DIRECTION_IDS } = require("../engine/directions");
 
 test("every catalog direction has a RIASEC mapping and vice versa", () => {
   const mapped = Object.keys(DIRECTION_RIASEC).sort();

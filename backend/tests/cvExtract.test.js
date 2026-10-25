@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("path");
-const { extractCvText, getCvUploadExtensions } = require("../cvExtract");
+const { extractCvText, getCvUploadExtensions } = require("../assessment/cvExtract");
 
 const FAKE_BIN = path.join(__dirname, "fixtures", "fake-markitdown");
 const FAKE_FAIL_BIN = path.join(__dirname, "fixtures", "fake-markitdown-fail");

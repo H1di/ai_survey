@@ -6,7 +6,7 @@ const {
   nextComparison,
   finalOrder,
   recordAnswer,
-} = require("../valuesTournament");
+} = require("../assessment/valuesTournament");
 
 const ITEMS = ["a", "b", "c", "d", "e", "f"];
 

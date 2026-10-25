@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { createAiEngine } = require("../aiEngine");
-const { DIRECTION_IDS } = require("../directions");
+const { createAiEngine } = require("../engine/aiEngine");
+const { DIRECTION_IDS } = require("../engine/directions");
 
 // No apiKey -> client is null -> every call takes the deterministic fallback.
 const engine = createAiEngine({ apiKey: undefined, model: "test" });
@@ -81,7 +81,7 @@ test("direction-era generators are gone", () => {
 
 // --- output normalizers ---
 
-const { normalizeOutputPayload, normalizeOutputDetailPayload } = require("../aiEngine");
+const { normalizeOutputPayload, normalizeOutputDetailPayload } = require("../engine/aiEngine");
 
 function goodOutputPayload() {
   return {
@@ -124,7 +124,7 @@ const {
   normalizeCvAnalysisPayload,
   normalizePersonaSummaryPayload,
   normalizeWhyThisFitsPayload,
-} = require("../aiEngine");
+} = require("../engine/aiEngine");
 
 test("keyless whyThisFits: fixed counts, every bullet traces to profile signal", async () => {
   const session = fakeSession();
@@ -241,7 +241,7 @@ test("keyless engine: inferRiasecProfile derives from Big Five", async () => {
 
 // --- runJsonCompletion (token ceilings) ---
 
-const { runJsonCompletion } = require("../aiEngine");
+const { runJsonCompletion } = require("../engine/aiEngine");
 
 test("runJsonCompletion forwards an explicit max_output_tokens ceiling", async () => {
   let captured;

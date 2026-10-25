@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { SessionStore, STEP_ORDER } = require("../sessionStore");
+const { SessionStore, STEP_ORDER } = require("../core/sessionStore");
 
 function makeSession(store) {
   return store.createSession({ dreamAnswer: "build things" });
@@ -190,8 +190,8 @@ test("v2 mutators: riasec, cv, journey", () => {
 });
 
 test("finalizeValues stores the hierarchy, clears the tournament, and advances", () => {
-  const { startTournament } = require("../valuesTournament");
-  const { WORK_VALUES_ORDER } = require("../workValues");
+  const { startTournament } = require("../assessment/valuesTournament");
+  const { WORK_VALUES_ORDER } = require("../engine/workValues");
   const store = new SessionStore();
   const s = makeSession(store);
   store.setValuesTournament(s, startTournament(WORK_VALUES_ORDER));
@@ -220,8 +220,8 @@ test("finalizeValues stores the hierarchy, clears the tournament, and advances",
 });
 
 test("valuesComparison serializes the pending pairwise question", () => {
-  const { startTournament } = require("../valuesTournament");
-  const { WORK_VALUES_ORDER } = require("../workValues");
+  const { startTournament } = require("../assessment/valuesTournament");
+  const { WORK_VALUES_ORDER } = require("../engine/workValues");
   const store = new SessionStore();
   const s = makeSession(store);
   store.setValuesTournament(s, startTournament(WORK_VALUES_ORDER));
@@ -308,8 +308,8 @@ test("with redis: createSession and touch write the session through", () => {
 });
 
 test("with redis: finalizeValues persists exactly ONE write with the tournament cleared", () => {
-  const { startTournament } = require("../valuesTournament");
-  const { WORK_VALUES_ORDER } = require("../workValues");
+  const { startTournament } = require("../assessment/valuesTournament");
+  const { WORK_VALUES_ORDER } = require("../engine/workValues");
   const redis = new FakeRedis();
   let sets = 0;
   const origSet = redis.set.bind(redis);

@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { MINI_IPIP_20 } = require("../bigFiveItems");
-const { computeBigFiveScores } = require("../questionEngine");
+const { MINI_IPIP_20 } = require("../assessment/bigFiveItems");
+const { computeBigFiveScores } = require("../assessment/questionEngine");
 
 const TRAITS = ["O", "C", "E", "A", "N"];
 

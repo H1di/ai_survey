@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { getStaticRiasecItems, RIASEC_POOL } = require("../riasecItems");
+const { getStaticRiasecItems, RIASEC_POOL } = require("../assessment/riasecItems");
 
 const TYPES = ["R", "I", "A", "S", "E", "C"];
 

@@ -8,7 +8,7 @@ process.env.MARKITDOWN_BIN = require("path").join(__dirname, "fixtures", "fake-m
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { getCvUploadExtensions } = require("../cvExtract");
+const { getCvUploadExtensions } = require("../assessment/cvExtract");
 const { app } = require("../server");
 
 let server;

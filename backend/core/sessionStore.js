@@ -3,14 +3,14 @@ const { randomUUID } = require("node:crypto");
 const {
   DEMOGRAPHIC_QUESTIONS,
   CAREER_JOURNEY_QUESTIONS,
-} = require("./questionPool");
+} = require("../assessment/questionPool");
 const {
   serializeDemographic,
   serializeRiasecItem,
-} = require("./questionEngine");
-const { WORK_VALUES_ORDER } = require("./workValues");
-const { nextComparison, finalOrder } = require("./valuesTournament");
-const { MINI_IPIP_20 } = require("./bigFiveItems");
+} = require("../assessment/questionEngine");
+const { WORK_VALUES_ORDER } = require("../engine/workValues");
+const { nextComparison, finalOrder } = require("../assessment/valuesTournament");
+const { MINI_IPIP_20 } = require("../assessment/bigFiveItems");
 
 // Bump when the session shape changes incompatibly. hydrate() expires any
 // persisted session below this version so old Schwartz-shaped sessions can't

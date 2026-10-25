@@ -5,7 +5,7 @@ const {
   parseTsv,
   transform,
 } = require("../scripts/build-onet-snapshot");
-const { DIRECTION_IDS } = require("../directions");
+const { DIRECTION_IDS } = require("../engine/directions");
 
 test("mapSocToDirection: major groups land on catalog families", () => {
   assert.equal(mapSocToDirection("11-1011.00"), "business");

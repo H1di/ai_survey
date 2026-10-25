@@ -1,7 +1,6 @@
 # ARCHITECTURE — Life Path Explorer
 
-Постоянная техническая спецификация. Обновляется при изменении структуры
-(вместе с `PROJECT_STATUS.md`). Актуальна на 2026-07-18 (Work-Values миграция + backend-хардеринг).
+Постоянная техническая спецификация. Обновляется при изменении структуры. Актуальна на 2026-07-18 (Work-Values миграция + backend-хардеринг).
 
 ---
 
@@ -45,24 +44,26 @@
 
 ## 2. Модули backend
 
+Пути — относительно `backend/` (`assessment/`, `engine/`, `core/`, `services/`).
+
 | Модуль | Что делает | Вход → Выход |
 |---|---|---|
 | `server.js` | Все 21 роут, `trust proxy` (1 хоп в prod, `TRUST_PROXY` override), request-id middleware + leak-safe `fail`/`sendError` (см. `logger.js`), step-guard'ы, rate limiting (300/15 мин глобально, 30/15 мин AI-роуты), CORS-allowlist, multer (5 МБ), single-flight lock output/roadmap/cv-роутов (409 на параллель), `buildScoredOutput` — единственное место агрегации work-values оценок output'а. **Один инстанс** (Map/лок/лимиты — process-local) | HTTP → снапшот сессии |
-| `logger.js` | Бездеп-логгер ошибок: `logError` — одна JSON-строка на ≥500 (route-шаблон / UUID-редакция, чтобы id сессии не утёк), `resolveStatus` (clamp 400..599) | (req, err) → лог |
-| `sessionStore.js` | In-memory `Map` сессий (авторитетный process-local набор — **один инстанс**); TTL 24 ч, sweep раз в час (unref'd); все мутаторы (`advanceStep`, `appendOutput`, `acceptOutput`, `finalizeValues`…); `serializeSessionState`; `schemaVersion` + миграция несовместимых сессий на `hydrate()`. Опциональный write-through + `hydrate()` в Redis, если передан клиент | session-объект ↔ снапшот |
-| `redisClient.js` | Фабрика Upstash-клиента: возвращает `null` без `UPSTASH_REDIS_REST_URL`/`_TOKEN` (→ чистый in-memory), иначе REST-клиент для durable сессий | env → Redis-клиент \| null |
-| `questionEngine.js` | Валидация каждого типа ответа (whitelist, диапазоны) и весь скоринг: Big Five (reverse `6−raw`, нормировка `((mean−1)/4)·100`), Big Two (Stability/Plasticity), RIASEC 0–100 + топ-3 код, прогресс | (session, answer) → normalized value / scores; бросает `{statusCode}`-ошибки |
-| `questionPool.js` | Статика: 4 демо-вопроса, 7 career-journey вопросов | константы |
-| `bigFiveItems.js` | Public-domain Mini-IPIP-20 — единственный фиксированный инструмент Big Five, сидируется в сессию при создании | `MINI_IPIP_20` |
-| `riasecItems.js` | Статичный фиксированный инструмент RIASEC (12 айтемов, interleaved) | `getStaticRiasecItems()` |
-| `cvExtract.js` | Файл → текст: MarkItDown-first гибрид (pdf/docx/pptx/html/txt); фоллбеки pdf-parse / mammoth / tag-strip / utf8, `.pptx` без MarkItDown → 400; `getCvUploadExtensions()` для снапшота; любая ошибка чтения → 400 | multer file → string |
+| `core/logger.js` | Бездеп-логгер ошибок: `logError` — одна JSON-строка на ≥500 (route-шаблон / UUID-редакция, чтобы id сессии не утёк), `resolveStatus` (clamp 400..599) | (req, err) → лог |
+| `core/sessionStore.js` | In-memory `Map` сессий (авторитетный process-local набор — **один инстанс**); TTL 24 ч, sweep раз в час (unref'd); все мутаторы (`advanceStep`, `appendOutput`, `acceptOutput`, `finalizeValues`…); `serializeSessionState`; `schemaVersion` + миграция несовместимых сессий на `hydrate()`. Опциональный write-through + `hydrate()` в Redis, если передан клиент | session-объект ↔ снапшот |
+| `core/redisClient.js` | Фабрика Upstash-клиента: возвращает `null` без `UPSTASH_REDIS_REST_URL`/`_TOKEN` (→ чистый in-memory), иначе REST-клиент для durable сессий | env → Redis-клиент \| null |
+| `assessment/questionEngine.js` | Валидация каждого типа ответа (whitelist, диапазоны) и весь скоринг: Big Five (reverse `6−raw`, нормировка `((mean−1)/4)·100`), Big Two (Stability/Plasticity), RIASEC 0–100 + топ-3 код, прогресс | (session, answer) → normalized value / scores; бросает `{statusCode}`-ошибки |
+| `assessment/questionPool.js` | Статика: 4 демо-вопроса, 7 career-journey вопросов | константы |
+| `assessment/bigFiveItems.js` | Public-domain Mini-IPIP-20 — единственный фиксированный инструмент Big Five, сидируется в сессию при создании | `MINI_IPIP_20` |
+| `assessment/riasecItems.js` | Статичный фиксированный инструмент RIASEC (12 айтемов, interleaved) | `getStaticRiasecItems()` |
+| `assessment/cvExtract.js` | Файл → текст: MarkItDown-first гибрид (pdf/docx/pptx/html/txt); фоллбеки pdf-parse / mammoth / tag-strip / utf8, `.pptx` без MarkItDown → 400; `getCvUploadExtensions()` для снапшота; любая ошибка чтения → 400 | multer file → string |
 | `services/markitdown.js` | Обёртка опционального MarkItDown CLI: probe `--version` (кэш по пути бинаря), spawn с таймаутом 20 с, `cleanMarkdown` (картинки/ссылки/пустые строки); `MARKITDOWN_BIN` override | buffer → markdown-текст |
-| `aiEngine.js` | 11 генераторов (`createAiEngine`), каждый: prompt → `runJsonCompletion` → нормализатор → при любой ошибке детерминированный фоллбек. Нормализаторы экспортированы и покрыты тестами | session-данные → валидированный артефакт |
-| `prompts.js` | Билдеры промптов; `BASE_SYSTEM` (анти-tech-bias, «dream — не фильтр домена»); `buildProfileDigest` — единый текстовый дайджест профиля, попадает в каждый content-промпт | параметры → `{system, user}` |
-| `directions.js` | Каталог 15 field-families (алфавитный намеренно — никакой домен не первый в детерминированных обходах): label, examples, 3 `professionSeeds`, id для work-value прототипов | `getDirection(id)`, `DIRECTION_IDS` |
-| `riasec.js` | Holland-веса каждого направления; `rankDirections(scores, {excludeIds})` — взвешенный dot-product; `inferRiasecScores(bigFive)` — эвристика на мета-аналитических связях для skip-пути | RIASEC-вектор → ранжированный каталог |
-| `workValues.js` | Чистый модуль шести Minnesota / O*NET work values: `WORK_VALUES_ORDER` (6 ключей), `rankToWorkValueScores` (rank→интенсивность + `curveVersion`), `deriveTopValues`, `valuesFit` (centered cosine → одно `{overall}` 0–100), прототипы направлений + `buildFallbackProfessionValues` (прототип направления как есть) | вектора 0–100 → агрегаты |
-| `valuesTournament.js` | Чистый Ford–Johnson merge-insertion движок: реплей решённых сравнений (resumable, иммунен к stale/двойным ответам), ≤10 сравнений для 6 items, доказано на всех 720 перестановках | (items, decided) → следующее сравнение \| финальный порядок |
+| `engine/aiEngine.js` | 11 генераторов (`createAiEngine`), каждый: prompt → `runJsonCompletion` → нормализатор → при любой ошибке детерминированный фоллбек. Нормализаторы экспортированы и покрыты тестами | session-данные → валидированный артефакт |
+| `engine/prompts.js` | Билдеры промптов; `BASE_SYSTEM` (анти-tech-bias, «dream — не фильтр домена»); `buildProfileDigest` — единый текстовый дайджест профиля, попадает в каждый content-промпт | параметры → `{system, user}` |
+| `engine/directions.js` | Каталог 15 field-families (алфавитный намеренно — никакой домен не первый в детерминированных обходах): label, examples, 3 `professionSeeds`, id для work-value прототипов | `getDirection(id)`, `DIRECTION_IDS` |
+| `engine/riasec.js` | Holland-веса каждого направления; `rankDirections(scores, {excludeIds})` — взвешенный dot-product; `inferRiasecScores(bigFive)` — эвристика на мета-аналитических связях для skip-пути | RIASEC-вектор → ранжированный каталог |
+| `engine/workValues.js` | Чистый модуль шести Minnesota / O*NET work values: `WORK_VALUES_ORDER` (6 ключей), `rankToWorkValueScores` (rank→интенсивность + `curveVersion`), `deriveTopValues`, `valuesFit` (centered cosine → одно `{overall}` 0–100), прототипы направлений + `buildFallbackProfessionValues` (прототип направления как есть) | вектора 0–100 → агрегаты |
+| `assessment/valuesTournament.js` | Чистый Ford–Johnson merge-insertion движок: реплей решённых сравнений (resumable, иммунен к stale/двойным ответам), ≤10 сравнений для 6 items, доказано на всех 720 перестановках | (items, decided) → следующее сравнение \| финальный порядок |
 
 ## 3. Структура вопросов
 

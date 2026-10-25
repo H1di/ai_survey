@@ -8,8 +8,8 @@ const {
   ONET_ATTRIBUTION,
   JOB_ZONE_LABELS,
   SNAPSHOT_VERSION,
-} = require("../onet");
-const { DIRECTION_IDS } = require("../directions");
+} = require("../engine/onet");
+const { DIRECTION_IDS } = require("../engine/directions");
 
 test("getOccupation returns a snapshot entry by SOC code", () => {
   const dev = getOccupation("15-1252.00");

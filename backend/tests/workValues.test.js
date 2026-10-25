@@ -10,7 +10,7 @@ const {
   deriveTopValues,
   buildFallbackProfessionValues,
   WORK_VALUES_DIRECTION_PROTOTYPES,
-} = require("../workValues");
+} = require("../engine/workValues");
 
 const KEYS = [
   "achievement",

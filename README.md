@@ -15,8 +15,8 @@ occupation data (RIASEC profile, job zone, skills, work values) comes from a
 checked-in O\*NET snapshot, so it works offline too.
 
 For the full technical spec (module map, JSON contracts, data-flow diagram,
-engineering assessment) see [`ARCHITECTURE.md`](./ARCHITECTURE.md); for current
-status and backlog see [`PROJECT_STATUS.md`](./PROJECT_STATUS.md).
+engineering assessment) see [`ARCHITECTURE.md`](./ARCHITECTURE.md). Finished plans,
+audits and the old status log live in [`docs/archive/`](./docs/archive/).
 
 ## Product flow
 

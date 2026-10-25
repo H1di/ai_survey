@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const prompts = require("../prompts");
+const prompts = require("../engine/prompts");
 
 const PROFILE = "Entry intent: find\nDream answer: build things";
 const PROFESSION = { id: "output_1", title: "Software Developer", summary: "s" };

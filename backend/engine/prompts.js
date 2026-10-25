@@ -1,4 +1,4 @@
-const { CAREER_JOURNEY_QUESTIONS } = require("./questionPool");
+const { CAREER_JOURNEY_QUESTIONS } = require("../assessment/questionPool");
 const { WORK_VALUES_META } = require("./workValues");
 
 const JOURNEY_QUESTION_BY_ID = new Map(CAREER_JOURNEY_QUESTIONS.map((q) => [q.id, q.question]));

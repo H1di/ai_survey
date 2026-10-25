@@ -12,7 +12,7 @@
 // (work-value prototypes + notSuitable exclusions run on direction families).
 const fs = require("node:fs");
 const path = require("node:path");
-const { DIRECTION_IDS } = require("../directions");
+const { DIRECTION_IDS } = require("../engine/directions");
 
 const ONET_VERSION = "30.3";
 
