@@ -1,0 +1,240 @@
+/* Layout follows the stage box's width (container query). Every zone has a
+   fixed height, so the stage never resizes while values move between zones.
+   The card and row looks come from ui/ui.css (.split*, .screen .rank-*);
+   only spacing and the demo's own states live here. */
+.vins {
+  container-type: inline-size;
+  padding: 20px 16px 18px;
+  display: grid;
+  gap: 16px;
+}
+
+.vins-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vins-counter,
+.vins-eyebrow,
+.vins-legend,
+.vins-confirmed,
+.vins-note,
+.vins-chip {
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+
+.vins-counter {
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--gold-70);
+  font-variant-numeric: tabular-nums;
+}
+
+.vins-eyebrow {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--gold-50);
+  margin-bottom: 8px;
+}
+
+.vins-figure {
+  display: grid;
+  gap: 20px;
+}
+
+/* --- A/B pair ------------------------------------------------------------ */
+
+.vins-pair {
+  max-width: none;
+  height: 196px;
+}
+
+.vins .demo-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: transparent;
+}
+
+.vins .split-half {
+  padding: 16px 14px;
+  overflow: hidden;
+  transition: background var(--t-fast) var(--ease-out), opacity var(--t-fast) var(--ease-out);
+}
+
+.vins .split-title {
+  font-size: 22px;
+  line-height: 1.05;
+  transition: color var(--t-fast) var(--ease-out);
+}
+
+.vins .split-body {
+  font-size: 12px;
+  margin-top: 10px;
+}
+
+.vins-card--chosen {
+  background: var(--gold-hover);
+}
+
+.vins-card--chosen .split-title {
+  color: var(--gold);
+}
+
+.vins-card--other {
+  opacity: 0.4;
+}
+
+.vins-done {
+  align-self: center;
+  margin: 0;
+  padding: 0 14px;
+  font: 400 14px/1.55 var(--font-body);
+  color: var(--text-60);
+}
+
+/* --- Pool ---------------------------------------------------------------- */
+
+.vins-pool {
+  height: 92px;
+}
+
+.vins-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.vins-chip {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-55);
+  border: 1px solid var(--gold-18);
+  padding: 5px 8px;
+}
+
+/* --- Ordered column ------------------------------------------------------- */
+
+/* .screen carries the app-screen box; here it only scopes the rank-row look. */
+.vins .screen.vins-col {
+  min-height: 0;
+  padding: 0;
+  display: block;
+  background: transparent;
+}
+
+.vins .vins-list {
+  max-width: none;
+  height: calc(6 * 49px);
+  border-top: 1px solid var(--gold-18);
+}
+
+.vins .rank-row {
+  padding: 10px 0;
+  height: 49px;
+  align-items: center;
+  cursor: default;
+}
+
+.vins .rank-number {
+  font-size: 24px;
+  color: var(--gold-70);
+}
+
+.vins .rank-number.vins-rank--open {
+  color: var(--gold-25);
+}
+
+.vins .rank-label {
+  font-size: 15px;
+}
+
+.vins .vins-row--open {
+  border-bottom-style: dashed;
+  border-bottom-color: var(--gold-40);
+}
+
+.vins-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 10px;
+  color: var(--text-45);
+}
+
+.vins-key {
+  width: 18px;
+  border-top: 1px solid var(--gold-40);
+}
+
+.vins-key--open {
+  margin-left: 12px;
+  border-top-style: dashed;
+}
+
+.vins-confirmed {
+  margin-top: 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--gold);
+  transition: opacity var(--t-base) var(--ease-out);
+}
+
+.vins-note {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-40);
+}
+
+@container (min-width: 720px) {
+  .vins {
+    padding: 28px 32px 24px;
+  }
+
+  .vins-figure {
+    grid-template-columns: 1.2fr 1fr;
+    gap: 48px;
+  }
+
+  .vins-pair {
+    height: 236px;
+  }
+
+  .vins-pool {
+    height: 74px;
+  }
+
+  .vins .split-half {
+    padding: 26px 24px;
+  }
+
+  .vins .split-title {
+    font-size: 30px;
+  }
+
+  .vins .split-body {
+    font-size: 13px;
+    margin-top: 14px;
+  }
+
+  .vins .vins-list {
+    height: calc(6 * 56px);
+  }
+
+  .vins .rank-row {
+    height: 56px;
+  }
+
+  .vins .rank-number {
+    font-size: 28px;
+  }
+
+  .vins .rank-label {
+    font-size: 17px;
+  }
+}

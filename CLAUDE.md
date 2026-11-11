@@ -33,6 +33,8 @@ cd backend && npm test
 
 The frontend dev server proxies `/api/*` to `http://localhost:3001` (see `frontend/vite.config.js`).
 
+Plans and in-flight work live in `project-plans/` (index: `project-plans/README.md`; the active strategy is `project-plans/2026-10-12-project-review/`). Finished plans are in `docs/archive/`. Dev-only animation demos live in `frontend/demos/` (never shipped by `vite build`; rules in `frontend/demos/README.md`).
+
 Production is a single Render free web service (`render.yaml`, `DEPLOY.md`): the build compiles `frontend/dist`, and `backend/server.js` serves it next to `/api` (static + SPA fallback for extensionless non-`/api` paths, mounted only when the build exists; `FRONTEND_DIST` overrides the path). Unknown `/api` paths must keep Express's default 404 — the dev gate relies on it.
 
 ## Environment

@@ -1,0 +1,183 @@
+/* Layout follows the stage box's own width (container query), never content,
+   and every animated piece has a reserved box — no layout shift. */
+.vfit {
+  container-type: inline-size;
+  padding: 16px 16px 18px;
+}
+
+.vfit-grid-layout {
+  display: grid;
+  gap: 8px;
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.vfit-figure {
+  width: 100%;
+  max-width: 540px;
+  justify-self: center;
+}
+
+.vfit-svg {
+  display: block;
+  width: 100%;
+  aspect-ratio: 400 / 352;
+}
+
+@container (min-width: 640px) {
+  .vfit-grid-layout {
+    grid-template-columns: minmax(0, 1fr) 260px;
+    align-items: center;
+    gap: 24px;
+  }
+}
+
+/* --- SVG --- */
+.vfit-grid path,
+.vfit-grid line {
+  fill: none;
+  stroke: var(--gold-15);
+  stroke-width: 1;
+}
+
+.vfit-region {
+  fill: var(--gold-25);
+  stroke: none;
+}
+
+.vfit-user,
+.vfit-job {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.vfit-user {
+  stroke: var(--bone);
+}
+
+.vfit-job {
+  stroke: var(--gold);
+}
+
+.vfit-dot-user {
+  fill: var(--bone);
+}
+
+.vfit-dot-job {
+  fill: var(--gold);
+}
+
+.vfit-label {
+  font: 500 12px var(--font-body);
+  fill: var(--text-72);
+}
+
+.vfit-val {
+  font: 500 10px var(--font-mono);
+}
+
+.vfit-val-user {
+  fill: var(--bone);
+}
+
+.vfit-val-sep {
+  fill: var(--text-30);
+}
+
+.vfit-val-job {
+  fill: var(--gold);
+}
+
+.vfit-tick {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* --- Readout --- */
+.vfit-readout {
+  display: grid;
+  gap: 6px;
+  align-content: center;
+  justify-items: start;
+  max-width: 360px;
+  justify-self: center;
+  width: 100%;
+}
+
+.vfit-readout p {
+  margin: 0;
+}
+
+.vfit-eyebrow {
+  font: 500 11px var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-70);
+}
+
+.vfit-number {
+  display: flex;
+  align-items: baseline;
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--bone);
+}
+
+.vfit-num {
+  font-size: 64px;
+  letter-spacing: -0.03em;
+}
+
+.vfit-pct {
+  margin-left: 4px;
+  font-size: 26px;
+  color: var(--gold-70);
+}
+
+.vfit-caption {
+  font: 400 14px / 1.5 var(--font-body);
+  color: var(--text-72);
+  max-width: 30ch;
+}
+
+.vfit-legend {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font: 400 11px / 1.4 var(--font-mono);
+  color: var(--text-55);
+}
+
+.vfit-legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vfit-swatch {
+  flex: none;
+  width: 18px;
+  height: 10px;
+}
+
+@container (min-width: 640px) {
+  .vfit-num {
+    font-size: 88px;
+  }
+}
+
+.vfit-presets {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}

@@ -1,0 +1,884 @@
+{
+  "generatedFrom": "frontend/demos/scripts/build-demo-data.cjs",
+  "snapshotVersion": "30.3",
+  "bigFiveScores": {
+    "O": 94,
+    "C": 75,
+    "E": 44,
+    "A": 75,
+    "N": 25
+  },
+  "riasecScores": {
+    "R": 13,
+    "I": 100,
+    "A": 88,
+    "S": 50,
+    "E": 63,
+    "C": 38
+  },
+  "riasecCode": "IAE",
+  "valuesOrder": [
+    "independence",
+    "achievement",
+    "working_conditions",
+    "relationships",
+    "recognition",
+    "support"
+  ],
+  "valuesScores": {
+    "independence": 100,
+    "achievement": 84,
+    "working_conditions": 68,
+    "relationships": 52,
+    "recognition": 36,
+    "support": 20
+  },
+  "topDirections": [
+    {
+      "id": "arts",
+      "label": "Arts & Performance",
+      "score": 83
+    },
+    {
+      "id": "science",
+      "label": "Science & Research",
+      "score": 83
+    },
+    {
+      "id": "media",
+      "label": "Marketing & Media",
+      "score": 79
+    },
+    {
+      "id": "design",
+      "label": "Design & Creative",
+      "score": 75
+    },
+    {
+      "id": "law",
+      "label": "Law & Public Service",
+      "score": 72
+    }
+  ],
+  "shortlist": [
+    {
+      "soc": "19-3094.00",
+      "title": "Political Scientists",
+      "directionId": "science",
+      "r": 0.886,
+      "workValues": {
+        "achievement": 78,
+        "working_conditions": 78,
+        "recognition": 72,
+        "relationships": 39,
+        "support": 22,
+        "independence": 67
+      }
+    },
+    {
+      "soc": "27-3023.00",
+      "title": "News Analysts, Reporters, and Journalists",
+      "directionId": "media",
+      "r": 0.858,
+      "workValues": {
+        "achievement": 78,
+        "working_conditions": 63,
+        "recognition": 75,
+        "relationships": 64,
+        "support": 45,
+        "independence": 70
+      }
+    },
+    {
+      "soc": "19-3041.00",
+      "title": "Sociologists",
+      "directionId": "science",
+      "r": 0.829,
+      "workValues": {
+        "achievement": 78,
+        "working_conditions": 70,
+        "recognition": 72,
+        "relationships": 39,
+        "support": 28,
+        "independence": 78
+      }
+    },
+    {
+      "soc": "19-2041.01",
+      "title": "Climate Change Policy Analysts",
+      "directionId": "science",
+      "r": 0.744,
+      "workValues": {
+        "achievement": 83,
+        "working_conditions": 61,
+        "recognition": 67,
+        "relationships": 61,
+        "support": 28,
+        "independence": 72
+      }
+    },
+    {
+      "soc": "27-3043.05",
+      "title": "Poets, Lyricists and Creative Writers",
+      "directionId": "media",
+      "r": 0.74,
+      "workValues": {
+        "achievement": 83,
+        "working_conditions": 64,
+        "recognition": 67,
+        "relationships": 28,
+        "support": 17,
+        "independence": 78
+      }
+    },
+    {
+      "soc": "27-3043.00",
+      "title": "Writers and Authors",
+      "directionId": "media",
+      "r": 0.69,
+      "workValues": {
+        "achievement": 67,
+        "working_conditions": 53,
+        "recognition": 45,
+        "relationships": 50,
+        "support": 56,
+        "independence": 45
+      }
+    },
+    {
+      "soc": "19-3032.00",
+      "title": "Industrial-Organizational Psychologists",
+      "directionId": "science",
+      "r": 0.665,
+      "workValues": {
+        "achievement": 78,
+        "working_conditions": 86,
+        "recognition": 61,
+        "relationships": 83,
+        "support": 67,
+        "independence": 78
+      }
+    },
+    {
+      "soc": "19-3011.00",
+      "title": "Economists",
+      "directionId": "science",
+      "r": 0.62,
+      "workValues": {
+        "achievement": 67,
+        "working_conditions": 78,
+        "recognition": 67,
+        "relationships": 22,
+        "support": 39,
+        "independence": 72
+      }
+    },
+    {
+      "soc": "19-3011.01",
+      "title": "Environmental Economists",
+      "directionId": "science",
+      "r": 0.535,
+      "workValues": {
+        "achievement": 89,
+        "working_conditions": 78,
+        "recognition": 72,
+        "relationships": 45,
+        "support": 28,
+        "independence": 83
+      }
+    },
+    {
+      "soc": "27-3041.00",
+      "title": "Editors",
+      "directionId": "media",
+      "r": 0.511,
+      "workValues": {
+        "achievement": 72,
+        "working_conditions": 56,
+        "recognition": 67,
+        "relationships": 56,
+        "support": 50,
+        "independence": 83
+      }
+    },
+    {
+      "soc": "19-3039.02",
+      "title": "Neuropsychologists",
+      "directionId": "science",
+      "r": 0.508,
+      "workValues": {
+        "achievement": 68,
+        "independence": 65,
+        "recognition": 60,
+        "relationships": 50,
+        "support": 48,
+        "working_conditions": 63
+      }
+    },
+    {
+      "soc": "15-2041.01",
+      "title": "Biostatisticians",
+      "directionId": "science",
+      "r": 0.504,
+      "workValues": {
+        "achievement": 78,
+        "working_conditions": 67,
+        "recognition": 67,
+        "relationships": 39,
+        "support": 33,
+        "independence": 72
+      }
+    },
+    {
+      "soc": "19-3093.00",
+      "title": "Historians",
+      "directionId": "science",
+      "r": 0.503,
+      "workValues": {
+        "achievement": 67,
+        "working_conditions": 58,
+        "recognition": 67,
+        "relationships": 67,
+        "support": 33,
+        "independence": 67
+      }
+    },
+    {
+      "soc": "19-3051.00",
+      "title": "Urban and Regional Planners",
+      "directionId": "science",
+      "r": 0.495,
+      "workValues": {
+        "achievement": 67,
+        "working_conditions": 67,
+        "recognition": 61,
+        "relationships": 72,
+        "support": 45,
+        "independence": 56
+      }
+    },
+    {
+      "soc": "19-3091.00",
+      "title": "Anthropologists and Archeologists",
+      "directionId": "science",
+      "r": 0.483,
+      "workValues": {
+        "achievement": 81,
+        "working_conditions": 70,
+        "recognition": 70,
+        "relationships": 61,
+        "support": 33,
+        "independence": 75
+      }
+    }
+  ],
+  "chosen": {
+    "soc": "19-3094.00",
+    "title": "Political Scientists",
+    "directionId": "science",
+    "r": 0.886,
+    "workValues": {
+      "achievement": 78,
+      "working_conditions": 78,
+      "recognition": 72,
+      "relationships": 39,
+      "support": 22,
+      "independence": 67
+    }
+  },
+  "valuesFit": {
+    "overall": 82
+  },
+  "tournamentTrace": [
+    {
+      "a": "achievement",
+      "b": "independence",
+      "winner": "independence",
+      "partialOrder": [
+        [
+          "independence",
+          "achievement"
+        ]
+      ]
+    },
+    {
+      "a": "recognition",
+      "b": "relationships",
+      "winner": "relationships",
+      "partialOrder": [
+        [
+          "independence",
+          "achievement"
+        ],
+        [
+          "relationships",
+          "recognition"
+        ]
+      ]
+    },
+    {
+      "a": "support",
+      "b": "working_conditions",
+      "winner": "working_conditions",
+      "partialOrder": [
+        [
+          "independence",
+          "achievement"
+        ],
+        [
+          "relationships",
+          "recognition"
+        ],
+        [
+          "working_conditions",
+          "support"
+        ]
+      ]
+    },
+    {
+      "a": "independence",
+      "b": "relationships",
+      "winner": "independence",
+      "partialOrder": [
+        [
+          "independence",
+          "achievement"
+        ],
+        [
+          "independence",
+          "recognition"
+        ],
+        [
+          "independence",
+          "relationships"
+        ],
+        [
+          "relationships",
+          "recognition"
+        ],
+        [
+          "working_conditions",
+          "support"
+        ]
+      ]
+    },
+    {
+      "a": "working_conditions",
+      "b": "independence",
+      "winner": "independence",
+      "partialOrder": [
+        [
+          "independence",
+          "achievement"
+        ],
+        [
+          "independence",
+          "recognition"
+        ],
+        [
+          "independence",
+          "relationships"
+        ],
+        [
+          "independence",
+          "support"
+        ],
+        [
+          "independence",
+          "working_conditions"
+        ],
+        [
+          "relationships",
+          "recognition"
+        ],
+        [
+          "working_conditions",
+          "support"
+        ]
+      ]
+    },
+    {
+      "a": "working_conditions",
+      "b": "relationships",
+      "winner": "working_conditions",
+      "partialOrder": [
+        [
+          "independence",
+          "achievement"
+        ],
+        [
+          "independence",
+          "recognition"
+        ],
+        [
+          "independence",
+          "relationships"
+        ],
+        [
+          "independence",
+          "support"
+        ],
+        [
+          "independence",
+          "working_conditions"
+        ],
+        [
+          "relationships",
+          "recognition"
+        ],
+        [
+          "working_conditions",
+          "recognition"
+        ],
+        [
+          "working_conditions",
+          "relationships"
+        ],
+        [
+          "working_conditions",
+          "support"
+        ]
+      ]
+    },
+    {
+      "a": "achievement",
+      "b": "relationships",
+      "winner": "achievement",
+      "partialOrder": [
+        [
+          "achievement",
+          "recognition"
+        ],
+        [
+          "achievement",
+          "relationships"
+        ],
+        [
+          "independence",
+          "achievement"
+        ],
+        [
+          "independence",
+          "recognition"
+        ],
+        [
+          "independence",
+          "relationships"
+        ],
+        [
+          "independence",
+          "support"
+        ],
+        [
+          "independence",
+          "working_conditions"
+        ],
+        [
+          "relationships",
+          "recognition"
+        ],
+        [
+          "working_conditions",
+          "recognition"
+        ],
+        [
+          "working_conditions",
+          "relationships"
+        ],
+        [
+          "working_conditions",
+          "support"
+        ]
+      ]
+    },
+    {
+      "a": "achievement",
+      "b": "working_conditions",
+      "winner": "achievement",
+      "partialOrder": [
+        [
+          "achievement",
+          "recognition"
+        ],
+        [
+          "achievement",
+          "relationships"
+        ],
+        [
+          "achievement",
+          "support"
+        ],
+        [
+          "achievement",
+          "working_conditions"
+        ],
+        [
+          "independence",
+          "achievement"
+        ],
+        [
+          "independence",
+          "recognition"
+        ],
+        [
+          "independence",
+          "relationships"
+        ],
+        [
+          "independence",
+          "support"
+        ],
+        [
+          "independence",
+          "working_conditions"
+        ],
+        [
+          "relationships",
+          "recognition"
+        ],
+        [
+          "working_conditions",
+          "recognition"
+        ],
+        [
+          "working_conditions",
+          "relationships"
+        ],
+        [
+          "working_conditions",
+          "support"
+        ]
+      ]
+    },
+    {
+      "a": "support",
+      "b": "relationships",
+      "winner": "relationships",
+      "partialOrder": [
+        [
+          "achievement",
+          "recognition"
+        ],
+        [
+          "achievement",
+          "relationships"
+        ],
+        [
+          "achievement",
+          "support"
+        ],
+        [
+          "achievement",
+          "working_conditions"
+        ],
+        [
+          "independence",
+          "achievement"
+        ],
+        [
+          "independence",
+          "recognition"
+        ],
+        [
+          "independence",
+          "relationships"
+        ],
+        [
+          "independence",
+          "support"
+        ],
+        [
+          "independence",
+          "working_conditions"
+        ],
+        [
+          "relationships",
+          "recognition"
+        ],
+        [
+          "relationships",
+          "support"
+        ],
+        [
+          "working_conditions",
+          "recognition"
+        ],
+        [
+          "working_conditions",
+          "relationships"
+        ],
+        [
+          "working_conditions",
+          "support"
+        ]
+      ]
+    },
+    {
+      "a": "support",
+      "b": "recognition",
+      "winner": "recognition",
+      "partialOrder": [
+        [
+          "achievement",
+          "recognition"
+        ],
+        [
+          "achievement",
+          "relationships"
+        ],
+        [
+          "achievement",
+          "support"
+        ],
+        [
+          "achievement",
+          "working_conditions"
+        ],
+        [
+          "independence",
+          "achievement"
+        ],
+        [
+          "independence",
+          "recognition"
+        ],
+        [
+          "independence",
+          "relationships"
+        ],
+        [
+          "independence",
+          "support"
+        ],
+        [
+          "independence",
+          "working_conditions"
+        ],
+        [
+          "recognition",
+          "support"
+        ],
+        [
+          "relationships",
+          "recognition"
+        ],
+        [
+          "relationships",
+          "support"
+        ],
+        [
+          "working_conditions",
+          "recognition"
+        ],
+        [
+          "working_conditions",
+          "relationships"
+        ],
+        [
+          "working_conditions",
+          "support"
+        ]
+      ]
+    }
+  ],
+  "refineTrace": [
+    {
+      "excludedDirectionIds": [
+        "science"
+      ],
+      "topDirections": [
+        {
+          "id": "arts",
+          "label": "Arts & Performance",
+          "score": 83
+        },
+        {
+          "id": "media",
+          "label": "Marketing & Media",
+          "score": 79
+        },
+        {
+          "id": "design",
+          "label": "Design & Creative",
+          "score": 75
+        },
+        {
+          "id": "law",
+          "label": "Law & Public Service",
+          "score": 72
+        },
+        {
+          "id": "tech",
+          "label": "Programming & Technology",
+          "score": 70
+        }
+      ],
+      "chosen": {
+        "soc": "27-3023.00",
+        "title": "News Analysts, Reporters, and Journalists",
+        "directionId": "media",
+        "r": 0.858,
+        "workValues": {
+          "achievement": 78,
+          "working_conditions": 63,
+          "recognition": 75,
+          "relationships": 64,
+          "support": 45,
+          "independence": 70
+        }
+      },
+      "valuesFit": {
+        "overall": 80
+      }
+    },
+    {
+      "excludedDirectionIds": [
+        "science",
+        "media"
+      ],
+      "topDirections": [
+        {
+          "id": "arts",
+          "label": "Arts & Performance",
+          "score": 83
+        },
+        {
+          "id": "design",
+          "label": "Design & Creative",
+          "score": 75
+        },
+        {
+          "id": "law",
+          "label": "Law & Public Service",
+          "score": 72
+        },
+        {
+          "id": "tech",
+          "label": "Programming & Technology",
+          "score": 70
+        },
+        {
+          "id": "education",
+          "label": "Education & Coaching",
+          "score": 63
+        }
+      ],
+      "chosen": {
+        "soc": "15-1255.00",
+        "title": "Web and Digital Interface Designers",
+        "directionId": "tech",
+        "r": 0.663,
+        "workValues": {
+          "achievement": 83,
+          "working_conditions": 70,
+          "recognition": 56,
+          "relationships": 33,
+          "support": 45,
+          "independence": 83
+        }
+      },
+      "valuesFit": {
+        "overall": 90
+      }
+    },
+    {
+      "excludedDirectionIds": [
+        "science",
+        "media",
+        "tech"
+      ],
+      "topDirections": [
+        {
+          "id": "arts",
+          "label": "Arts & Performance",
+          "score": 83
+        },
+        {
+          "id": "design",
+          "label": "Design & Creative",
+          "score": 75
+        },
+        {
+          "id": "law",
+          "label": "Law & Public Service",
+          "score": 72
+        },
+        {
+          "id": "education",
+          "label": "Education & Coaching",
+          "score": 63
+        },
+        {
+          "id": "healthcare",
+          "label": "Healthcare & Wellbeing",
+          "score": 61
+        }
+      ],
+      "chosen": {
+        "soc": "29-1129.02",
+        "title": "Music Therapists",
+        "directionId": "healthcare",
+        "r": 0.536,
+        "workValues": {
+          "achievement": 83,
+          "working_conditions": 61,
+          "recognition": 61,
+          "relationships": 100,
+          "support": 39,
+          "independence": 78
+        }
+      },
+      "valuesFit": {
+        "overall": 78
+      }
+    }
+  ],
+  "roadmap": {
+    "professionId": "output_1",
+    "stages": [
+      {
+        "id": "stage_1",
+        "title": "Foundations",
+        "description": "Learn the core skills every Political Scientists uses daily. Pick one reputable beginner course and finish it end to end.",
+        "timeframe": "2-3 months",
+        "milestone": "Core concepts applied in small exercises without help."
+      },
+      {
+        "id": "stage_2",
+        "title": "First real projects",
+        "description": "Build 2-3 small but complete projects that mirror real work, and document them publicly as a portfolio.",
+        "timeframe": "2-3 months",
+        "milestone": "A portfolio you can walk a stranger through in 10 minutes."
+      },
+      {
+        "id": "stage_3",
+        "title": "Entry-level readiness",
+        "description": "Translate the portfolio into a focused CV, practice common interview formats, and apply consistently every week.",
+        "timeframe": "1-2 months",
+        "milestone": "First interviews scheduled."
+      },
+      {
+        "id": "stage_4",
+        "title": "First role",
+        "description": "Land an entry-level or junior Political Scientists position — prioritize learning environment over salary at this stage.",
+        "timeframe": "0-3 months of searching",
+        "milestone": "Signed offer and first 90 days completed."
+      },
+      {
+        "id": "stage_5",
+        "title": "Credibility milestone",
+        "description": "Earn the one certification or visible achievement most recognized in this field, chosen with input from seniors around you.",
+        "timeframe": "3-6 months",
+        "milestone": "Credential earned and added to your profile."
+      },
+      {
+        "id": "stage_6",
+        "title": "Established Political Scientists",
+        "description": "Deepen a specialization, take ownership of larger pieces of work, and build the track record that defines the target role.",
+        "timeframe": "12-24 months",
+        "milestone": "Operating independently at the level you set out to reach."
+      }
+    ]
+  },
+  "onetAttribution": "This product includes information from the O*NET 30.3 Database (occupations, interests, skills) and the O*NET 28.0 Database (work values), plus O*NET Web Services, by the U.S. Department of Labor, Employment and Training Administration (USDOL/ETA). O*NET® is a trademark of USDOL/ETA. Used under the CC BY 4.0 license."
+}

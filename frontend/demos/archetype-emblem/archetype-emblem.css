@@ -1,0 +1,109 @@
+/* Layout follows the stage box's width (container query); every animated
+   piece has a reserved box, so nothing shifts while it fades in. */
+.emb {
+  container-type: inline-size;
+  padding: 16px 16px 18px;
+}
+
+.emb-layout {
+  display: grid;
+  gap: 16px;
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+.emb-figure {
+  margin: 0;
+  width: 100%;
+  max-width: 480px;
+  justify-self: center;
+}
+
+.emb-canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+}
+
+.emb-caption {
+  text-align: center;
+  min-height: 7.5em; /* name + two tagline lines + serial */
+}
+
+.emb-name {
+  margin: 4px 0 6px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  color: var(--bone);
+}
+
+.emb-tagline {
+  margin: 0 auto;
+  max-width: 34ch;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-60);
+}
+
+.emb-serial {
+  margin: 10px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--gold-70);
+}
+
+.emb-legend {
+  margin: 0;
+  display: grid;
+  gap: 12px;
+  align-content: center;
+}
+
+.emb-legend dt {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gold-70);
+}
+
+.emb-legend dd {
+  margin: 4px 0 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-60);
+}
+
+.emb-legend > div {
+  transition: opacity 400ms var(--ease-out);
+}
+
+.emb-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  max-width: 920px;
+  margin: 18px auto 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--gold-15);
+}
+
+.emb-profiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@container (min-width: 720px) {
+  .emb-layout {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    align-items: center;
+    gap: 32px;
+  }
+}

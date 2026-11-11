@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Animation demos</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="demo-page">
+      <header class="demo-head">
+        <span class="demo-slug">Dev only · not in the production build</span>
+        <h1 class="demo-title">Animation demos</h1>
+        <p class="demo-explains">
+          Each scene explains one real mechanism of the product with the fixed dev persona's data.
+          Rules: demos/README.md. Wiring reference: <a href="/demos/_template.html">_template</a>.
+        </p>
+      </header>
+      <ul class="demo-index" id="demo-list"></ul>
+    </div>
+    <script type="module">
+      import "/demos/kit/demo.css";
+      import { renderIndex } from "/demos/catalog.js";
+      renderIndex(document.getElementById("demo-list"));
+    </script>
+  </body>
+</html>

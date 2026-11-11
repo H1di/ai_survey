@@ -1,0 +1,52 @@
+/* Fixed box height: the roadmap animates inside it, never resizes it. */
+.rd-stage {
+  position: relative;
+  height: 720px;
+}
+
+.rd-flow {
+  width: 100%;
+  height: 100%;
+}
+
+.rd-edge {
+  fill: none;
+  stroke: var(--gold-40);
+  stroke-width: 1.5;
+}
+
+/* The app's node classes carry their own CSS entrance (node-pop) and a hover
+   glow; here the clock owns the motion and demos never glow. */
+.rd-stage .node,
+.rd-stage .node:hover {
+  animation: none;
+  box-shadow: none;
+  cursor: default;
+}
+
+.rd-stage--chain .rd-chosen {
+  width: 300px;
+}
+
+.rd-stage--chain .rd-chosen .node-title {
+  font-size: 28px;
+}
+
+.rd-stage--chain .rd-step {
+  width: 280px;
+}
+
+.rd-chosen .node-title {
+  margin-bottom: 12px;
+}
+
+.rd-step {
+  will-change: opacity, transform;
+}
+
+.rd-replay {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+}

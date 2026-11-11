@@ -1,0 +1,398 @@
+/* Micro-interactions demo.
+   Two parts, kept apart on purpose:
+     1. Demo framing (.micro-*)  — page layout only, never adopted.
+     2. Proposed (.demo-micro …) — strip the `.demo-micro ` prefix and the rule
+        is what moves into ui.css / screens.css. [data-motion="reduced"] stands
+        in for @media (prefers-reduced-motion: reduce) so ?rm=1 can force it. */
+
+/* ======================================================================== */
+/* 1. Demo framing                                                           */
+/* ======================================================================== */
+
+/* The app base (index.css) the real components assume. Demo pages load
+   demo.css instead, so the two rules the components depend on are restated
+   at element specificity — :where() keeps them below every component rule. */
+:where(.micro-col) button {
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+:where(.micro-col) :focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.micro-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.micro-panel {
+  margin: 0 0 40px;
+  padding-top: 28px;
+  border-top: 1px solid var(--gold-15);
+}
+
+.micro-panel-head {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.micro-panel-head h2 {
+  margin: 0;
+  font: 500 20px/1.3 var(--font-body);
+  color: var(--bone);
+}
+
+.micro-panel-head p {
+  margin: 0;
+  max-width: 68ch;
+  font-size: 14px;
+  color: var(--text-60);
+}
+
+.micro-panel-head .demo-btn {
+  justify-self: start;
+  margin-top: 10px;
+}
+
+.micro-panel-key {
+  font: 500 11px/1 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold-70);
+}
+
+.micro-pair {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+@media (min-width: 900px) {
+  .micro-pair {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.micro-col {
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--gold-15);
+  border-radius: var(--radius-surface);
+  background: var(--ink-screen);
+  overflow: hidden;
+}
+
+.micro-col--proposed {
+  border-color: var(--gold-30);
+}
+
+.micro-col-label {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 1;
+  font: 500 10px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-45);
+}
+
+.micro-col--proposed .micro-col-label {
+  color: var(--gold-70);
+}
+
+/* ScreenShell is a full-viewport screen; inside a column it only needs to
+   frame the slide. Same box on both sides, so heights never differ. */
+.micro-col .screen {
+  min-height: 0;
+  padding: 56px 20px 32px;
+}
+
+.micro-col .screen > .wordmark {
+  top: 14px;
+  left: 16px;
+}
+
+.micro-col .screen-title {
+  font-size: 30px;
+}
+
+.micro-col .item-statement {
+  min-height: 2.6em;
+  font-size: 20px;
+}
+
+.micro-likert {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 52px 20px 32px;
+  text-align: center;
+}
+
+.micro-rail {
+  padding: 52px 20px 28px;
+}
+
+.micro-rail .step-rail {
+  margin: 0;
+}
+
+.micro-adoption {
+  padding-top: 28px;
+  border-top: 1px solid var(--gold-15);
+}
+
+.micro-adoption h2 {
+  margin: 0 0 6px;
+  font: 500 20px/1.3 var(--font-body);
+  color: var(--bone);
+}
+
+.micro-adoption > p {
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: var(--text-60);
+}
+
+.micro-adoption-group h3 {
+  margin: 20px 0 8px;
+  font: 500 12px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-70);
+}
+
+.micro-adoption-group h3 span {
+  color: var(--text-45);
+}
+
+.micro-adoption ul {
+  margin: 0;
+  padding: 0 0 0 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.micro-adoption li {
+  color: var(--text-45);
+}
+
+.micro-adoption code {
+  font: 400 12.5px/1.6 var(--font-mono);
+  color: var(--text-72);
+  overflow-wrap: anywhere;
+}
+
+/* ======================================================================== */
+/* 2. Proposed                                                               */
+/* ======================================================================== */
+
+/* ---- a) Slide change → ui.css ------------------------------------------- */
+
+/* The body is the only part that travels; eyebrow and title get their own
+   names so they are lifted out of the slide and cross-fade in place. */
+.demo-micro .screen-body {
+  view-transition-name: screen-slide;
+}
+
+.demo-micro .eyebrow {
+  view-transition-name: screen-eyebrow;
+}
+
+.demo-micro .screen-title {
+  view-transition-name: screen-title;
+}
+
+::view-transition-group(screen-slide),
+::view-transition-group(screen-eyebrow),
+::view-transition-group(screen-title) {
+  animation-duration: var(--t-base);
+  animation-timing-function: var(--ease-out);
+}
+
+/* Everything unnamed swaps instantly, as today — only the slide moves. */
+::view-transition-group(root),
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+::view-transition-old(screen-slide) {
+  animation: var(--t-base) var(--ease-out) both screen-slide-out;
+}
+
+::view-transition-new(screen-slide) {
+  animation: var(--t-base) var(--ease-out) both screen-slide-in;
+}
+
+@keyframes screen-slide-out {
+  to {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+}
+
+@keyframes screen-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+/* ---- b) Likert → ui.css ------------------------------------------------- */
+
+.demo-micro .likert-option {
+  transition: transform var(--t-fast) var(--ease-out);
+}
+
+.demo-micro .likert-option:active:enabled {
+  transform: scale(0.97);
+}
+
+/* The fill lives on a pseudo-element so it can grow (transform + opacity,
+   compositor-only) instead of repainting the ring's background. */
+.demo-micro .likert-ring {
+  position: relative;
+  transition: border-color var(--t-fast) var(--ease-out);
+}
+
+.demo-micro .likert-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--gold);
+  opacity: 0;
+  transform: scale(0.5);
+  transition:
+    opacity var(--t-fast) var(--ease-out),
+    transform var(--t-base) var(--ease-out);
+}
+
+/* box-shadow: none drops the 14 px glow — optional, separate decision. */
+.demo-micro .likert-option--on .likert-ring {
+  background: none;
+  box-shadow: none;
+}
+
+.demo-micro .likert-option--on .likert-ring::after {
+  opacity: 1;
+  transform: none;
+}
+
+/* The ring hugs the circle instead of boxing the whole 80 px option. */
+.demo-micro .likert-option:focus-visible {
+  outline: none;
+}
+
+.demo-micro .likert-option:focus-visible .likert-ring {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+/* ---- c) Journey rail → screens.css -------------------------------------- */
+
+.demo-micro .step-rail {
+  position: relative;
+  padding-bottom: 14px;
+}
+
+.demo-micro .step-rail::before,
+.demo-micro .step-rail::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+}
+
+.demo-micro .step-rail::before {
+  background: var(--gold-20);
+}
+
+/* scaleX, not width: the fill never triggers layout. */
+.demo-micro .step-rail::after {
+  background: var(--gold);
+  transform-origin: left;
+  transform: scaleX(calc(var(--rail-done, 0) / 6));
+  transition: transform var(--t-base) var(--ease-out);
+}
+
+/* Steps done = index of the active entry. 6 = JOURNEY_RAIL.length. */
+.demo-micro .step-rail:has(> .step-rail-item--active:nth-child(2)) { --rail-done: 1; }
+.demo-micro .step-rail:has(> .step-rail-item--active:nth-child(3)) { --rail-done: 2; }
+.demo-micro .step-rail:has(> .step-rail-item--active:nth-child(4)) { --rail-done: 3; }
+.demo-micro .step-rail:has(> .step-rail-item--active:nth-child(5)) { --rail-done: 4; }
+.demo-micro .step-rail:has(> .step-rail-item--active:nth-child(6)) { --rail-done: 5; }
+
+/* The dot sits inside the pill: on the li when it is plain text, on the
+   button when the li wraps one (the button carries the pill then). */
+.demo-micro .step-rail-item:not(:has(> button))::before,
+.demo-micro .step-rail-item > button::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 0 8px 1px 0;
+  vertical-align: middle;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  transition:
+    background-color var(--t-fast) linear,
+    border-color var(--t-fast) linear;
+}
+
+.demo-micro .step-rail-item--done::before,
+.demo-micro .step-rail-item--done > button::before {
+  background-color: var(--gold);
+  border-color: var(--gold);
+}
+
+/* ---- Reduced motion → each file's @media (prefers-reduced-motion) block -- */
+
+[data-motion="reduced"] .demo-micro .likert-option,
+[data-motion="reduced"] .demo-micro .likert-ring,
+[data-motion="reduced"] .demo-micro .likert-ring::after,
+[data-motion="reduced"] .demo-micro .step-rail::after,
+[data-motion="reduced"] .demo-micro .step-rail-item:not(:has(> button))::before,
+[data-motion="reduced"] .demo-micro .step-rail-item > button::before {
+  transition: opacity 120ms linear;
+}
+
+[data-motion="reduced"] .demo-micro .likert-option:active:enabled,
+[data-motion="reduced"] .demo-micro .likert-ring::after {
+  transform: none;
+}
+
+[data-motion="reduced"]::view-transition-group(screen-slide),
+[data-motion="reduced"]::view-transition-group(screen-eyebrow),
+[data-motion="reduced"]::view-transition-group(screen-title) {
+  animation-duration: 120ms;
+}
+
+[data-motion="reduced"]::view-transition-old(screen-slide) {
+  animation: 120ms linear both screen-fade-out;
+}
+
+[data-motion="reduced"]::view-transition-new(screen-slide) {
+  animation: 120ms linear both screen-fade-in;
+}
+
+@keyframes screen-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes screen-fade-in {
+  from {
+    opacity: 0;
+  }
+}
