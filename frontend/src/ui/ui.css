@@ -167,15 +167,36 @@
   width: 80px;
   background: none;
   padding: 0;
+  transition: transform var(--t-fast) var(--ease-out);
+}
+
+/* Press and hold: the option settles. */
+.likert-option:active:enabled {
+  transform: scale(0.97);
 }
 
 .likert-ring {
+  position: relative;
   width: 22px;
   height: 22px;
   border-radius: 50%;
   border: 1px solid var(--gold-50);
-  transition: background var(--t-fast) ease, border-color var(--t-fast) ease,
-    box-shadow var(--t-fast) ease;
+  transition: border-color var(--t-fast) var(--ease-out);
+}
+
+/* The fill lives on a pseudo-element so it can grow from the centre
+   (transform + opacity, compositor-only) instead of repainting the ring. */
+.likert-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--gold);
+  opacity: 0;
+  transform: scale(0.5);
+  transition:
+    opacity var(--t-fast) var(--ease-out),
+    transform var(--t-base) var(--ease-out);
 }
 
 .likert-option:hover:enabled .likert-ring {
@@ -183,9 +204,22 @@
 }
 
 .likert-option--on .likert-ring {
-  background: var(--gold);
   border-color: var(--gold);
-  box-shadow: 0 0 14px var(--gold-focus);
+}
+
+.likert-option--on .likert-ring::after {
+  opacity: 1;
+  transform: none;
+}
+
+/* The focus ring hugs the circle instead of boxing the whole 80 px option. */
+.likert-option:focus-visible {
+  outline: none;
+}
+
+.likert-option:focus-visible .likert-ring {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
 }
 
 .likert-label {
@@ -235,6 +269,12 @@
   background: transparent;
   color: var(--text);
   transition: background var(--t-fast) ease;
+}
+
+/* Pressed: the half takes the hover wash a step further — no movement, the
+   choice is about to move on its own. */
+.split-half:active:enabled {
+  background: var(--gold-wash);
 }
 
 .split-half:hover:enabled {
@@ -448,9 +488,106 @@
   }
 }
 
+/* --- Slide change ---
+   Answering an item swaps the slide (App.jsx wraps the index update in a view
+   transition). Only the body travels: 12 px out to the left, 12 px in from the
+   right. The eyebrow and title get their own names, so they are lifted out of
+   the slide and cross-fade in place. One .screen is on the page at a time —
+   two would duplicate the names and cancel the transition. */
+.screen > .screen-body {
+  view-transition-name: screen-slide;
+}
+
+.screen > .eyebrow {
+  view-transition-name: screen-eyebrow;
+}
+
+.screen > .screen-title {
+  view-transition-name: screen-title;
+}
+
+/* The snapshot layer must never eat a click: the next answer is live at once. */
+::view-transition {
+  pointer-events: none;
+}
+
+::view-transition-group(screen-slide),
+::view-transition-group(screen-eyebrow),
+::view-transition-group(screen-title) {
+  animation-duration: var(--t-base);
+  animation-timing-function: var(--ease-out);
+}
+
+/* Everything unnamed swaps instantly — only the slide moves. */
+::view-transition-group(root),
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+::view-transition-old(screen-slide) {
+  animation: var(--t-base) var(--ease-out) both screen-slide-out;
+}
+
+::view-transition-new(screen-slide) {
+  animation: var(--t-base) var(--ease-out) both screen-slide-in;
+}
+
+@keyframes screen-slide-out {
+  to {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+}
+
+@keyframes screen-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+@keyframes screen-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes screen-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .confirm-overlay,
   .confirm-card {
     animation: none;
+  }
+
+  /* State changes in place: no press scale, no growing fill, a short fade. */
+  .likert-option,
+  .likert-ring,
+  .likert-ring::after {
+    transition: opacity 120ms linear;
+  }
+
+  .likert-option:active:enabled,
+  .likert-ring::after {
+    transform: none;
+  }
+
+  ::view-transition-group(screen-slide),
+  ::view-transition-group(screen-eyebrow),
+  ::view-transition-group(screen-title) {
+    animation-duration: 120ms;
+  }
+
+  ::view-transition-old(screen-slide) {
+    animation: 120ms linear both screen-fade-out;
+  }
+
+  ::view-transition-new(screen-slide) {
+    animation: 120ms linear both screen-fade-in;
   }
 }

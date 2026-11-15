@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion as Motion } from "framer-motion";
+import { AnimatePresence, MotionConfig, motion as Motion } from "framer-motion";
 import GraphView from "./components/GraphView";
 import { DetailPanel } from "./components/GraphView/NodeComponent";
 import Wordmark from "./ui/Wordmark";
@@ -16,6 +16,11 @@ import ValuesTournamentScreen from "./screens/ValuesTournamentScreen";
 import ValuesHierarchyScreen from "./screens/ValuesHierarchyScreen";
 import ExperienceScreen from "./screens/ExperienceScreen";
 import SummaryScreen from "./screens/SummaryScreen";
+import RiasecResultScreen from "./screens/RiasecResultScreen";
+import FirstPathScreen from "./screens/FirstPathScreen";
+import ValuesFit from "./motion/fit/ValuesFit";
+import { useOnetField } from "./motion/onetField";
+import { withViewTransition } from "./motion/viewTransition";
 import StepRail from "./screens/StepRail";
 import OutputDecision from "./screens/OutputDecision";
 import ProfilePanel from "./components/ProfileCharts";
@@ -89,7 +94,7 @@ function overallProgress(progress) {
 function InfoPanel({ view, onClose }) {
   if (!view) return null;
   return (
-    <div className="detail-panel">
+    <div className={`detail-panel${view.wide ? " detail-panel--wide" : ""}`}>
       <button className="detail-close" onClick={onClose}>×</button>
       <p className="detail-archetype">{view.archetype}</p>
       <h2 className="detail-title">{view.title}</h2>
@@ -97,6 +102,7 @@ function InfoPanel({ view, onClose }) {
       {(view.sections || []).map((section, index) => (
         <div className="detail-section" key={index}>
           {section.heading && <h4>{section.heading}</h4>}
+          {section.figure}
           {section.text && <p>{section.text}</p>}
           {section.items && section.items.length > 0 && (
             <ul>
@@ -222,6 +228,15 @@ function LifePathApp({ onReset }) {
   const [valuesComparison, setValuesComparison] = useState(null);
   const [valuesRanking, setValuesRanking] = useState(null);
   const [valuesRankDraft, setValuesRankDraft] = useState([]);
+  // The tournament's recorded answers ([{ a, b, winner }]) — null outside a
+  // running tournament. The values screens draw the order they imply.
+  const [valuesDecided, setValuesDecided] = useState(null);
+  // View state: the interest result is shown once, right after the quiz
+  // closes. The step machine is already on `values` underneath it.
+  const [riasecReveal, setRiasecReveal] = useState(false);
+  // The output whose card should play its arrival (just generated in this
+  // session) — a reload or a dev jump shows the settled card instead.
+  const [arrivalId, setArrivalId] = useState(null);
   const [careerJourneyQuestions, setCareerJourneyQuestions] = useState([]);
   const [cvUploadFormats, setCvUploadFormats] = useState([".pdf", ".docx", ".txt"]);
   const [journeyIndex, setJourneyIndex] = useState(0);
@@ -284,6 +299,7 @@ function LifePathApp({ onReset }) {
     });
     setValuesComparison(data.valuesComparison || null);
     setValuesRanking(data.valuesRanking || null);
+    setValuesDecided(data.valuesDecided || null);
     // The reorderable draft starts from the finished tournament's ranking. On a
     // rail revisit finalizeValues has cleared the tournament and the auto-start
     // effect is blocked by userValues, so the confirmed order seeds it instead.
@@ -305,6 +321,7 @@ function LifePathApp({ onReset }) {
   // go through here: a second place that knows about indexes would drift.
   const hydrateFromSnapshot = (data) => {
     applySessionSnapshot(data);
+    setRiasecReveal(false);
     setDreamAnswer(data.dreamAnswer || "");
     setDemoDrafts(
       Object.fromEntries(
@@ -417,8 +434,14 @@ function LifePathApp({ onReset }) {
     const item = bigFiveItems[bigFiveIndex];
     if (!sessionId || !item) return;
     return run("bigFive", "Could not save.", async () => {
-      applySessionSnapshot(await submitBigFiveAnswer({ sessionId, itemId: item.id, value }));
-      if (bigFiveIndex < bigFiveItems.length - 1) setBigFiveIndex((i) => i + 1);
+      const data = await submitBigFiveAnswer({ sessionId, itemId: item.id, value });
+      // The busy flag clears inside the transition so the incoming slide is
+      // captured live, not dimmed.
+      withViewTransition(() => {
+        applySessionSnapshot(data);
+        if (bigFiveIndex < bigFiveItems.length - 1) setBigFiveIndex((i) => i + 1);
+        setBusy((p) => ({ ...p, bigFive: false }));
+      });
     });
   };
 
@@ -439,14 +462,24 @@ function LifePathApp({ onReset }) {
     const item = riasecItems[riasecIndex];
     if (!sessionId || !item) return;
     return run("riasec", "Could not save.", async () => {
-      applySessionSnapshot(await submitRiasecAnswer({ sessionId, itemId: item.id, value }));
-      if (riasecIndex < riasecItems.length - 1) setRiasecIndex((i) => i + 1);
+      const data = await submitRiasecAnswer({ sessionId, itemId: item.id, value });
+      withViewTransition(() => {
+        applySessionSnapshot(data);
+        // The quiz just closed: show its result once before the values step.
+        if (data.step !== "riasec") setRiasecReveal(Boolean(data.riasecScores));
+        else if (riasecIndex < riasecItems.length - 1) setRiasecIndex((i) => i + 1);
+        setBusy((p) => ({ ...p, riasec: false }));
+      });
     });
   };
 
   const handleSkipRiasec = () =>
     sessionId &&
-    sync("riasecSkip", "Could not estimate interests.", () => skipRiasec({ sessionId }));
+    run("riasecSkip", "Could not estimate interests.", async () => {
+      const data = await skipRiasec({ sessionId });
+      applySessionSnapshot(data);
+      if (data.step !== "riasec") setRiasecReveal(Boolean(data.riasecScores));
+    });
 
   const handleValuesStart = () =>
     sessionId &&
@@ -535,21 +568,40 @@ function LifePathApp({ onReset }) {
       async () => {
         const data = await fetchFirstOutput({ sessionId });
         if (stepRef.current !== "tree") return;
+        // The snapshot lands; FirstPathScreen hands over to the graph (at once
+        // when it has no scene to finish, or on "See your path").
         applySessionSnapshot(data);
-        setStage("tree");
       },
       handleEnterLifePath
     );
 
   const latestOutput = outputs.length ? outputs[outputs.length - 1] : null;
+
+  const handleFirstPathShown = () => {
+    if (stage === "tree") return;
+    setArrivalId(latestOutput?.id ?? null);
+    setStage("tree");
+  };
   const acceptedOutput = outputs.find((o) => o.id === acceptedOutputId) || null;
 
   const handleOutputOpen = (output) => {
     setStageDetail(null);
+    const userScores = profile?.userValues?.scores;
+    const fitFigure =
+      output.valuesFit && output.workValues && userScores ? (
+        <ValuesFit
+          compact
+          title={output.jobTitle}
+          user={userScores}
+          job={output.workValues}
+          fit={output.valuesFit.overall}
+        />
+      ) : null;
     setInfoView({
       archetype: output.orientedField,
       title: output.jobTitle,
       description: output.thesis,
+      wide: Boolean(fitFigure),
       sections: [
         ...whyThisFitsSections(output),
         onetSection(output),
@@ -557,6 +609,7 @@ function LifePathApp({ onReset }) {
         output.valuesFit
           ? {
               heading: `Work-values match: ${output.valuesFit.overall}/100`,
+              figure: fitFigure,
               text: "How this profession's measured work values line up with your hierarchy.",
               items: (output.topValues || []).map(
                 (k) => `${WORK_VALUE_META[k]?.label || k} — strong for this role`
@@ -604,22 +657,36 @@ function LifePathApp({ onReset }) {
   const handleNotSuitable = () =>
     sessionId &&
     latestOutput &&
-    sync(
+    run(
       "refine",
       "Could not regenerate the output.",
-      () => refineOutput({ sessionId, outputId: latestOutput.id }),
+      async () => {
+        const data = await refineOutput({ sessionId, outputId: latestOutput.id });
+        applySessionSnapshot(data);
+        const fresh = data.outputs?.[data.outputs.length - 1];
+        setArrivalId(fresh?.id ?? null);
+      },
       handleNotSuitable
     );
 
   // Rail navigation between steps already reached. The backend refuses anything
   // past furthestStep, so this cannot skip unanswered work; it only moves the
   // step, which is why the full snapshot can be applied wholesale.
-  const handleRailNavigate = (targetStep) =>
-    sessionId &&
-    targetStep !== step &&
-    run("goto", "Could not switch steps.", async () =>
-      hydrateFromSnapshot(await sessionGoto({ sessionId, step: targetStep }))
+  const handleRailNavigate = (targetStep) => {
+    // The interest result is a view over `values`: leaving it by the rail is
+    // just closing it, and "Values" itself is where it already is.
+    if (riasecReveal) {
+      setRiasecReveal(false);
+      if (targetStep === step) return undefined;
+    }
+    return (
+      sessionId &&
+      targetStep !== step &&
+      run("goto", "Could not switch steps.", async () =>
+        hydrateFromSnapshot(await sessionGoto({ sessionId, step: targetStep }))
+      )
     );
+  };
 
   // Dev stage jump. The composite targets cannot call handleEnterLifePath /
   // handleAcceptOutput: those read sessionId and latestOutput from React state,
@@ -690,6 +757,11 @@ function LifePathApp({ onReset }) {
 
   const currentBigFiveItem = bigFiveItems[bigFiveIndex] || null;
 
+  // The O*NET field (a lazy chunk) is fetched a step early, so the first-path
+  // scene has it by the time the `tree` step opens.
+  const onetField = useOnetField(step === "summary" || step === "tree" || stage === "tree");
+  const showRiasecResult = riasecReveal && step === "values" && Boolean(profile?.riasecScores);
+
   const graph = buildLifePathGraph({
     outputs,
     acceptedOutputId,
@@ -737,13 +809,19 @@ function LifePathApp({ onReset }) {
           onAccept={handleAcceptOutput}
           onRegenerate={handleNotSuitable}
           onOpenDetails={handleOutputOpen}
+          field={onetField}
+          riasecScores={profile?.riasecScores}
+          outputs={outputs}
+          animateArrival={latestOutput.id === arrivalId}
         />
       ),
     };
   }
 
   const overall = overallProgress(progress);
-  const surveyFooter = (
+  // `railStep` lets a view that sits over a step (the interest result) show
+  // the rail where the user thinks they are.
+  const renderFooter = (railStep = step) => (
     <>
       {overall && (
         <div className="screen-progress">
@@ -761,7 +839,7 @@ function LifePathApp({ onReset }) {
         </div>
       )}
       <StepRail
-        step={step}
+        step={railStep}
         furthestStep={furthestStep}
         busy={busy.goto}
         onNavigate={handleRailNavigate}
@@ -773,6 +851,8 @@ function LifePathApp({ onReset }) {
       </button>
     </>
   );
+
+  const surveyFooter = renderFooter();
 
   if (restoring) {
     return (
@@ -788,6 +868,7 @@ function LifePathApp({ onReset }) {
   const homeNav = stage === "entry" ? null : () => setConfirmHome(true);
 
   return (
+    <MotionConfig reducedMotion="user">
     <HomeNavContext.Provider value={homeNav}>
       <main className="app-shell">
         {stage === "entry" && (
@@ -833,7 +914,7 @@ function LifePathApp({ onReset }) {
                 total={bigFiveItems.length}
                 busy={busy.bigFive}
                 onAnswer={handleSubmitBigFive}
-                onBack={() => setBigFiveIndex((i) => Math.max(0, i - 1))}
+                onBack={() => withViewTransition(() => setBigFiveIndex((i) => Math.max(0, i - 1)))}
                 canGoBack={bigFiveIndex > 0}
                 footer={surveyFooter}
               />
@@ -855,7 +936,7 @@ function LifePathApp({ onReset }) {
                 total={riasecItems.length}
                 busy={busy.riasec || busy.riasecSkip}
                 onAnswer={handleSubmitRiasec}
-                onBack={() => setRiasecIndex((i) => Math.max(0, i - 1))}
+                onBack={() => withViewTransition(() => setRiasecIndex((i) => Math.max(0, i - 1)))}
                 canGoBack={riasecIndex > 0}
                 onSkip={handleSkipRiasec}
                 canSkip={Object.keys(riasecAnswers).length === 0}
@@ -863,9 +944,20 @@ function LifePathApp({ onReset }) {
               />
             )}
 
-            {step === "values" && valuesComparison && (
+            {showRiasecResult && (
+              <RiasecResultScreen
+                scores={profile.riasecScores}
+                code={profile.riasecCode}
+                inferred={profile.riasecInferred}
+                onContinue={() => setRiasecReveal(false)}
+                footer={renderFooter("riasec")}
+              />
+            )}
+
+            {step === "values" && !showRiasecResult && valuesComparison && (
               <ValuesTournamentScreen
                 comparison={valuesComparison}
+                decided={valuesDecided}
                 progress={progress?.values || null}
                 busy={busy.values}
                 onChoose={handleValuesAnswer}
@@ -873,9 +965,10 @@ function LifePathApp({ onReset }) {
               />
             )}
 
-            {step === "values" && !valuesComparison && valuesRankDraft.length === 6 && (
+            {step === "values" && !showRiasecResult && !valuesComparison && valuesRankDraft.length === 6 && (
               <ValuesHierarchyScreen
                 ranking={valuesRankDraft}
+                answersCount={valuesDecided?.length || 0}
                 onReorder={(from, to) => setValuesRankDraft((list) => moveRankItemTo(list, from, to))}
                 busy={busy.valuesConfirm}
                 onConfirm={handleValuesConfirm}
@@ -927,6 +1020,8 @@ function LifePathApp({ onReset }) {
                   bigFiveScores: profile?.bigFiveScores,
                 })}
                 bigFiveScores={profile?.bigFiveScores}
+                riasecScores={profile?.riasecScores}
+                riasecCode={profile?.riasecCode}
                 personaSummary={profile?.personaSummary}
                 userValues={profile?.userValues}
                 busy={busy.summary}
@@ -936,17 +1031,14 @@ function LifePathApp({ onReset }) {
             )}
 
             {step === "tree" && (
-              <ScreenShell
-                eyebrow="life path engine"
-                title="Building your first life path…"
-                sub="Matching your profile against the O*NET occupation set."
-                glow="center"
+              <FirstPathScreen
+                field={onetField}
+                riasecScores={profile?.riasecScores}
+                riasecCode={profile?.riasecCode}
+                output={outputs[0] || null}
+                onDone={handleFirstPathShown}
                 footer={surveyFooter}
-              >
-                <div className="screen-loading-dots" aria-live="polite" aria-label="Generating">
-                  <span /><span /><span />
-                </div>
-              </ScreenShell>
+              />
             )}
 
             <ErrorRow error={error} retryAction={retryAction} />
@@ -982,6 +1074,8 @@ function LifePathApp({ onReset }) {
                 edges={graph.edges}
                 focusKey={focusKey}
                 focusNodeIds={focusNodeIds}
+                roadmapKey={roadmapVisible ? acceptedOutputId : null}
+                roadmapSteps={selectedRoadmap?.stages.length || 0}
               />
               {profileOpen && (
                 <ProfilePanel
@@ -1073,5 +1167,6 @@ function LifePathApp({ onReset }) {
         </AnimatePresence>
       </main>
     </HomeNavContext.Provider>
+    </MotionConfig>
   );
 }

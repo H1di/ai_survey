@@ -1,16 +1,29 @@
 import ScreenShell from "../ui/ScreenShell";
 import { PersonalityRadarChart, WorkValuesRadar } from "../components/ProfileCharts";
+import ArchetypeEmblem from "../motion/emblem/ArchetypeEmblem";
+import { canBuildEmblem } from "../motion/emblem/emblemEngine";
 import "./screens.css";
 
 export default function SummaryScreen({
   archetype,
   bigFiveScores,
+  riasecScores,
+  riasecCode,
   personaSummary,
   userValues,
   busy,
   onContinue,
   footer,
+  reducedMotion,
 }) {
+  // The three measured layers as one mark — only when all three exist.
+  const emblemProfile = {
+    bigFiveScores,
+    riasecScores,
+    riasecCode,
+    valuesOrder: userValues?.order,
+  };
+
   return (
     <ScreenShell
       eyebrow="step 6 · summary"
@@ -19,6 +32,9 @@ export default function SummaryScreen({
       glow="center"
       footer={footer}
     >
+      {canBuildEmblem(emblemProfile) && (
+        <ArchetypeEmblem profile={emblemProfile} reducedMotion={reducedMotion} />
+      )}
       <p className="summary-archetype">{archetype.name}</p>
       <p className="summary-tagline">{archetype.tagline}</p>
 

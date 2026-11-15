@@ -217,6 +217,33 @@ test("finalizeValues stores the hierarchy, clears the tournament, and advances",
   assert.equal(trimmed.userValuesAxes, undefined, "Schwartz plane point is gone");
   assert.equal(trimmed.valuesComparison, null, "no pending comparison after confirm");
   assert.equal(trimmed.valuesRanking, null, "no lingering ranking after confirm");
+  assert.equal(trimmed.valuesDecided, null, "no recorded answers once the tournament is dropped");
+});
+
+test("valuesDecided echoes the recorded answers while the tournament runs", () => {
+  const { startTournament, nextComparison, recordAnswer } = require("../assessment/valuesTournament");
+  const { WORK_VALUES_ORDER } = require("../engine/workValues");
+  const store = new SessionStore();
+  const s = makeSession(store);
+
+  const before = store.serializeSessionState(s, {}, {}, { includeStatic: false });
+  assert.equal(before.valuesDecided, null, "null before the tournament starts");
+
+  let state = startTournament(WORK_VALUES_ORDER);
+  store.setValuesTournament(s, state);
+  assert.deepEqual(
+    store.serializeSessionState(s, {}, {}, { includeStatic: false }).valuesDecided,
+    [],
+    "empty, not null, once it is running"
+  );
+
+  const first = nextComparison(state);
+  state = recordAnswer(state, { comparisonId: first.comparisonId, winner: first.a }).state;
+  store.setValuesTournament(s, state);
+  const snap = store.serializeSessionState(s, {}, {}, { includeStatic: false });
+  assert.deepEqual(snap.valuesDecided, [{ a: first.a, b: first.b, winner: first.a }]);
+  // Additive: the pending question still travels exactly as before.
+  assert.deepEqual(snap.valuesComparison, nextComparison(state));
 });
 
 test("valuesComparison serializes the pending pairwise question", () => {

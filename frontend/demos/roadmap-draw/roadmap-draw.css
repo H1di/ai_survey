@@ -9,12 +9,6 @@
   height: 100%;
 }
 
-.rd-edge {
-  fill: none;
-  stroke: var(--gold-40);
-  stroke-width: 1.5;
-}
-
 /* The app's node classes carry their own CSS entrance (node-pop) and a hover
    glow; here the clock owns the motion and demos never glow. */
 .rd-stage .node,
@@ -32,16 +26,17 @@
   font-size: 28px;
 }
 
-.rd-stage--chain .rd-step {
-  width: 280px;
+.rd-stage--chain .node--roadmap {
+  width: 300px;
+}
+
+/* A stage this small has no chosen-path pulse; the draw is the subject. */
+.rd-stage .branch-edge-flow {
+  display: none;
 }
 
 .rd-chosen .node-title {
   margin-bottom: 12px;
-}
-
-.rd-step {
-  will-change: opacity, transform;
 }
 
 .rd-replay {

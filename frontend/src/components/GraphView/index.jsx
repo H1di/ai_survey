@@ -10,6 +10,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { MeNode, OutputNode, AdviceNode, RoadmapNode, LoadingNode } from './NodeComponent';
 import BranchEdge from './BranchEdge';
+import { RoadmapReveal } from '../../motion/roadmap/RoadmapReveal';
 import './GraphView.css';
 
 const nodeTypes = {
@@ -59,7 +60,16 @@ function CameraDirector({ focusKey, focusNodeIds }) {
   return null;
 }
 
-export default function GraphView({ nodes: externalNodes, edges: externalEdges, focusKey, focusNodeIds }) {
+// roadmapKey / roadmapSteps start the roadmap's reveal clock: a new key (the
+// accepted output's id) replays it, zero steps means there is nothing to reveal.
+export default function GraphView({
+  nodes: externalNodes,
+  edges: externalEdges,
+  focusKey,
+  focusNodeIds,
+  roadmapKey = null,
+  roadmapSteps = 0,
+}) {
   const [nodes, setNodes, onNodesChange] = useNodesState(externalNodes || []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(externalEdges || []);
 
@@ -73,6 +83,7 @@ export default function GraphView({ nodes: externalNodes, edges: externalEdges, 
 
   return (
     <div className="graph-view">
+      <RoadmapReveal stepCount={roadmapSteps} revealKey={roadmapKey}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -91,6 +102,7 @@ export default function GraphView({ nodes: externalNodes, edges: externalEdges, 
         <Controls showInteractive={false} className="graph-controls" />
         <CameraDirector focusKey={focusKey} focusNodeIds={focusNodeIds} />
       </ReactFlow>
+      </RoadmapReveal>
     </div>
   );
 }

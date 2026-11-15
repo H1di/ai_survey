@@ -1,0 +1,7 @@
+/* The figure variant at the size the result card gives it (4:3, ≤ 420 px). */
+.omap-demo-figure {
+  position: relative;
+  width: min(100%, 420px);
+  aspect-ratio: 4 / 3;
+  margin: 24px auto;
+}

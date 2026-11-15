@@ -1,0 +1,143 @@
+/* Layout follows the stage box's width (container query); every animated
+   piece has a reserved box, so nothing shifts while it fades in. */
+.emb {
+  container-type: inline-size;
+  padding: 16px 16px 18px;
+}
+
+.emb-layout {
+  display: grid;
+  gap: 16px;
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+.emb-figure {
+  margin: 0;
+  width: 100%;
+  max-width: 480px;
+  justify-self: center;
+}
+
+.emb-canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+}
+
+.emb-caption {
+  text-align: center;
+  min-height: 7.5em; /* name + two tagline lines + serial */
+}
+
+.emb-name {
+  margin: 4px 0 6px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  color: var(--bone);
+}
+
+.emb-tagline {
+  margin: 0 auto;
+  max-width: 34ch;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-60);
+}
+
+.emb-serial {
+  margin: 10px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--gold-70);
+}
+
+.emb-legend {
+  margin: 0;
+  display: grid;
+  gap: 12px;
+  align-content: center;
+}
+
+.emb-legend dt {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gold-70);
+}
+
+.emb-legend dd {
+  margin: 4px 0 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-60);
+}
+
+.emb-legend > div {
+  transition: opacity 400ms var(--ease-out);
+}
+
+/* --- Shipped (summary screen) ------------------------------------------- */
+
+.emb-host {
+  width: 100%;
+  max-width: 400px;
+  margin-bottom: 30px;
+}
+
+.emb-host .emb {
+  padding: 0;
+  display: grid;
+  justify-items: center;
+}
+
+.emb-host .emb-figure {
+  max-width: 340px;
+}
+
+/* Serial only: the screen prints the archetype name itself. */
+.emb-caption--serial {
+  min-height: 0;
+}
+
+.emb-caption--serial .emb-serial {
+  margin-top: 2px;
+}
+
+.emb-fold {
+  width: 100%;
+  text-align: left;
+}
+
+.emb-fold summary {
+  width: fit-content;
+  margin: 0 auto;
+  padding: 6px 0;
+  cursor: pointer;
+  font: 400 12px/1.4 var(--font-body);
+  color: var(--gold-70);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.emb-fold .emb-legend {
+  margin-top: 10px;
+}
+
+.emb-save {
+  margin-top: 6px;
+}
+
+@container (min-width: 720px) {
+  .emb-layout--open {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    align-items: center;
+    gap: 32px;
+  }
+}

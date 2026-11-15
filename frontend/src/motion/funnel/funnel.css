@@ -1,0 +1,29 @@
+/* Stage box: square on a phone, 16:10 from 600 px up. Sized by the container,
+   never by the animating content — no layout shift. */
+.funnel-wrap {
+  container-type: inline-size;
+}
+
+.funnel-canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+}
+
+@container (min-width: 600px) {
+  .funnel-canvas {
+    aspect-ratio: 16 / 10;
+  }
+}
+
+/* The stage being shown. One fixed-height line: the text changes, the box
+   never does. */
+.funnel-caption {
+  margin: 10px 0 0;
+  min-height: 1.5em;
+  text-align: center;
+  font: 500 11px/1.5 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-70);
+}

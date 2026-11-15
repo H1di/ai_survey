@@ -1,9 +1,28 @@
 import Eyebrow from "../ui/Eyebrow";
+import OutputFieldFigure from "../motion/OutputFieldFigure";
+import { canPlaceOutputs } from "../motion/onetField";
 import { usMarketLine, whyThisFitsSections } from "../lifePath";
 import "./screens.css";
 
 // The Yes/No decision, as three ruled columns carrying the output itself.
-export default function OutputDecision({ output, busy, onAccept, onRegenerate, onOpenDetails }) {
+//
+// With the O*NET field (`field`, `riasecScores`, `outputs` — every output so
+// far, this one last) the job column carries a figure: where the pick sits
+// among the shortlist, and — while a "No" is in flight and when its answer
+// lands — the move from one field family to the next. The figure never gates
+// the buttons.
+export default function OutputDecision({
+  output,
+  busy,
+  onAccept,
+  onRegenerate,
+  onOpenDetails,
+  field = null,
+  riasecScores = null,
+  outputs = null,
+  animateArrival = false,
+  reducedMotion,
+}) {
   const market = usMarketLine(output);
   // Outputs generated before the structured explanation existed — and any
   // whose second AI call failed — carry a single free-text section instead of
@@ -13,6 +32,8 @@ export default function OutputDecision({ output, busy, onAccept, onRegenerate, o
     .filter(Boolean)
     .slice(0, 3);
   const locked = Boolean(busy.accept || busy.refine);
+  const shown = outputs?.length ? outputs : [output];
+  const figure = Boolean(riasecScores) && canPlaceOutputs(field, shown);
 
   return (
     <div className="output-decision">
@@ -36,6 +57,16 @@ export default function OutputDecision({ output, busy, onAccept, onRegenerate, o
             )}
           </p>
           {market && <p className="output-meta">{market}</p>}
+          {figure && (
+            <OutputFieldFigure
+              field={field}
+              riasecScores={riasecScores}
+              outputs={shown}
+              leaving={Boolean(busy.refine)}
+              animateArrival={animateArrival}
+              reducedMotion={reducedMotion}
+            />
+          )}
         </div>
 
         <div className="output-column">
@@ -53,6 +84,10 @@ export default function OutputDecision({ output, busy, onAccept, onRegenerate, o
           </button>
         </div>
       </div>
+
+      {figure && (
+        <p className="output-attribution">{output.onet?.attribution || field.attribution}</p>
+      )}
 
       <p className="screen-footnote">
         Say Yes to accept (unlocks four advice blocks + a roadmap) or No to regenerate from a

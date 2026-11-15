@@ -1,11 +1,65 @@
 .step-rail {
+  position: relative;
   list-style: none;
   margin: 0 0 36px;
-  padding: 0;
+  padding: 0 0 14px;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   justify-content: center;
+}
+
+/* Progress line under the pills: a hairline track and a gold fill that grows
+   one sixth per completed step. scaleX, not width — the fill never triggers
+   layout. */
+.step-rail::before,
+.step-rail::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+}
+
+.step-rail::before {
+  background: var(--gold-20);
+}
+
+.step-rail::after {
+  background: var(--gold);
+  transform-origin: left;
+  transform: scaleX(calc(var(--rail-done, 0) / 6));
+  transition: transform var(--t-base) var(--ease-out);
+}
+
+/* Steps done = index of the active entry. 6 = JOURNEY_RAIL.length; a seventh
+   step needs one more rule (and a /7). */
+.step-rail:has(> .step-rail-item--active:nth-child(2)) { --rail-done: 1; }
+.step-rail:has(> .step-rail-item--active:nth-child(3)) { --rail-done: 2; }
+.step-rail:has(> .step-rail-item--active:nth-child(4)) { --rail-done: 3; }
+.step-rail:has(> .step-rail-item--active:nth-child(5)) { --rail-done: 4; }
+.step-rail:has(> .step-rail-item--active:nth-child(6)) { --rail-done: 5; }
+
+/* A dot inside each pill: on the li when it is plain text, on the button when
+   the li wraps one (the button carries the pill then). Gold once done. */
+.step-rail-item:not(:has(> button))::before,
+.step-rail-item > button::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 0 8px 1px 0;
+  vertical-align: middle;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  transition:
+    background-color var(--t-fast) linear,
+    border-color var(--t-fast) linear;
+}
+
+.step-rail-item--done::before,
+.step-rail-item--done > button::before {
+  background-color: var(--gold);
+  border-color: var(--gold);
 }
 
 .step-rail-item,
@@ -62,6 +116,7 @@
   cursor: default;
 }
 
+
 .btn--bone {
   background: var(--bone);
   color: var(--ink-on-gold);
@@ -97,6 +152,15 @@
 .btn--ghost:hover:enabled {
   color: var(--text);
   border-color: var(--gold-50);
+}
+
+/* Pressed: the button settles back from its hover lift. After the hover rules
+   on purpose — same specificity, so order decides. */
+.btn:active:enabled,
+.btn--bone:active:enabled,
+.btn--gold:active:enabled {
+  transform: scale(0.97);
+  box-shadow: none;
 }
 
 /* --- Hero --- */
@@ -369,6 +433,45 @@
   margin-top: 26px;
 }
 
+/* Where the order came from: how few answers it took. */
+.rank-provenance {
+  margin: -14px 0 22px;
+  max-width: 560px;
+  font: 500 11px/1.5 var(--font-mono);
+  letter-spacing: 0.06em;
+  color: var(--gold-70);
+}
+
+/* The interest result's Continue. */
+.result-continue {
+  margin-top: 24px;
+}
+
+/* The `tree` step: the selection path, the hand-over button, the attribution.
+   The button is always in the layout (hidden until the result exists), so its
+   arrival moves nothing. */
+.first-path {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.first-path .funnel-wrap {
+  width: 100%;
+}
+
+.first-path-cta {
+  margin-top: 18px;
+}
+
+.first-path-attribution {
+  margin-top: 20px;
+  font-size: 11px;
+  color: var(--text-30);
+}
+
 /* One control, two halves: the pick is a single either/or, not two buttons. */
 .intent-segment {
   display: inline-flex;
@@ -424,6 +527,19 @@
 @media (prefers-reduced-motion: reduce) {
   .experience-split {
     animation: none;
+  }
+
+  /* The rail's line and dots change in place. */
+  .step-rail::after,
+  .step-rail-item:not(:has(> button))::before,
+  .step-rail-item > button::before {
+    transition: opacity 120ms linear;
+  }
+
+  .btn,
+  .btn:hover:enabled,
+  .btn:active:enabled {
+    transform: none;
   }
 }
 
@@ -702,6 +818,14 @@
   padding-left: 18px;
   font: 300 13.5px/1.6 var(--font-body);
   color: var(--text-60);
+}
+
+/* CC-BY attribution for the O*NET-derived figure in the job column. */
+.output-attribution {
+  margin: 12px 0 0;
+  padding: 0 30px;
+  font: 300 10.5px/1.5 var(--font-body);
+  color: var(--text-30);
 }
 
 .output-actions {

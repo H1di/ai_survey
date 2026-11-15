@@ -309,6 +309,34 @@ describe("buildLifePathGraph (output chain)", () => {
     expect(stages[1].data.last).toBe(true);
   });
 
+  it("sequences the roadmap from the reveal timeline: edge, then its step, then the next edge", () => {
+    const outputs = [{ ...OUTPUTS[0], accepted: true, detail: DETAIL }];
+    const stages = ["a", "b", "c"].map((id) => ({ id, title: id, timeframe: "1m" }));
+    const { nodes, edges } = buildLifePathGraph({
+      outputs,
+      acceptedOutputId: "output_1",
+      roadmaps: { output_1: { stages } },
+      onOutputOpen: noop,
+      onAdviceOpen: noop,
+      onStageOpen: noop,
+    });
+    const steps = nodes.filter((n) => n.type === "roadmap");
+    const links = edges.filter((e) => e.data?.revealIndex !== undefined);
+    expect(steps.map((n) => n.data.revealIndex)).toEqual([0, 1, 2]);
+    expect(links.map((e) => e.data.revealIndex)).toEqual([0, 1, 2]);
+
+    const appear = steps.map((n) => Number.parseInt(n.style["--appear-delay"], 10));
+    links.forEach((edge, i) => {
+      // The step appears exactly when its edge has finished drawing…
+      expect(appear[i]).toBe(edge.data.flowDelayMs);
+      expect(edge.data.flowDelayMs).toBe(edge.data.delay + 600);
+      // …and the next edge starts only after that step is in (220 ms).
+      if (i > 0) expect(edge.data.delay).toBe(appear[i - 1] + 220);
+    });
+    // Other node types are not part of the roadmap clock.
+    expect(nodes.filter((n) => n.type !== "roadmap").every((n) => n.data.revealIndex === undefined)).toBe(true);
+  });
+
   // Node positions are left edges and the card is 480px wide, so
   // "centred" here means the row's own centre lands on the card's.
   it("abuts the advice cells and centres both rows under the accepted card", () => {

@@ -9,9 +9,10 @@ import { useEffect, useMemo, useState } from "react";
 import DemoShell from "../kit/DemoShell";
 import occupations from "../data/occupations.json";
 import profile from "../data/demo-profile.json";
-import FunnelCanvas from "./FunnelCanvas";
-import { HOLD_AT, buildModel, frameAt, stagesFor } from "./funnelEngine";
-import "./funnel.css";
+import FunnelCanvas from "../../src/motion/funnel/FunnelCanvas";
+import { HOLD_AT, buildModel, frameAt, stagesFor } from "../../src/motion/funnel/funnelEngine";
+import "../../src/motion/funnel/funnel.css";
+import "./funnel-demo.css";
 
 const MODEL = buildModel(occupations, profile);
 

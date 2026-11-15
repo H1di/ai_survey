@@ -36,4 +36,16 @@ describe("ValuesHierarchyScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm hierarchy" }));
     expect(onConfirm).toHaveBeenCalled();
   });
+
+  it("says how few answers the order took, when the record is there", () => {
+    render(<ValuesHierarchyScreen {...base} answersCount={9} />);
+    expect(
+      screen.getByText(/9 answers placed all six · the other 6 of 15\s+possible pairs followed from them/)
+    ).toBeInTheDocument();
+  });
+
+  it("claims nothing on a rail revisit, where the record is gone", () => {
+    render(<ValuesHierarchyScreen {...base} />);
+    expect(screen.queryByText(/answers placed all six/)).not.toBeInTheDocument();
+  });
 });

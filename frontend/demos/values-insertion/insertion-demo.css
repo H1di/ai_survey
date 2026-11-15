@@ -1,0 +1,33 @@
+/* Demo-only controls around the shipped scene. */
+.vins-counter,
+.vins-note {
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+
+.vins-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vins-counter {
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--gold-70);
+  font-variant-numeric: tabular-nums;
+}
+
+.vins .demo-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: transparent;
+}
+
+.vins-note {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-40);
+}

@@ -1,4 +1,6 @@
-// Refine shift — what "No, show another" does. The backend's refine takes only
+// Refine shift — what "No, show another" does. Shipped in the result card
+// (OutputFieldFigure → FieldShift): there the same engine waits on the real
+// response between ruling a family out and flying to the next one. The backend's refine takes only
 // the output id and regenerates from a field family no earlier output used, so
 // each No rules out a whole field and moves to the next-best one.
 //
@@ -8,12 +10,13 @@ import { useEffect, useMemo, useState } from "react";
 import DemoShell from "../kit/DemoShell";
 import occupations from "../data/occupations.json";
 import profile from "../data/demo-profile.json";
-import ShiftCanvas from "./ShiftCanvas";
-import { buildModel, frameAt, parseCubicBezier, roundEnd } from "./shiftEngine";
-import "./refine-shift.css";
+import ShiftCanvas from "../../src/motion/shift/ShiftCanvas";
+import { buildModel, frameAt, parseCubicBezier, roundEnd, traceSource } from "../../src/motion/shift/shiftEngine";
+import "../../src/motion/shift/shift.css";
+import "./shift-demo.css";
 
 const ease = parseCubicBezier(getComputedStyle(document.documentElement).getPropertyValue("--ease-out"));
-const MODEL = buildModel(occupations, profile, ease ? { ease } : {});
+const MODEL = buildModel(occupations, traceSource(profile), ease ? { ease } : {});
 const { families, rounds } = MODEL;
 
 const fields = (n) => `${n} field${n === 1 ? "" : "s"} ruled out`;
@@ -30,6 +33,8 @@ function Scene({ clock }) {
 
   useEffect(() => {
     if (stopAt === null) return;
+    // Demo control only: stop the scrub clock when it reaches the round end.
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (T >= stopAt - 1e-6) {
       clock.pause();
       clock.seek(stopAt);

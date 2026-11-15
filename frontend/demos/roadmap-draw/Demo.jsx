@@ -1,7 +1,9 @@
 // Roadmap draw — the accepted occupation's plan, walked one step at a time.
+// Shipped in the life-path graph: GraphView's RoadmapReveal plays this timeline
+// once when the roadmap arrives.
 import DemoShell from "../kit/DemoShell";
 import profile from "../data/demo-profile.json";
-import { buildStages, buildTimeline } from "./roadmapTimeline";
+import { buildStages, buildTimeline } from "../../src/motion/roadmap/roadmapTimeline";
 import RoadmapDemo from "./RoadmapDemo";
 
 const steps = profile.roadmap.stages;

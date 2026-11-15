@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import OutputDecision from "./OutputDecision";
+import raw from "../motion/data/onet-field.json";
+import { decodeField, groundingFor } from "../motion/onetField";
+
+const field = decodeField(raw);
 
 const output = {
   id: "output_1",
@@ -92,5 +96,79 @@ describe("OutputDecision", () => {
     render(<OutputDecision {...base} output={{ ...output, onet: {}, whyThisFits: null }} />);
     expect(screen.getByText("Financial Manager")).toBeInTheDocument();
     expect(screen.queryByText(/median \(US\)/)).not.toBeInTheDocument();
+  });
+
+  describe("the field figure", () => {
+    const riasecScores = { R: 13, I: 100, A: 88, S: 50, E: 63, C: 38 };
+    const [first, second] = [
+      groundingFor(field, riasecScores).shortlist[0],
+      groundingFor(field, riasecScores).shortlist.find(
+        (o) => o.directionId !== groundingFor(field, riasecScores).shortlist[0].directionId
+      ),
+    ];
+    const placed = (o) => ({
+      ...output,
+      id: o.soc,
+      jobTitle: o.title,
+      socCode: o.soc,
+      directionId: o.directionId,
+      onet: { attribution: "O*NET attribution line." },
+    });
+    const one = placed(first);
+    const withField = { ...base, output: one, outputs: [one], field, riasecScores };
+
+    it("reduced motion: the settled map — the pick among its shortlist — plus the attribution", () => {
+      render(<OutputDecision {...withField} animateArrival reducedMotion />);
+      expect(
+        screen.getByRole("img", {
+          name: new RegExp(`${first.title} marked among the 15 occupations.*all 923 occupations`),
+        })
+      ).toBeInTheDocument();
+      expect(screen.getByText("Among the 15 closest interest profiles")).toBeInTheDocument();
+      expect(screen.getByText("O*NET attribution line.")).toBeInTheDocument();
+    });
+
+    it("while a No is in flight: this family ruled out, no next pick shown, buttons as before", () => {
+      render(<OutputDecision {...withField} busy={{ refine: true }} reducedMotion />);
+      const label = field.directionLabel(first.directionId);
+      expect(screen.getByText(`${label} ruled out · weighing the other fields`)).toBeInTheDocument();
+      expect(
+        screen.getByRole("img", { name: new RegExp(`${label} ruled out; the remaining families are being weighed`) })
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Finding another…" })).toBeDisabled();
+    });
+
+    it("a just-arrived pick plays its arrival without gating Yes or No", () => {
+      const two = placed(second);
+      const onAccept = vi.fn();
+      render(
+        <OutputDecision
+          {...withField}
+          output={two}
+          outputs={[one, two]}
+          onAccept={onAccept}
+          animateArrival
+          reducedMotion={false}
+        />
+      );
+      expect(screen.getByText(`From ${field.directionLabel(second.directionId)}`)).toBeInTheDocument();
+      expect(
+        screen.getByRole("img", {
+          name: new RegExp(`${field.directionLabel(first.directionId)} ruled out\\. The pick, ${second.title}, comes from`),
+        })
+      ).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Yes — accept this path" }));
+      expect(onAccept).toHaveBeenCalled();
+    });
+
+    it("is left out for an output the map cannot place, and for a card without the field", () => {
+      const { container, rerender } = render(
+        <OutputDecision {...withField} output={{ ...one, socCode: null }} outputs={[{ ...one, socCode: null }]} />
+      );
+      expect(container.querySelector(".output-figure")).toBeNull();
+      expect(container.querySelector(".output-attribution")).toBeNull();
+      rerender(<OutputDecision {...base} />);
+      expect(container.querySelector(".output-figure")).toBeNull();
+    });
   });
 });

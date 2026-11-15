@@ -1,4 +1,6 @@
 import { Handle, Position } from '@xyflow/react';
+import { useStepReveal } from '../../motion/roadmap/revealContext';
+import { NODE_RISE_PX } from '../../motion/roadmap/roadmapTimeline';
 import './NodeComponent.css';
 
 export function MeNode() {
@@ -68,23 +70,48 @@ export function AdviceNode({ data }) {
   );
 }
 
+// A roadmap step. Inside a running reveal (motion/roadmap) the clock owns its
+// entrance: a fade with a 6 px rise, then the timeframe. The handles sit
+// outside the animated box — React Flow measures them once, so they must not
+// ride the rise.
 export function RoadmapNode({ data }) {
-  const { index, title, timeframe, last, onOpen } = data;
+  const { index, title, timeframe, last, onOpen, revealIndex } = data;
+  const reveal = useStepReveal(revealIndex);
 
   return (
-    <button
-      type="button"
-      className={`node node--roadmap ${last ? 'node--roadmap-last' : ''}`}
-      onClick={onOpen}
-    >
+    <>
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
-      <span className="node-roadmap-index">{index}</span>
-      <span className="node-roadmap-body">
-        <span className="node-roadmap-title">{title}</span>
-        {timeframe && <span className="node-roadmap-timeframe">{timeframe}</span>}
-      </span>
+      <button
+        type="button"
+        className={`node node--roadmap ${last ? 'node--roadmap-last' : ''} ${
+          reveal ? 'node--clocked' : ''
+        }`}
+        style={
+          reveal
+            ? {
+                opacity: reveal.node,
+                transform: `translateY(${(1 - reveal.node) * NODE_RISE_PX}px)`,
+                pointerEvents: reveal.node > 0 ? undefined : 'none',
+              }
+            : undefined
+        }
+        onClick={onOpen}
+      >
+        <span className="node-roadmap-index">{index}</span>
+        <span className="node-roadmap-body">
+          <span className="node-roadmap-title">{title}</span>
+          {timeframe && (
+            <span
+              className="node-roadmap-timeframe"
+              style={reveal ? { opacity: reveal.label } : undefined}
+            >
+              {timeframe}
+            </span>
+          )}
+        </span>
+      </button>
       <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
-    </button>
+    </>
   );
 }
 

@@ -407,6 +407,10 @@ class SessionStore {
       valuesRanking: session.valuesTournament
         ? finalOrder(session.valuesTournament)
         : null,
+      // The answers recorded so far ([{ a, b, winner }], null outside a running
+      // tournament) — the user's own choices, echoed back so the frontend can
+      // show the order they imply without keeping a second copy of the state.
+      valuesDecided: session.valuesTournament ? session.valuesTournament.decided : null,
       progress,
       summary,
       pathStage: session.pathStage,

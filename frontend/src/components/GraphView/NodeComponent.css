@@ -368,6 +368,13 @@
   animation-delay: var(--appear-delay, 0ms);
 }
 
+/* Inside a roadmap reveal the clock sets opacity and the rise inline; the CSS
+   entrance would fight it. */
+.node--roadmap.node--clocked {
+  animation: none;
+  will-change: opacity, transform;
+}
+
 .node-roadmap-index {
   font: 900 20px/1 var(--font-display);
   color: var(--gold-40);
@@ -413,5 +420,19 @@
   .node--advice,
   .node--roadmap {
     animation: none;
+  }
+}
+
+/* An output's details carry a figure (the work-values comparison): give it
+   room on a desktop, and trade padding for width on a phone. Last in the file
+   for the same cascade reason as the blocks above. */
+.detail-panel--wide {
+  width: min(440px, 100vw);
+}
+
+@media (max-width: 480px) {
+  .detail-panel {
+    width: 100vw;
+    padding: 48px 24px;
   }
 }

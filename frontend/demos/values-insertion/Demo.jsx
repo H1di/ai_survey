@@ -1,17 +1,19 @@
-// Values insertion — why ten quick choices are enough. Each answer places a
+// Values insertion — why ten quick choices are enough. Shipped as the body of
+// ValuesTournamentScreen (InsertionBoard, fed by the live tournament state). Each answer places a
 // value relative to an ordered list instead of pitting every value against
 // every other (15 pairs). Replays the real tournament answers in
 // demo-profile.json → tournamentTrace.
 //
-// Manual mode is off on purpose: backend/assessment/valuesTournament.js is
-// CommonJS and sits outside the Vite dev server's file root (/@fs → 403), so
-// it does not run in the browser unchanged. The vitest suite still checks the
-// trace against that engine.
+// Manual mode stays off here: the interactive version is the product itself
+// (the tournament screen answers through the real backend engine). This page
+// replays the recorded answers; the vitest suite checks them against that
+// engine.
 import DemoShell from "../kit/DemoShell";
 import { WORK_VALUE_ORDER } from "../../src/lifePath";
 import profile from "../data/demo-profile.json";
-import InsertionDemo from "./InsertionDemo";
-import { MAX_CHOICES, buildStages, frameAt, layoutAt } from "./insertionModel";
+import "./insertion-demo.css";
+import InsertionBoard from "../../src/motion/insertion/InsertionBoard";
+import { MAX_CHOICES, buildStages, frameAt, layoutAt } from "../../src/motion/insertion/insertionModel";
 
 const trace = profile.tournamentTrace;
 const STAGES = buildStages(trace);
@@ -42,16 +44,18 @@ function Scene({ clock }) {
         </div>
       </div>
 
-      <InsertionDemo
+      <InsertionBoard
         layout={layout}
-        frame={frame}
+        applied={frame.applied}
+        chosen={frame.chosen}
+        confirmed={frame.confirmed}
         reducedMotion={clock.reducedMotion}
         maxChoices={MAX_CHOICES}
       />
 
       <p className="vins-note" id="vins-manual-note">
-        Manual is off: the tournament engine is server-side CommonJS and does not run here
-        unchanged, so this replays the recorded answers.
+        Manual is off here: this page replays the recorded answers. The interactive version is
+        the values step of the assessment itself.
       </p>
     </div>
   );

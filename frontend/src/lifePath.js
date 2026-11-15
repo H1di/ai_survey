@@ -1,6 +1,7 @@
 // Pure helpers for the Life Path tree: the React Flow graph builder and the
 // dock-card state machine. Kept side-effect-free and out of App.jsx so both
 // can be unit-tested without rendering the whole app.
+import { buildTimeline } from "./motion/roadmap/roadmapTimeline";
 
 const ME_NODE = { id: "me", type: "me", position: { x: 0, y: 0 }, data: {} };
 
@@ -23,7 +24,6 @@ const ROADMAP_GAP = 200;
 // Cascade timing: a node appears exactly when its edge finishes drawing.
 const EDGE_DRAW_MS = 600;
 const ADVICE_STAGGER_MS = 180;
-const ROADMAP_STEP_MS = 600;
 
 export const ADVICE_BLOCKS = [
   { key: "aiRecommendations", label: "AI Recommendations" },
@@ -176,19 +176,25 @@ export function buildLifePathGraph({
 
   const roadmap = roadmaps[accepted.id];
   if (roadmap) {
+    // One source for the sequence: motion/roadmap/roadmapTimeline. The reveal
+    // clock in GraphView animates from it (revealIndex); the same numbers ride
+    // along as CSS delays for anything rendered outside that clock.
+    const timeline = buildTimeline(roadmap.stages.length);
+    const ms = (seconds) => Math.round(seconds * 1000);
     roadmap.stages.forEach((stage, index) => {
       const nodeId = `stage-${accepted.id}-${stage.id}`;
       const parentId =
         index === 0 ? accepted.id : `stage-${accepted.id}-${roadmap.stages[index - 1].id}`;
-      const edgeDelay = index * ROADMAP_STEP_MS;
+      const step = timeline[index];
       nodes.push({
         id: nodeId,
         type: "roadmap",
         position: { x: centerX - ROADMAP_W / 2, y: ROADMAP_START_Y + index * ROADMAP_GAP },
         draggable: true,
-        style: { "--appear-delay": `${edgeDelay + EDGE_DRAW_MS}ms` },
+        style: { "--appear-delay": `${ms(step.nodeIn)}ms` },
         data: {
           index: index + 1,
+          revealIndex: index,
           title: stage.title,
           timeframe: stage.timeframe,
           last: index === roadmap.stages.length - 1,
@@ -200,7 +206,12 @@ export function buildLifePathGraph({
         source: parentId,
         target: nodeId,
         type: "branch",
-        data: { delay: edgeDelay, active: true, flowDelayMs: edgeDelay + EDGE_DRAW_MS },
+        data: {
+          delay: ms(step.edgeStart),
+          active: true,
+          flowDelayMs: ms(step.edgeEnd),
+          revealIndex: index,
+        },
       });
     });
   }

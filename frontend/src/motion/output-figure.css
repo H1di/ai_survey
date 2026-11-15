@@ -1,0 +1,42 @@
+/* The result card's figure. The box is sized by its own width and a fixed
+   ratio — never by what is drawn in it — so the three states swap in place. */
+.output-figure {
+  margin: 18px 0 0;
+}
+
+.output-figure-box {
+  position: relative;
+  width: 100%;
+  /* 300 × 225: fits beside the trace column without making the card taller. */
+  max-width: 300px;
+  aspect-ratio: 4 / 3;
+}
+
+.output-figure-layer {
+  position: absolute;
+  inset: 0;
+  animation: output-figure-in 320ms var(--ease-out) both;
+}
+
+@keyframes output-figure-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.output-figure-caption {
+  margin-top: 6px;
+  /* Two lines reserved: the longest caption wraps at 300 px. */
+  min-height: 3em;
+  max-width: 300px;
+  font: 500 10px/1.5 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-70);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .output-figure-layer {
+    animation: none;
+  }
+}
