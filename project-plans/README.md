@@ -6,6 +6,7 @@ These are proposals, not commitments — nothing here is implemented unless the 
 
 | Date | Plan | Status |
 |---|---|---|
+| 2026-11-15 | [Additions plan (architecture map, "add" column)](2026-11-15-additions-plan.md) | Plan — not started; details T3, T6–T13 from the active strategy plus CI, error alerts, E2E smoke, i18n spike |
 | 2026-11-10 | [Animation demos — session prompts](2026-11-10-animation-demo-prompts.md) | Active — demos live in `frontend/demos/` (rules: `frontend/demos/README.md`) |
 | 2026-10-12 | [Whole-project & product review → school pilot](2026-10-12-project-review/) | **Active strategy** — start with `WIP-STATUS-project-review.md`, then `PLAN-project-review-tasks.md` (decision log + ordered tasks; supersedes `PLAN-project-review.md` where they conflict) |
 | 2026-09-28 | [Local events finder (city → country → online)](2026-09-28-local-events-finder.md) | Proposal — spike done, not implemented |
