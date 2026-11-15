@@ -45,6 +45,7 @@ OPENAI_API_KEY=...      # optional — without it every AI call uses determinist
 ONET_API_KEY=...        # optional — adds live US salary/outlook; snapshot covers the rest
 SUPABASE_URL=...        # optional — accounts; unset = auth bypass (fixed dev user, nothing saved)
 SUPABASE_SERVICE_ROLE_KEY=...  # backend-only; enables saved_paths writes
+ERROR_WEBHOOK_URL=...     # optional — Slack/Discord webhook for 5xx + browser crashes (POST /api/client-error); unset = no-op
 ```
 `frontend/.env.local` (copy from `frontend/.env.example`): `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` — build-time; without both the sign-in screen is skipped. Setup steps: `DEPLOY.md` → "Аккаунты".
 The app must always work keyless (Supabase included — the auth bypass is the keyless mode): every AI generator in `backend/engine/aiEngine.js` has a deterministic fallback, and O*NET occupation data comes from the checked-in snapshot when `ONET_API_KEY` is absent. When touching AI paths, verify both modes.
@@ -84,6 +85,7 @@ Layout: `server.js` (entry + routes) at the root; `assessment/` (instruments, va
 - `backend/core/auth.js` — `createAuth({supabaseUrl})` → `/api` middleware mounted before the rate limiters (`/api/health` exempt): verifies the Supabase access token (`Authorization: Bearer`) with `jose` against the project JWKS (issuer `<url>/auth/v1`, audience `authenticated`) and sets `req.user = {id, bypass}`; bad/expired token → 401, JWKS outage → 503. Without `SUPABASE_URL`: bypass, `req.user` = `DEV_USER_ID` with `bypass: true`
 - `backend/services/supabaseDb.js` — service-role supabase-js client: `saveAcceptedPath` (upsert on `session_id` at accept and again when the roadmap lands; failures logged, never surfaced) and `listSavedPaths` (`GET /api/me/paths`); no-op without both env values
 - `supabase/migrations/` — Postgres schema: `profiles` (sign-up trigger; consent/age columns reserved for T6), `saved_paths`, `checkins`; RLS = authenticated reads own rows only, no client writes, anon nothing; rows cascade with the auth user. Proof: `supabase/tests/run-rls.sh` (docker Postgres + a Supabase stub)
+- `backend/core/alert.js` — `createAlerter({url})` → `notify({status,route,requestId,message})`: optional webhook (`ERROR_WEBHOOK_URL`), one-line `{text, content}` payload, throttled 1/min per status+route, never throws; called from `sendError` on 500s and from `POST /api/client-error` (the frontend `ErrorBoundary` reports render crashes there)
 - `backend/core/logger.js` — dependency-free structured error logging (`logError` one JSON line per ≥500, route template / UUID-redacted so the session id never leaks) + `resolveStatus` (clamp 400..599)
 - `backend/core/sessionStore.js` — in-memory `Map` sessions with TTL sweep (the process-local authoritative set — **do not run >1 instance**) + optional Upstash Redis write-through/hydrate for durability; `serializeSessionState` is the single snapshot the frontend consumes; `finalizeValues` / `finalizeJobChar` are the atomic step-closing writes
 - `backend/assessment/questionEngine.js` — answer validation and all scoring (Big Five, RIASEC, career-journey, derived traits)

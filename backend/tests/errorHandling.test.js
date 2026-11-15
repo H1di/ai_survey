@@ -114,3 +114,29 @@ test("malformed JSON body is a generic 400 (final error middleware) + requestId"
   assert.equal(data.error, "Malformed JSON body.");
   assert.ok(typeof data.requestId === "string" && data.requestId.length > 0);
 });
+
+test("POST /api/client-error: message -> 204 and one kind:client log line; no message -> 400 with requestId", async () => {
+  const long = "x".repeat(500);
+  const lines = await captureErr(async () => {
+    const ok = await fetch(`${base}/api/client-error`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: long, where: "render" }),
+    });
+    assert.equal(ok.status, 204);
+  });
+  const logged = JSON.parse(lines[0][0]);
+  assert.equal(logged.kind, "client");
+  assert.equal(logged.msg.length, 300);
+  assert.equal(logged.where, "render");
+
+  const bad = await fetch(`${base}/api/client-error`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ where: "render" }),
+  });
+  assert.equal(bad.status, 400);
+  const body = await bad.json();
+  assert.ok(body.requestId);
+  assert.ok(bad.headers.get("x-request-id"));
+});

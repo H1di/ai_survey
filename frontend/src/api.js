@@ -75,3 +75,22 @@ export function devJump(payload) {
     body: JSON.stringify(payload),
   });
 }
+
+// Fire-and-forget crash report for the error boundary. Must never throw: it runs
+// while the UI is already broken, and a failed report is not worth a second error.
+export async function reportClientError({ message, where }) {
+  try {
+    // Raw fetch, not request(): a 401 here must not sign the user out.
+    const headers = { "Content-Type": "application/json" };
+    const token = await getAccessToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    await fetch("/api/client-error", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ message: String(message ?? ""), where }),
+      keepalive: true,
+    });
+  } catch {
+    // swallowed on purpose
+  }
+}

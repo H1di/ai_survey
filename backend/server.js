@@ -47,7 +47,10 @@ const { createAuth } = require("./core/auth");
 const { randomUUID, createHash, timingSafeEqual } = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
-const { logError, resolveStatus } = require("./core/logger");
+const { logError, resolveStatus, routeOf } = require("./core/logger");
+const { createAlerter } = require("./core/alert");
+
+const alerter = createAlerter({ url: process.env.ERROR_WEBHOOK_URL });
 
 // Tests set their own env (and force fallback by blanking the key) — skip
 // .env entirely so it can't refill a real key underneath them.
@@ -213,6 +216,13 @@ function sendError(res, req, error, fallbackMessage) {
     return res.status(status).json({ error: error.message, requestId: req && req.id });
   }
   logError(req, error);
+  // Generic text only: the real message stays in the log (look it up by requestId).
+  alerter.notify({
+    status: 500,
+    route: routeOf(req),
+    requestId: req && req.id,
+    message: fallbackMessage,
+  });
   return res.status(500).json({ error: fallbackMessage, requestId: req && req.id });
 }
 
@@ -299,6 +309,36 @@ app.get("/api/health", (_req, res) => {
       ...onetApi.getStatus(),
     },
   });
+});
+
+// Browser-side crash report (React error boundary). Untrusted free text: capped,
+// whitespace-collapsed, logged as one JSON line and forwarded to the alert hook.
+app.post("/api/client-error", (req, res) => {
+  const { message, where } = req.body || {};
+  if (typeof message !== "string" || !message.trim()) {
+    return fail(res, req, 400, "A message is required.");
+  }
+  const clean = (value, max) =>
+    (typeof value === "string" ? value : "").replace(/\s+/g, " ").trim().slice(0, max);
+  const msg = clean(message, 300);
+  const at = clean(where, 100);
+  console.error(
+    JSON.stringify({
+      t: new Date().toISOString(),
+      lvl: "error",
+      kind: "client",
+      reqId: req.id,
+      msg,
+      where: at,
+    })
+  );
+  alerter.notify({
+    status: 0,
+    route: routeOf(req),
+    requestId: req.id,
+    message: at ? `[${at}] ${msg}` : msg,
+  });
+  return res.status(204).end();
 });
 
 app.post("/api/session/start", (req, res) => {
