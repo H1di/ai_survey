@@ -45,10 +45,7 @@ describe("whyThisFitsSections", () => {
     expect(sections[4].items).toEqual(["d1", "d2", "d3"]);
   });
 
-  it("falls back to legacy whyFit text for old outputs", () => {
-    expect(whyThisFitsSections({ whyFit: "legacy line" })).toEqual([
-      { heading: "Why this fits you", text: "legacy line" },
-    ]);
+  it("returns no sections when the block is missing", () => {
     expect(whyThisFitsSections({})).toEqual([]);
   });
 });

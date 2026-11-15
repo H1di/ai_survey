@@ -6,7 +6,7 @@ const {
 } = require("../engine/prompts");
 const { createAiEngine, resolveShortlistSoc } = require("../engine/aiEngine");
 const { getOccupation } = require("../engine/onet");
-const { getDirection } = require("../engine/directions");
+const { getDirection, DIRECTION_IDS } = require("../engine/directions");
 
 const engine = createAiEngine({ apiKey: undefined, model: "test" });
 
@@ -73,8 +73,6 @@ test("keyless first output is a real snapshot occupation with a socCode", async 
   assert.equal(output.thesis, occupation.blurb);
   assert.equal(output.directionId, occupation.directionId);
   assert.equal(output.orientedField, getDirection(occupation.directionId).label);
-  // Social-dominant profile must not land in a hands-off family
-  assert.ok(output.whyFit.length > 0);
 });
 
 test("refine excludes whole direction families and never repeats a SOC", async () => {
@@ -88,6 +86,16 @@ test("refine excludes whole direction families and never repeats a SOC", async (
   });
   assert.notEqual(second.directionId, first.directionId);
   assert.notEqual(second.socCode, first.socCode);
+});
+
+test("with every family rejected, the keyless fallback still picks an unused real occupation", async () => {
+  const session = fakeSession();
+  const first = await engine.generateFirstOutput({ session });
+  session.outputs = [first];
+
+  const next = await engine.generateFirstOutput({ session, excludeDirectionIds: DIRECTION_IDS });
+  assert.ok(getOccupation(next.socCode), `socCode ${next.socCode} must exist in the snapshot`);
+  assert.notEqual(next.socCode, first.socCode);
 });
 
 test("keyless whyThisFits names O*NET skills to develop for the chosen occupation", async () => {

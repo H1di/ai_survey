@@ -14,8 +14,7 @@
 services:
   # name — это идентичность сервиса внутри Blueprint, а не его адрес (см. шапку).
   # Должно совпадать с именем живого сервиса на Render — "ai-survey-backend".
-  # Публичный URL живого сервиса — https://ai-survey-backend-3g62.onrender.com,
-  # он же прописан в CORS_ORIGIN ниже.
+  # Публичный URL живого сервиса — https://ai-survey-backend-3g62.onrender.com.
   # Менять name нельзя: sync не переименует сервис, а создаст
   # новый, пустой.
   - type: web
@@ -50,10 +49,6 @@ services:
       # express-rate-limit keys on the real client IP, not the proxy's.
       - key: TRUST_PROXY
         value: "1"
-      # Фронт теперь same-origin, CORS в браузерном пути не участвует;
-      # держим значение правдивым — это собственный URL сервиса.
-      - key: CORS_ORIGIN
-        value: https://ai-survey-backend-3g62.onrender.com
       # Секрет — задаётся вручную в Render Dashboard (или через `render env set`),
       # никогда не коммитится. Без ключа приложение всё равно работает
       # (детерминированные fallback-ответы вместо реального OpenAI).

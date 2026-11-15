@@ -36,7 +36,7 @@ test("keyless first output: grounded in the top-ranked direction", async () => {
   const output = await engine.generateFirstOutput({ session: fakeSession() });
   assert.ok(DIRECTION_IDS.includes(output.directionId));
   assert.ok(output.orientedField && output.jobTitle && output.thesis);
-  assert.ok(output.whyFit && output.firstMilestone && output.constraintsNote);
+  assert.ok(output.firstMilestone && output.constraintsNote);
   assert.equal(output.parameterFit, undefined, "no 7-parameter fit block remains");
   // High-Investigative profile should not land in a Social/Enterprising family
   assert.ok(["science", "tech", "finance", "design"].includes(output.directionId), output.directionId);
@@ -88,7 +88,6 @@ function goodOutputPayload() {
     orientedField: "Healthcare",
     jobTitle: "Hospice Nurse",
     thesis: "Care work.",
-    whyFit: "Fits.",
     firstMilestone: "Shadow a nurse.",
     constraintsNote: "Licensing required.",
   };
@@ -100,7 +99,7 @@ test("normalizeOutputPayload requires every field", () => {
   assert.equal(output.parameterFit, undefined, "the fit block is no longer normalized");
 
   assert.throws(() => normalizeOutputPayload({ ...goodOutputPayload(), jobTitle: " " }), /jobTitle/);
-  assert.throws(() => normalizeOutputPayload({ ...goodOutputPayload(), whyFit: "" }), /whyFit/);
+  assert.throws(() => normalizeOutputPayload({ ...goodOutputPayload(), thesis: "" }), /thesis/);
 });
 
 test("normalizeOutputDetailPayload enforces 2-4 valid entries per block", () => {

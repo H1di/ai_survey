@@ -5,18 +5,14 @@
 // enrichment lives in services/onetApi.js.
 const { RIASEC_KEYS } = require("./riasec");
 
-let snapshot = { version: "0", attribution: "", occupations: [] };
-try {
-  snapshot = require("../data/onet-snapshot.json");
-} catch (error) {
-  console.error("[onet] snapshot missing — occupation grounding disabled:", error.message);
-}
+// Checked into the repo and required: every keyless output is picked from it.
+const snapshot = require("../data/onet-snapshot.json");
 
 const bySoc = new Map(snapshot.occupations.map((o) => [o.soc, o]));
 
 const SNAPSHOT_VERSION = snapshot.version;
 // Exported so /api/health can report grounding coverage without re-requiring
-// the JSON. 0 means the snapshot is missing and occupation grounding is dead.
+// the JSON.
 const SNAPSHOT_OCCUPATION_COUNT = snapshot.occupations.length;
 const ONET_ATTRIBUTION =
   snapshot.attribution ||

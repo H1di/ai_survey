@@ -1,4 +1,3 @@
-const cors = require("cors");
 const dotenv = require("dotenv");
 const express = require("express");
 const multer = require("multer");
@@ -106,10 +105,6 @@ if (auth.enabled && !db.enabled) {
   console.error("[db] SUPABASE_URL is set without SUPABASE_SERVICE_ROLE_KEY — accepted paths will not be saved.");
 }
 
-const CORS_ORIGINS = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
-  : ["http://localhost:5173", "http://127.0.0.1:5173"];
-
 // Request-id: assign or propagate a trace id on EVERY request, mounted before
 // body parsing and rate limiting so even malformed-JSON 400s and rate-limit
 // 429s carry the X-Request-Id header. An inbound header is sanitized to a safe
@@ -124,9 +119,8 @@ app.use((req, res, next) => {
   next();
 });
 
-// Requests proxied by the Vite dev server are same-origin and bypass CORS,
-// so this only constrains direct cross-origin browser calls.
-app.use(cors({ origin: CORS_ORIGINS }));
+// No CORS middleware: production serves the frontend from this same origin
+// and the Vite dev server proxies /api, so browsers never call cross-origin.
 app.use(express.json({ limit: "1mb" }));
 
 // Auth runs before the limiters so they can key on the user: a class behind
@@ -630,7 +624,7 @@ if (DEV_TOOLS_TOKEN) {
 
 // The real-occupation card for one output: snapshot facts always, live US
 // salary/outlook only when the O*NET key answered. Null when the output was
-// never pinned to a SOC (snapshot missing).
+// never pinned to a SOC (an AI pick outside the snapshot).
 function buildOnetBlock(socCode, extras) {
   const occupation = socCode ? getOccupation(socCode) : null;
   if (!occupation) return null;

@@ -24,12 +24,8 @@ export default function OutputDecision({
   reducedMotion,
 }) {
   const market = usMarketLine(output);
-  // Outputs generated before the structured explanation existed — and any
-  // whose second AI call failed — carry a single free-text section instead of
-  // items. Reading only `items` would drop a real explanation on the floor.
   const trace = whyThisFitsSections(output)
-    .flatMap((section) => (section.items?.length ? section.items : [section.text]))
-    .filter(Boolean)
+    .flatMap((section) => section.items || [])
     .slice(0, 3);
   const locked = Boolean(busy.accept || busy.refine);
   const shown = outputs?.length ? outputs : [output];

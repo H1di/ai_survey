@@ -14,8 +14,8 @@ Every AI call has a deterministic fallback, so the app works with **no API key**
 occupation data (RIASEC profile, job zone, skills, work values) comes from a
 checked-in O\*NET snapshot, so it works offline too.
 
-For the full technical spec (module map, JSON contracts, data-flow diagram,
-engineering assessment) see [`ARCHITECTURE.md`](./ARCHITECTURE.md). Finished plans,
+For the full technical spec (module map, contracts, data flow) see
+[`CLAUDE.md`](./CLAUDE.md). Finished plans,
 audits and the old status log live in [`docs/archive/`](./docs/archive/).
 
 ## Product flow
@@ -74,7 +74,7 @@ audits and the old status log live in [`docs/archive/`](./docs/archive/).
 - `backend/` — Express API, assessment engine, AI prompt engine.
 
 Key backend modules:
-- `server.js` — routes, rate limiting, CORS allowlist, step guards, request-id +
+- `server.js` — routes, rate limiting, step guards, request-id +
   leak-safe error responders
 - `logger.js` — dependency-free structured error logging + status/route helpers
 - `sessionStore.js` — in-memory sessions (+ optional Redis) + snapshot serializer

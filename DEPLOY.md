@@ -72,8 +72,7 @@ tier):
 ### Вариант A — Blueprint (проще всего)
 1. В Render Dashboard → **New** → **Blueprint** → выбрать репозиторий `H1di/ai_survey`.
 2. Render найдёт `render.yaml` в корне и предложит создать сервис `ai-survey-backend`
-   (публичный URL Render выдаст сам; при занятом имени добавит суффикс —
-   тогда обнови `CORS_ORIGIN` в `render.yaml` под фактический URL).
+   (публичный URL Render выдаст сам; при занятом имени добавит суффикс).
 3. При создании Render попросит заполнить переменные с `sync: false` — это
    `OPENAI_API_KEY`. Если ключа пока нет — можно оставить пустым, приложение
    само уйдёт в детерминированный fallback-режим (см. `backend/.env.example`).
@@ -95,7 +94,7 @@ render blueprint launch
 
 Если Render сообщит, что имя `ai-survey-backend` уже используется кем-то
 другим: выбери новое уникальное имя и обнови синхронно `render.yaml`
-(`services[0].name`, `CORS_ORIGIN`) и URL keep-alive монитора.
+(`services[0].name`) и URL keep-alive монитора.
 
 ## Аккаунты: Supabase EU (вход + сохранённые пути)
 

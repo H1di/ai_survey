@@ -88,7 +88,6 @@ function occupationOutput(session, pick) {
     orientedField: direction.label,
     jobTitle: pick.title,
     thesis: pick.blurb,
-    whyFit: `Your interest profile (${session.riasecCode || "balanced"}) correlates with the measured interests of working ${pick.title} (O*NET ${pick.soc}) — the strongest real-occupation match in the ${direction.label} family.`,
     firstMilestone: `Spend two weeks talking to people doing this work and shadow one full day of a real ${pick.title.toLowerCase()} shift.`,
     constraintsNote:
       "Demo mode — matched from measured O*NET interest profiles by fixed rules; treat it as a structured starting point, not advice.",
@@ -105,29 +104,9 @@ function fallbackFirstOutput(session, excludeDirectionIds = []) {
     const [pick] = rankOccupations(scores, { directionIds: [id], excludeSocs, limit: 1 });
     if (pick) return occupationOutput(session, pick);
   }
-  return fallbackFirstOutputFromSeeds(session, excludeDirectionIds);
-}
-
-// Last-resort path for a missing/broken snapshot: the legacy hand-written
-// profession seeds.
-function fallbackFirstOutputFromSeeds(session, excludeDirectionIds = []) {
-  const scores = sessionRiasec(session);
-  const ranked = rankDirections(scores, { excludeIds: excludeDirectionIds });
-  const direction = getDirection(ranked[0]?.id) || DIRECTIONS[0];
-  const usedTitles = new Set((session.outputs || []).map((o) => o.jobTitle));
-  const seed =
-    direction.professionSeeds.find((s) => !usedTitles.has(s.title)) || direction.professionSeeds[0];
-
-  return {
-    directionId: direction.id,
-    orientedField: direction.label,
-    jobTitle: seed.title,
-    thesis: seed.summary,
-    whyFit: `Your interest profile (${session.riasecCode || "balanced"}) points to the ${direction.label} family, and this role lines up with the priorities you ranked highest.`,
-    firstMilestone: `Spend two weeks talking to working ${seed.title.toLowerCase()}s and shadow one full day of the real work.`,
-    constraintsNote:
-      "Demo mode — assembled from fixed rules; treat it as a structured starting point, not advice.",
-  };
+  // Every family already rejected: take the best unused occupation anywhere.
+  const [pick] = rankOccupations(scores, { excludeSocs, limit: 1 });
+  return occupationOutput(session, pick);
 }
 
 function fallbackOutputDetail(session, output) {
@@ -358,7 +337,6 @@ function normalizeOutputPayload(payload) {
     orientedField: cleanText(payload?.orientedField),
     jobTitle: cleanText(payload?.jobTitle),
     thesis: cleanText(payload?.thesis),
-    whyFit: cleanText(payload?.whyFit),
     firstMilestone: cleanText(payload?.firstMilestone),
     constraintsNote: cleanText(payload?.constraintsNote),
   };

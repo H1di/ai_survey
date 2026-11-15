@@ -338,13 +338,10 @@ export function deriveArchetype({ riasecCode, bigFiveScores } = {}) {
   return { name, tagline: `${interestLine} — ${trait}.` };
 }
 
-// Maps the structured whyThisFits block to InfoPanel sections, falling back to
-// the output's free-text whyFit when the block is missing.
+// Maps the structured whyThisFits block to InfoPanel sections.
 export function whyThisFitsSections(output) {
   const why = output?.whyThisFits;
-  if (!why) {
-    return output?.whyFit ? [{ heading: "Why this fits you", text: output.whyFit }] : [];
-  }
+  if (!why) return [];
   const pts = (list) => (list || []).map((p) => p.point);
   return [
     { heading: "Why this fits — personality", items: pts(why.personality) },

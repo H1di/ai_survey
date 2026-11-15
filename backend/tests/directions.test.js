@@ -2,17 +2,12 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { DIRECTIONS, DIRECTION_IDS, getDirection } = require("../engine/directions");
 
-test("catalog has 15 directions, each with id/label/examples and 3 profession seeds", () => {
+test("catalog has 15 directions, each with id/label/examples", () => {
   assert.equal(DIRECTIONS.length, 15);
   for (const dir of DIRECTIONS) {
     assert.ok(dir.id && typeof dir.id === "string");
     assert.ok(dir.label && typeof dir.label === "string");
     assert.ok(dir.examples && typeof dir.examples === "string");
-    assert.equal(dir.professionSeeds.length, 3);
-    for (const seed of dir.professionSeeds) {
-      assert.ok(seed.title);
-      assert.ok(seed.summary);
-    }
   }
   assert.deepEqual(DIRECTION_IDS, DIRECTIONS.map((d) => d.id));
 });

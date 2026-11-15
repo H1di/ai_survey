@@ -155,7 +155,7 @@ function buildCvParsePrompt(cvText) {
 }
 
 const OUTPUT_SCHEMA =
-  '{"orientedField":"","jobTitle":"","socCode":"","thesis":"","whyFit":"","firstMilestone":"","constraintsNote":""}';
+  '{"orientedField":"","jobTitle":"","socCode":"","thesis":"","firstMilestone":"","constraintsNote":""}';
 
 // Real O*NET occupations pre-ranked against the user's measured RIASEC
 // profile. Rendered into the user message so the model chooses from
