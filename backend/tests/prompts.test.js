@@ -160,3 +160,34 @@ test("whyThisFits prompt targets the person's top work value", () => {
   assert.match(system, /top-ranked work value \(Relationships\)/);
   assert.ok(!/schwartz/i.test(system));
 });
+
+test("no builder leaks seeded PII", () => {
+  const dirty = "reach me at olena@example.com or +380671234567";
+  const cv = `Olena Kovalenko\n${dirty}`;
+  const texts = [
+    prompts.buildProfileDigest({
+      ...DIGEST_FIXTURE,
+      dreamAnswer: dirty,
+      demographics: { city: dirty, country: dirty },
+      cvAnalysis: null,
+      cvText: cv,
+    }),
+    prompts.buildProfileDigest({
+      dreamAnswer: dirty,
+      careerJourneyAnswers: { cj_education: dirty },
+    }),
+    ...[
+      prompts.buildRiasecInferencePrompt({
+        bigFiveScores: DIGEST_FIXTURE.bigFiveScores,
+        dreamAnswer: dirty,
+      }),
+      prompts.buildCvParsePrompt(cv),
+    ].flatMap((p) => [p.system, p.user]),
+  ];
+  for (const text of texts) {
+    assert.ok(!text.includes("olena@example.com"), text);
+    assert.ok(!text.includes("+380671234567"), text);
+  }
+  assert.ok(!texts[0].includes("Olena Kovalenko"));
+  assert.ok(!texts[3].includes("Olena Kovalenko"));
+});

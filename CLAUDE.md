@@ -94,6 +94,7 @@ Layout: `server.js` (entry + routes) at the root; `assessment/` (instruments, va
 - `backend/services/markitdown.js` — optional MarkItDown CLI wrapper (probe + spawn + cleanup); absent binary = silent fallback to Node parsers
 - `backend/engine/aiEngine.js` — one generator per AI artifact, each with normalizer + deterministic fallback
 - `backend/engine/prompts.js` — prompt builders; `buildProfileDigest` is the profile every prompt receives
+- `backend/engine/piiScrub.js` — `scrubPii` (emails/phones/links/@handles → `[email]`/`[phone]`/`[link]`/`[handle]`) + `scrubCvHeader` (CV first-line name → `[name]`), applied only inside `prompts.js` so stored answers stay verbatim; names inside sentences are a documented non-goal
 - `backend/engine/directions.js` — field-family catalog (alphabetical on purpose): labels + prompt hints
 - `backend/engine/workValues.js` / `backend/assessment/valuesTournament.js` — the six Minnesota work values (order, rank curve, `valuesFit`, prototypes) and the pure Ford–Johnson tournament engine
 - `backend/engine/riasec.js` — per-direction Holland weights + `rankDirections(riasecScores)` catalog ranking (direction-prompt hint); `inferRiasecScores` is the Big Five-only quiz-skip fallback

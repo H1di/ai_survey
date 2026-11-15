@@ -1,5 +1,6 @@
 const { CAREER_JOURNEY_QUESTIONS } = require("../assessment/questionPool");
 const { WORK_VALUES_META } = require("./workValues");
+const { scrubPii, scrubCvHeader } = require("./piiScrub");
 
 const JOURNEY_QUESTION_BY_ID = new Map(CAREER_JOURNEY_QUESTIONS.map((q) => [q.id, q.question]));
 const WORK_VALUE_LABEL = new Map(WORK_VALUES_META.map((m) => [m.id, m.label]));
@@ -32,15 +33,15 @@ function buildProfileDigest({
 }) {
   const lines = [];
   lines.push(
-    `Dream answer (secondary context — emotional colour, NOT a domain filter): ${dreamAnswer}`
+    `Dream answer (secondary context — emotional colour, NOT a domain filter): ${scrubPii(dreamAnswer)}`
   );
 
   if (demographics && Object.keys(demographics).length) {
     lines.push("Demographics:");
-    if (demographics.sex !== undefined) lines.push(`- Sex: ${demographics.sex}`);
-    if (demographics.age !== undefined) lines.push(`- Age: ${demographics.age}`);
-    if (demographics.country !== undefined) lines.push(`- Country: ${demographics.country}`);
-    if (demographics.city !== undefined) lines.push(`- City: ${demographics.city}`);
+    if (demographics.sex !== undefined) lines.push(`- Sex: ${scrubPii(String(demographics.sex))}`);
+    if (demographics.age !== undefined) lines.push(`- Age: ${scrubPii(String(demographics.age))}`);
+    if (demographics.country !== undefined) lines.push(`- Country: ${scrubPii(String(demographics.country))}`);
+    if (demographics.city !== undefined) lines.push(`- City: ${scrubPii(String(demographics.city))}`);
   }
 
   if (bigFiveScores) {
@@ -94,11 +95,11 @@ function buildProfileDigest({
     if (cvAnalysis.keywords?.length) segments.push(`keywords [${cvAnalysis.keywords.join(", ")}]`);
     lines.push(`CV signal: ${segments.join("; ")}`);
   } else if (cvText) {
-    lines.push(`CV provided (unparsed excerpt): "${cvText.slice(0, 300)}"`);
+    lines.push(`CV provided (unparsed excerpt): "${scrubPii(scrubCvHeader(cvText)).slice(0, 300)}"`);
   } else if (careerJourneyAnswers && Object.keys(careerJourneyAnswers).length) {
     lines.push("Career journey:");
     for (const [qId, answer] of Object.entries(careerJourneyAnswers)) {
-      lines.push(`- ${JOURNEY_QUESTION_BY_ID.get(qId) || qId} → ${answer}`);
+      lines.push(`- ${JOURNEY_QUESTION_BY_ID.get(qId) || qId} → ${scrubPii(String(answer))}`);
     }
   }
   if (cvIntent) {
@@ -122,7 +123,7 @@ function buildRiasecInferencePrompt({ bigFiveScores, dreamAnswer }) {
   ].join(" ");
   const user = [
     `Big Five (0–100): O=${bigFiveScores.O} C=${bigFiveScores.C} E=${bigFiveScores.E} A=${bigFiveScores.A} N=${bigFiveScores.N}`,
-    `Dream answer: ${dreamAnswer}`,
+    `Dream answer: ${scrubPii(dreamAnswer)}`,
     "Estimate the RIASEC scores now.",
   ].join("\n");
   return { system, user };
@@ -151,7 +152,7 @@ function buildCvParsePrompt(cvText) {
     'seniority: one of "student", "junior", "mid", "senior", "lead", "executive", or a short honest label.',
     "Each array item at most 8 words. Extract only what the text supports; do not invent.",
   ].join(" ");
-  return { system, user: `CV text:\n${cvText}\n\nExtract the signal now.` };
+  return { system, user: `CV text:\n${scrubPii(scrubCvHeader(cvText))}\n\nExtract the signal now.` };
 }
 
 const OUTPUT_SCHEMA =
