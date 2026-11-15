@@ -1,8 +1,24 @@
 # WIP status: whole-project & product-idea review
 
-**Updated:** 2026-10-12 (second session, `/grill-me`) · **Status: task plan written, wave 1 blocked on workers**
+**Updated:** 2026-11-15 · **Status: Supabase accounts built keyless; waiting on T1 keys**
 
-## Latest (supersedes "Where it stopped" below)
+## 2026-11-15 — Supabase slice (from the architecture artifact)
+- **T4 done:** `backend/core/auth.js` (jose + JWKS), sessions bound to `userId`, foreign
+  session ⇒ 404, rate limits keyed on user id, bypass without `SUPABASE_URL`.
+  `backend/tests/auth.test.js` signs tokens against a local JWKS.
+- **T5 done:** `supabase/migrations/20261115000000_accounts.sql` (profiles via sign-up
+  trigger, saved_paths, checkins, read-own RLS, no client writes, cascade on user delete).
+  Proof: `supabase/tests/run-rls.sh` passes in docker Postgres 17.
+- **T7 partial:** sign-in screen (magic link + Google), bearer in `api.js`, 401 ⇒ local
+  sign-out, sign-out on the entry screen, bypass without `VITE_SUPABASE_*`. **Not done:**
+  consent / birth year / cohort / under-16 screens (those need T6 first).
+- **T8 partial:** accept and roadmap upsert one `saved_paths` row per session;
+  `GET /api/me/paths`. **Not done:** the read-only saved-path view after sign-in.
+- Live check still needs T1 (Eugene): project, asymmetric JWT keys, redirect URLs, Google,
+  SMTP, migration applied, four env vars. Steps: `DEPLOY.md` → "Аккаунты".
+- Next: T6 (consent + age gate) → finish T7/T8 → T9 (delete my data).
+
+## 2026-10-12 (supersedes "Where it stopped" below)
 - Act 2 (Codex review of the strategy) **skipped by Eugene**; review moves to per-diff verification.
 - Follow-up grill changed decisions #7 (accounts **before** the pilot, mandatory before start,
   Supabase EU, magic link + Google, day-14 check-in email, under-16 only via cohort link) and

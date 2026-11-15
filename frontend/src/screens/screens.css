@@ -263,6 +263,47 @@
   padding-bottom: 24px;
 }
 
+/* --- Sign-in (hero frame, a single-line field instead of the dream box) --- */
+.signin-form,
+.signin-sent {
+  margin-top: 28px;
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.signin-label {
+  font: 400 12px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-60);
+}
+
+.signin-input {
+  margin-top: 0;
+  min-height: 0;
+}
+
+.signin-or {
+  margin: 4px 0;
+  text-align: center;
+  font: 400 12.5px/1 var(--font-body);
+  color: var(--text-60);
+}
+
+.signin-sent p {
+  margin: 0;
+  font: 400 15px/1.5 var(--font-body);
+  color: var(--text-72);
+}
+
+.signin-sent strong {
+  color: var(--text);
+}
+
 .hero .onet-attribution {
   display: flex;
   flex-direction: column;

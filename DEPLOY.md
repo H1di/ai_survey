@@ -97,6 +97,34 @@ render blueprint launch
 другим: выбери новое уникальное имя и обнови синхронно `render.yaml`
 (`services[0].name`, `CORS_ORIGIN`) и URL keep-alive монитора.
 
+## Аккаунты: Supabase EU (вход + сохранённые пути)
+
+Без `SUPABASE_URL` бэкенд работает в обходе auth: каждый запрос идёт от одного
+фиксированного dev-пользователя, экрана входа нет, пути не сохраняются. Так
+работает и прод, пока переменные не заданы. Включение:
+
+1. Создай проект на https://supabase.com в EU-регионе (Frankfurt).
+2. **Project Settings → JWT Keys**: включи асимметричные ключи подписи (ES256).
+   Бэкенд проверяет токены по JWKS (`<url>/auth/v1/.well-known/jwks.json`).
+   Если у проекта только старый HS256-секрет, JWKS пуст и каждый запрос получит 401.
+3. **Authentication → URL Configuration**: Site URL = прод-URL; в Redirect URLs
+   добавь прод-URL и `http://localhost:5173`.
+4. **Authentication → Providers**: Email (magic link) включён по умолчанию.
+   Для Google создай OAuth-клиент в Google Cloud, redirect URI
+   `<url>/auth/v1/callback`. Для писем подключи свой SMTP (EU): встроенный
+   почтовик Supabase шлёт лишь несколько писем в час.
+5. Схема: открой SQL Editor и выполни
+   `supabase/migrations/20261115000000_accounts.sql`
+   (или `supabase link` + `supabase db push`).
+6. Ключи. В `backend/.env` положи `SUPABASE_URL` и `SUPABASE_SERVICE_ROLE_KEY`,
+   в `frontend/.env.local` — `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY`.
+   В Render задай все четыре (объявлены в `render.yaml`, `sync: false`), потом
+   сделай новый деплой: `VITE_*` вшиваются при сборке.
+7. Проверь: `GET /api/health` → `"auth":"supabase","savedPaths":true`.
+
+RLS (только чтение своих строк, anon без доступа, каскад при удалении
+пользователя) проверяется локально: `supabase/tests/run-rls.sh` (нужен docker).
+
 ## Что дальше
 
 - Платный tier Render (Starter, $7/мес) — без засыпания, keep-alive не нужен.

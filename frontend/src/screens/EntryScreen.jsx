@@ -13,6 +13,7 @@ export default function EntryScreen({
   error,
   reducedMotion,
   onOpenInfo,
+  onSignOut,
 }) {
   const ready = Boolean(value.trim()) && !busy;
 
@@ -29,6 +30,11 @@ export default function EntryScreen({
           <button type="button" onClick={() => onOpenInfo("the-engine")}>
             the engine
           </button>
+          {onSignOut && (
+            <button type="button" onClick={onSignOut}>
+              sign out
+            </button>
+          )}
         </nav>
       </div>
 

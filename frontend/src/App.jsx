@@ -27,6 +27,15 @@ import ProfilePanel from "./components/ProfileCharts";
 import DevPanel from "./components/DevPanel";
 import { captureDevToken, isDevMode } from "./devMode";
 import {
+  authEnabled,
+  authGate,
+  sendMagicLink,
+  signInWithGoogle,
+  signOut,
+  supabase,
+} from "./auth";
+import SignInScreen from "./screens/SignInScreen";
+import {
   acceptOutput,
   confirmValues,
   continueSummary,
@@ -192,10 +201,40 @@ const METHODOLOGY_VIEWS = {
 // back to its initial value without a hand-kept list of setters.
 export default function App() {
   const [generation, setGeneration] = useState(0);
+  const [authSession, setAuthSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(authEnabled);
   const reset = () => {
     localStorage.removeItem(SESSION_STORAGE_KEY);
     setGeneration((g) => g + 1);
   };
+
+  useEffect(() => {
+    if (!supabase) return undefined;
+    // INITIAL_SESSION fires first (stored session, or the one a magic-link /
+    // OAuth redirect just produced), then every sign-in, refresh and sign-out.
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      setAuthSession(session);
+      setAuthLoading(false);
+      // A stored assessment belongs to whoever was signed in; the backend
+      // would 404 it for anyone else anyway.
+      if (event === "SIGNED_OUT") localStorage.removeItem(SESSION_STORAGE_KEY);
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  const gate = authGate({ enabled: authEnabled, loading: authLoading, session: authSession });
+  if (gate === "loading") return <main className="app-shell" aria-busy="true" />;
+  if (gate === "signin") {
+    return (
+      <main className="app-shell">
+        <SignInScreen
+          onMagicLink={sendMagicLink}
+          onGoogle={signInWithGoogle}
+          reducedMotion={REDUCED_MOTION}
+        />
+      </main>
+    );
+  }
   return <LifePathApp key={generation} onReset={reset} />;
 }
 
@@ -880,6 +919,7 @@ function LifePathApp({ onReset }) {
             error={error}
             reducedMotion={REDUCED_MOTION}
             onOpenInfo={handleOpenMethodology}
+            onSignOut={authEnabled ? signOut : undefined}
           />
         )}
 

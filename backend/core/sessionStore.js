@@ -149,13 +149,16 @@ class SessionStore {
     this.sweepTimer = null;
   }
 
-  createSession({ dreamAnswer }) {
+  createSession({ dreamAnswer, userId }) {
     const id = randomUUID();
     const now = new Date().toISOString();
 
     const session = {
       id,
       schemaVersion: SESSION_SCHEMA_VERSION,
+      // Owner (Supabase user id, or the dev-bypass id). require() refuses any
+      // other caller with the same 404 as an unknown id.
+      userId,
       dreamAnswer,
       step: "demographics",
       // High-water mark: the furthest step ever reached. Rail navigation may
@@ -200,10 +203,12 @@ class SessionStore {
     return this.sessions.get(sessionId) || null;
   }
 
-  require(sessionId) {
+  // `userId` given → a session owned by anyone else is indistinguishable from
+  // a missing one (404, never 403: a 403 would confirm the id exists).
+  require(sessionId, userId) {
     const session = this.get(sessionId);
 
-    if (!session) {
+    if (!session || (userId !== undefined && session.userId !== userId)) {
       const error = new Error("Session not found.");
       error.statusCode = 404;
       throw error;

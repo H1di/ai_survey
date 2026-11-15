@@ -2,7 +2,7 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const express = require("express");
 const multer = require("multer");
-const rateLimit = require("express-rate-limit");
+const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 const { extractCvText, getCvUploadExtensions } = require("./assessment/cvExtract");
 const { createAiEngine } = require("./engine/aiEngine");
 const { getStaticRiasecItems } = require("./assessment/riasecItems");
@@ -43,6 +43,8 @@ const {
   SNAPSHOT_OCCUPATION_COUNT,
 } = require("./engine/onet");
 const { createOnetApi } = require("./services/onetApi");
+const { createSupabaseDb } = require("./services/supabaseDb");
+const { createAuth } = require("./core/auth");
 const { randomUUID, createHash, timingSafeEqual } = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -90,6 +92,20 @@ const aiEngine = createAiEngine({
 // built from the bundled snapshot alone (no US salary/outlook).
 const onetApi = createOnetApi({ apiKey: process.env.ONET_API_KEY });
 
+// Accounts (Supabase Auth). Without SUPABASE_URL every request runs as one
+// fixed dev user — the keyless rule, same as the AI and O*NET fallbacks.
+const auth = createAuth({ supabaseUrl: process.env.SUPABASE_URL });
+const db = createSupabaseDb({
+  url: process.env.SUPABASE_URL,
+  serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+});
+if (!auth.enabled && process.env.NODE_ENV !== "test") {
+  console.warn("[auth] SUPABASE_URL is not set — auth bypass: every request runs as the dev user.");
+}
+if (auth.enabled && !db.enabled) {
+  console.error("[db] SUPABASE_URL is set without SUPABASE_SERVICE_ROLE_KEY — accepted paths will not be saved.");
+}
+
 const CORS_ORIGINS = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
   : ["http://localhost:5173", "http://127.0.0.1:5173"];
@@ -113,6 +129,20 @@ app.use((req, res, next) => {
 app.use(cors({ origin: CORS_ORIGINS }));
 app.use(express.json({ limit: "1mb" }));
 
+// Auth runs before the limiters so they can key on the user: a class behind
+// one school NAT shares an IP, not a bucket. /api/health stays open for the
+// uptime pinger. Unknown /api paths answer 401 to an anonymous caller and
+// Express's default 404 to a signed-in one — the dev gate still can't be told
+// apart from an unmounted path either way.
+app.use("/api", (req, res, next) =>
+  req.path === "/health" ? next() : auth.middleware(req, res, next)
+);
+
+// Signed-in → per user; bypass or no user → per IP (ipKeyGenerator groups an
+// IPv6 /56, as express-rate-limit's default does).
+const rateKey = (req) =>
+  req.user && !req.user.bypass ? `user:${req.user.id}` : ipKeyGenerator(req.ip);
+
 const RATE_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000;
 
 const globalLimiter = rateLimit({
@@ -120,6 +150,7 @@ const globalLimiter = rateLimit({
   max: Number(process.env.RATE_LIMIT_GLOBAL_MAX) || 300,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: rateKey,
 });
 app.use("/api", globalLimiter);
 
@@ -130,7 +161,8 @@ const aiLimiter = rateLimit({
   max: Number(process.env.RATE_LIMIT_AI_MAX) || 30,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many AI requests from this address. Try again later." },
+  keyGenerator: rateKey,
+  message: { error: "Too many AI requests. Try again later." },
 });
 for (const path of [
   "/api/riasec/skip",
@@ -220,9 +252,14 @@ function assertStep(session, step) {
   if (session.step !== step) throw httpError(400, STEP_ERRORS[step]);
 }
 
+// The caller's own session — a foreign or unknown id is the same 404.
+function ownSession(req, sessionId) {
+  return store.require(sessionId, req.user.id);
+}
+
 // The body's session, which must sit on `step`.
-function sessionAt(body, step) {
-  const session = store.require(body.sessionId);
+function sessionAt(req, step) {
+  const session = ownSession(req, req.body?.sessionId);
   assertStep(session, step);
   return session;
 }
@@ -231,7 +268,7 @@ function sessionAt(body, step) {
 // or unknown id 404s rather than sharing an `undefined:<op>` bucket.
 function lockedRoute(op, fn, fallbackMessage, busyMessage) {
   return handle(async (req, res, body) => {
-    const session = store.require(body.sessionId);
+    const session = ownSession(req, body.sessionId);
     return withLock(req, res, `${session.id}:${op}`, () => fn(req, res, session, body), busyMessage);
   }, fallbackMessage);
 }
@@ -256,6 +293,9 @@ app.get("/api/health", (_req, res) => {
     model: MODEL,
     hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY),
     sessionStore: store.redis ? "redis" : "memory",
+    // Booleans only — never a key, URL or prefix.
+    auth: auth.enabled ? "supabase" : "bypass",
+    savedPaths: db.enabled,
     // Snapshot grounding + live-client liveness. getStatus() is cached
     // in-process state (no request, no key) — it is what tells a wrong
     // ONET_API_KEY (liveKey true, lastLookupOk false) from no key at all.
@@ -275,21 +315,21 @@ app.post("/api/session/start", (req, res) => {
   if (!normalizedDream) {
     return fail(res, req, 400, "dreamAnswer is required.");
   }
-  const session = store.createSession({ dreamAnswer: normalizedDream });
+  const session = store.createSession({ dreamAnswer: normalizedDream, userId: req.user.id });
   return sendSessionSnapshot(res, session, { includeStatic: true });
 });
 
 app.get(
   "/api/session/:sessionId",
   handle((req, res) =>
-    sendSessionSnapshot(res, store.require(req.params.sessionId), { includeStatic: true })
+    sendSessionSnapshot(res, ownSession(req, req.params.sessionId), { includeStatic: true })
   )
 );
 
 app.post(
   "/api/session/demographics",
   handle((req, res, { sessionId, questionId, value }) => {
-    const session = store.require(sessionId);
+    const session = ownSession(req, sessionId);
     if (session.step !== "demographics") {
       return fail(res, req, 400, "Session is past the demographics step.");
     }
@@ -304,7 +344,7 @@ app.post(
 app.post(
   "/api/big-five/answer",
   handle((req, res, body) => {
-    const session = sessionAt(body, "big_five");
+    const session = sessionAt(req, "big_five");
     const { itemId, value } = body;
     store.recordBigFiveAnswer(session, itemId, validateBigFiveAnswer(session, itemId, value));
     if (session.bigFiveItems.every((i) => session.bigFiveAnswers[i.id] !== undefined)) {
@@ -319,7 +359,7 @@ app.post(
 app.post(
   "/api/riasec/start",
   handle((req, res, body) => {
-    const session = sessionAt(body, "riasec");
+    const session = sessionAt(req, "riasec");
     if (!session.riasecItems.length) {
       store.setRiasecItems(session, getStaticRiasecItems());
     }
@@ -331,7 +371,7 @@ app.post(
 app.post(
   "/api/riasec/answer",
   handle((req, res, body) => {
-    const session = sessionAt(body, "riasec");
+    const session = sessionAt(req, "riasec");
     const { itemId, value } = body;
     store.recordRiasecAnswer(session, itemId, validateRiasecAnswer(session, itemId, value));
     const { scores } = computeRiasecScores(session);
@@ -346,7 +386,7 @@ app.post(
 app.post(
   "/api/riasec/skip",
   handle(async (req, res, body) => {
-    const session = sessionAt(body, "riasec");
+    const session = sessionAt(req, "riasec");
     const scores = await aiEngine.inferRiasecProfile({ session });
     store.setRiasecScores(session, scores, deriveRiasecCode(scores), { inferred: true });
     store.advanceStep(session, "values");
@@ -359,7 +399,7 @@ app.post(
 app.post(
   "/api/values/start",
   handle((req, res, body) => {
-    const session = sessionAt(body, "values");
+    const session = sessionAt(req, "values");
     if (!session.valuesTournament) {
       store.setValuesTournament(session, startTournament(WORK_VALUES_ORDER));
     }
@@ -370,7 +410,7 @@ app.post(
 app.post(
   "/api/values/answer",
   handle((req, res, body) => {
-    const session = sessionAt(body, "values");
+    const session = sessionAt(req, "values");
     if (!session.valuesTournament) {
       return fail(res, req, 400, "Tournament has not started.");
     }
@@ -386,7 +426,7 @@ app.post(
 app.post(
   "/api/values/confirm",
   handle((req, res, { sessionId, order }) => {
-    const session = store.require(sessionId);
+    const session = ownSession(req, sessionId);
     if (session.step !== "values") {
       // Idempotent: a double-submit after advancing just returns the snapshot.
       if (session.userValues) return sendSessionSnapshot(res, session);
@@ -433,7 +473,7 @@ const cvUpload = multer({
 app.post(
   "/api/cv/intent",
   handle((req, res, body) => {
-    const session = sessionAt(body, "cv");
+    const session = sessionAt(req, "cv");
     if (body.cvIntent !== "new" && body.cvIntent !== "use_skills") {
       return fail(res, req, 400, "cvIntent must be 'new' or 'use_skills'.");
     }
@@ -498,7 +538,7 @@ app.post(
 app.post(
   "/api/summary/continue",
   handle((req, res, { sessionId }) => {
-    const session = store.require(sessionId);
+    const session = ownSession(req, sessionId);
     // Idempotent: a re-submit after advancing just returns the snapshot.
     if (session.step === "tree") return sendSessionSnapshot(res, session);
     if (session.step !== "summary") {
@@ -516,7 +556,7 @@ app.post(
 app.post(
   "/api/session/goto",
   handle((req, res, { sessionId, step }) => {
-    const session = store.require(sessionId);
+    const session = ownSession(req, sessionId);
     if (!STEP_ORDER.includes(step)) {
       return fail(res, req, 400, "Unknown step.");
     }
@@ -561,13 +601,16 @@ if (DEV_TOOLS_TOKEN) {
 
     // An expired or unknown id must not 404: the point of the tool is to land
     // on a working screen, so fall through to a fresh session instead.
-    const existing = sessionId ? store.get(sessionId) : null;
+    // Someone else's session counts as unknown: seed a fresh one for the caller.
+    const found = sessionId ? store.get(sessionId) : null;
+    const existing = found && found.userId === req.user.id ? found : null;
     const behind = existing && STEP_ORDER.indexOf(step) < STEP_ORDER.indexOf(existing.step);
     const session =
       existing && !behind
         ? existing
         : store.createSession({
             dreamAnswer: existing ? existing.dreamAnswer : DEV_PROFILE.dreamAnswer,
+            userId: req.user.id,
           });
 
     try {
@@ -629,6 +672,23 @@ async function buildOutput(session, excludeDirectionIds) {
   return output;
 }
 
+// Copy the accepted path (and its roadmap, once built) to the account. The live
+// session stays authoritative: a failed write is logged, never surfaced, so a
+// Supabase outage cannot break accept. Bypass users have no account to write to.
+async function savePath(req, session, outputId) {
+  if (req.user.bypass || !db.enabled) return;
+  try {
+    await db.saveAcceptedPath({
+      userId: req.user.id,
+      session,
+      output: session.outputs.find((o) => o.id === outputId),
+      roadmap: session.roadmaps[outputId] || null,
+    });
+  } catch (error) {
+    logError(req, error);
+  }
+}
+
 // The output loop runs only after the assessment, under one `output` lock so
 // first/refine/accept can never interleave.
 function outputRoute(fn, fallbackMessage) {
@@ -683,6 +743,7 @@ app.post(
     const output = pendingOutput(session, outputId);
     const detail = await aiEngine.generateOutputDetail({ session, output });
     store.acceptOutput(session, outputId, detail);
+    await savePath(req, session, outputId);
     return sendSessionSnapshot(res, session);
   }, "Failed to build the advice blocks.")
 );
@@ -698,12 +759,22 @@ app.post(
       if (!session.roadmaps[outputId]) {
         const output = session.outputs.find((o) => o.id === outputId);
         store.setRoadmap(session, await aiEngine.generateRoadmap({ session, output }));
+        await savePath(req, session, outputId);
       }
       return sendSessionSnapshot(res, session);
     },
     "Failed to generate roadmap.",
     "The roadmap for this output is still building."
   )
+);
+
+// The caller's saved paths, newest first. Empty under the auth bypass.
+app.get(
+  "/api/me/paths",
+  handle(async (req, res) => {
+    const paths = req.user.bypass ? [] : await db.listSavedPaths(req.user.id);
+    return res.json({ paths });
+  }, "Could not load your saved paths.")
 );
 
 // --- Frontend --------------------------------------------------------------
@@ -797,4 +868,4 @@ if (require.main === module) {
 // `store` and `__locks` are exported for tests only (there is no other
 // consumer): a test can monkeypatch `store.require` to force a 500 or seed a
 // lock key to exercise the single-flight 409 path. Not part of the app's API.
-module.exports = { app, store, __locks: inFlightKeys };
+module.exports = { app, store, db, __locks: inFlightKeys };

@@ -1,4 +1,5 @@
 import { getDevToken } from "./devMode";
+import { authEnabled, getAccessToken, signOut } from "./auth";
 
 const REQUEST_TIMEOUT_MS = 45_000;
 
@@ -13,8 +14,13 @@ async function request(path, options = {}) {
     for (const key of Object.keys(headers)) {
       if (headers[key] === null) delete headers[key];
     }
+    const token = await getAccessToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
     const response = await fetch(path, { ...options, headers, signal: controller.signal });
     const data = await response.json().catch(() => ({}));
+    // A rejected token (revoked, or refresh failed): drop the local session so
+    // the top-level gate shows the sign-in screen again.
+    if (response.status === 401 && authEnabled) await signOut();
     if (!response.ok) throw new Error(data.error || "Request failed.");
     return data;
   } catch (error) {

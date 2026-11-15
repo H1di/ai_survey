@@ -75,6 +75,18 @@ services:
         sync: false
       - key: UPSTASH_REDIS_REST_TOKEN
         sync: false
+      # Accounts (Supabase EU). Without SUPABASE_URL the backend runs the auth
+      # bypass (one fixed dev user, nothing saved) — today's behaviour. Set all
+      # four together. VITE_* are read at BUILD time, so a change needs a new
+      # deploy, not just a restart. The service-role key is backend-only.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
       # MarkItDown is OPTIONAL: this node runtime has no Python, so the backend
       # serves pdf/docx/txt/html via its built-in parsers and hides .pptx from
       # the UI. To enable full MarkItDown support, switch the service to a
