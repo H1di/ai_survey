@@ -65,3 +65,42 @@ test("fetchImpl rejecting or throwing does not throw or leave an unhandled rejec
   process.off("unhandledRejection", onUnhandled);
   assert.equal(unhandled, 0);
 });
+
+test("caller-controlled text cannot ping, link or mark up the channel", () => {
+  const sent = [];
+  const alerter = createAlerter({
+    url: "https://hooks.example/x",
+    fetchImpl: (_url, init) => {
+      sent.push(JSON.parse(init.body));
+      return Promise.resolve();
+    },
+  });
+  alerter.notify({
+    status: 0,
+    route: "/api/client-error",
+    requestId: "r1",
+    message: "@everyone <!channel> <@U123> <https://evil.example|click to fix> [fix](https://evil.example) http://evil.example",
+  });
+  assert.equal(sent.length, 1);
+  const { text, content, allowed_mentions: allowed } = sent[0];
+  assert.equal(text, content);
+  assert.deepEqual(allowed, { parse: [] });
+  assert.ok(!/[<>]/.test(text), "no angle brackets");
+  assert.ok(!/@(everyone|here|channel|U123)/.test(text), "no live mention");
+  assert.ok(!text.includes("]("), "no masked link");
+  assert.ok(!text.includes("://"), "no live URL");
+  assert.ok(text.includes("evil.example"), "the text itself is kept for the reader");
+});
+
+test("an alert line is capped at 500 characters", () => {
+  const sent = [];
+  const alerter = createAlerter({
+    url: "https://hooks.example/x",
+    fetchImpl: (_url, init) => {
+      sent.push(JSON.parse(init.body));
+      return Promise.resolve();
+    },
+  });
+  alerter.notify({ status: 500, route: "/api/x", requestId: "r", message: "a".repeat(5000) });
+  assert.equal(sent[0].text.length, 500);
+});

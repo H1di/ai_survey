@@ -10,6 +10,17 @@ const DEV_USER_ID = "00000000-0000-0000-0000-000000000000";
 // at the project's JWKS endpoint, issuer `<url>/auth/v1`, audience
 // "authenticated". Legacy HS256-only projects publish no keys and will 401 —
 // switch the project to asymmetric JWT signing keys.
+const TOKEN_VERDICTS = new Set([
+  "ERR_JWT_EXPIRED",
+  "ERR_JWT_CLAIM_VALIDATION_FAILED",
+  "ERR_JWT_INVALID",
+  "ERR_JWS_INVALID",
+  "ERR_JWS_SIGNATURE_VERIFICATION_FAILED",
+  "ERR_JOSE_ALG_NOT_ALLOWED",
+  "ERR_JOSE_NOT_SUPPORTED",
+  "ERR_JWKS_NO_MATCHING_KEY",
+]);
+
 // `onOutage(req)` fires when the JWKS cannot be reached (the 503 below): that
 // failure locks every user out and never passes through sendError.
 function createAuth({ supabaseUrl, onOutage } = {}) {
@@ -43,13 +54,11 @@ function createAuth({ supabaseUrl, onOutage } = {}) {
         req.user = { id: payload.sub, bypass: false };
         return next();
       } catch (error) {
-        // jose's own verdicts (bad signature, expired, wrong issuer/audience,
-        // unknown kid) mean "sign in again". A JWKS timeout or a network
-        // failure is our outage, not the user's token — 503, logged.
-        const code = error && error.code;
-        if (typeof code === "string" && code.startsWith("ERR_J") && code !== "ERR_JWKS_TIMEOUT") {
-          return unauthorized(req, res);
-        }
+        // Only a verdict about THIS token means "sign in again". Everything
+        // else — a network failure, a timeout, a non-200 or malformed JWKS
+        // (jose codes those ERR_JOSE_GENERIC / ERR_JWKS_INVALID) — is our
+        // outage: 503, logged. A 401 there would sign every user out.
+        if (TOKEN_VERDICTS.has(error && error.code)) return unauthorized(req, res);
         logError(req, error);
         try {
           if (onOutage) onOutage(req);

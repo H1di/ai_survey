@@ -68,3 +68,56 @@ test("a throwing onOutage does not break the 503", async () => {
   await auth.middleware({ id: "req-3", get: () => bearer }, res, () => {});
   assert.equal(res.statusCode, 503);
 });
+
+// jose reports a non-200 JWKS response as ERR_JOSE_GENERIC and an unusable key
+// set as ERR_JWKS_INVALID — both start with ERR_J but are our outage: a 401
+// here would sign every user out and drop their stored session id.
+const http = require("node:http");
+
+async function withJwks(handler, fn) {
+  const srv = http.createServer(handler);
+  await new Promise((resolve) => srv.listen(0, "127.0.0.1", resolve));
+  try {
+    await fn(`http://127.0.0.1:${srv.address().port}`);
+  } finally {
+    await new Promise((resolve) => srv.close(resolve));
+  }
+}
+
+for (const [name, handler] of [
+  ["a 500 from the JWKS endpoint", (_req, res) => res.writeHead(500).end("down")],
+  ["a 429 from the JWKS endpoint", (_req, res) => res.writeHead(429).end("slow down")],
+  [
+    "a JWKS body that is not a key set",
+    (_req, res) => res.writeHead(200, { "Content-Type": "application/json" }).end('{"oops":true}'),
+  ],
+]) {
+  test(`${name} → 503 and onOutage, never 401`, async () => {
+    await withJwks(handler, async (supabaseUrl) => {
+      const calls = [];
+      const auth = createAuth({ supabaseUrl, onOutage: (req) => calls.push(req) });
+      const res = fakeRes();
+      await auth.middleware({ id: "req-x", get: () => bearer }, res, () => {});
+      assert.equal(res.statusCode, 503);
+      assert.equal(calls.length, 1);
+    });
+  });
+}
+
+test("a token signed by a key the JWKS does not hold is still a 401", async () => {
+  const { generateKeyPair: gen, exportJWK } = require("jose");
+  const other = await gen("ES256");
+  const jwk = { ...(await exportJWK(other.publicKey)), kid: "other", alg: "ES256", use: "sig" };
+  await withJwks(
+    (_req, res) =>
+      res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ keys: [jwk] })),
+    async (supabaseUrl) => {
+      const calls = [];
+      const auth = createAuth({ supabaseUrl, onOutage: (req) => calls.push(req) });
+      const res = fakeRes();
+      await auth.middleware({ id: "req-y", get: () => bearer }, res, () => {});
+      assert.equal(res.statusCode, 401);
+      assert.equal(calls.length, 0);
+    }
+  );
+});
