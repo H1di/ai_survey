@@ -42,9 +42,11 @@ test("keyless user reaches a roadmap", async ({ page }) => {
   // Values tournament: left card until the hierarchy screen appears
   const confirm = page.getByRole("button", { name: "Confirm hierarchy" });
   const left = page.locator(".split-half").first();
+  // Bounded click: after the last answer the chosen card is disabled and then
+  // unmounts, and an unbounded click on it would wait out the whole test while
+  // the hierarchy screen is already up. A miss just re-checks for that screen.
   while (!(await confirm.isVisible())) {
-    if (await left.isVisible()) await left.click();
-    else await page.waitForTimeout(50);
+    await left.click({ timeout: 1_000 }).catch(() => {});
   }
   await confirm.click();
 
@@ -58,9 +60,12 @@ test("keyless user reaches a roadmap", async ({ page }) => {
 
   // Summary -> first output (the funnel scene hands over via "See your path")
   await page.getByRole("button", { name: "Enter the Life Path Engine" }).click();
-  await page.getByRole("button", { name: /see your path/i }).click({ timeout: 30_000 }).catch(() => {});
-
+  // The scene may hand over by itself (reduced motion) or offer the button;
+  // wait for whichever comes instead of sitting out a timeout on the button.
+  const seePath = page.getByRole("button", { name: /see your path/i });
   const accept = page.getByRole("button", { name: /Yes — accept this path/ });
+  await expect(seePath.or(accept).first()).toBeVisible({ timeout: 30_000 });
+  if (await seePath.isVisible()) await seePath.click({ timeout: 2_000 }).catch(() => {});
   await expect(accept).toBeVisible({ timeout: 30_000 });
 
   // The concrete job column carries the O*NET profession title.
