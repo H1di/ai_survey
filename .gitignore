@@ -18,3 +18,7 @@ frontend/dist/
 .superpowers/
 
 .vercel/
+
+# Playwright
+test-results/
+playwright-report/
