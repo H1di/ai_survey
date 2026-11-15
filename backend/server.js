@@ -50,8 +50,6 @@ const path = require("node:path");
 const { logError, resolveStatus, routeOf } = require("./core/logger");
 const { createAlerter } = require("./core/alert");
 
-const alerter = createAlerter({ url: process.env.ERROR_WEBHOOK_URL });
-
 // Tests set their own env (and force fallback by blanking the key) — skip
 // .env entirely so it can't refill a real key underneath them.
 if (process.env.NODE_ENV !== "test") {
@@ -61,6 +59,9 @@ if (process.env.NODE_ENV !== "test") {
   if (!process.env.OPENAI_API_KEY) delete process.env.OPENAI_API_KEY;
   dotenv.config();
 }
+
+// Built after dotenv so a webhook URL in backend/.env is honoured too.
+const alerter = createAlerter({ url: process.env.ERROR_WEBHOOK_URL });
 
 // Trust proxy: hosting platforms (Render) put us behind a reverse proxy, so
 // req.ip is the proxy's address unless we trust its forwarding header. Without
@@ -96,7 +97,17 @@ const onetApi = createOnetApi({ apiKey: process.env.ONET_API_KEY });
 
 // Accounts (Supabase Auth). Without SUPABASE_URL every request runs as one
 // fixed dev user — the keyless rule, same as the AI and O*NET fallbacks.
-const auth = createAuth({ supabaseUrl: process.env.SUPABASE_URL });
+const auth = createAuth({
+  supabaseUrl: process.env.SUPABASE_URL,
+  // A JWKS outage locks everyone out and is answered inside the middleware.
+  onOutage: (req) =>
+    alerter.notify({
+      status: 503,
+      route: routeOf(req),
+      requestId: req.id,
+      message: "Sign-in service is unavailable.",
+    }),
+});
 const db = createSupabaseDb({
   url: process.env.SUPABASE_URL,
   serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,

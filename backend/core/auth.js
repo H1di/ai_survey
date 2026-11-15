@@ -10,7 +10,9 @@ const DEV_USER_ID = "00000000-0000-0000-0000-000000000000";
 // at the project's JWKS endpoint, issuer `<url>/auth/v1`, audience
 // "authenticated". Legacy HS256-only projects publish no keys and will 401 —
 // switch the project to asymmetric JWT signing keys.
-function createAuth({ supabaseUrl } = {}) {
+// `onOutage(req)` fires when the JWKS cannot be reached (the 503 below): that
+// failure locks every user out and never passes through sendError.
+function createAuth({ supabaseUrl, onOutage } = {}) {
   if (!supabaseUrl) {
     return {
       enabled: false,
@@ -49,6 +51,11 @@ function createAuth({ supabaseUrl } = {}) {
           return unauthorized(req, res);
         }
         logError(req, error);
+        try {
+          if (onOutage) onOutage(req);
+        } catch {
+          // an alert hook must never turn a 503 into a crash
+        }
         return res
           .status(503)
           .json({ error: "Sign-in service is unavailable. Try again shortly.", requestId: req.id });
