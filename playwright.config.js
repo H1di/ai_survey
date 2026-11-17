@@ -1,9 +1,11 @@
 const { defineConfig, devices } = require("@playwright/test");
 
-// Keys blanked on purpose: dotenv and Vite never override variables that
-// already exist, so a developer's real .env cannot turn this keyless run
-// into one that reaches OpenAI, O*NET, Supabase or Redis.
+// Keys blanked on purpose, and SKIP_DOTENV stops the backend reading
+// backend/.env at all: server.js drops a blank OPENAI_API_KEY before dotenv
+// runs, so blanking alone would let a developer's real key back in. Vite never
+// overrides variables that already exist, so the blank VITE_* values hold.
 const KEYLESS_ENV = {
+  SKIP_DOTENV: "1",
   OPENAI_API_KEY: "",
   ONET_API_KEY: "",
   SUPABASE_URL: "",

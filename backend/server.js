@@ -51,8 +51,11 @@ const { logError, resolveStatus, routeOf } = require("./core/logger");
 const { createAlerter } = require("./core/alert");
 
 // Tests set their own env (and force fallback by blanking the key) — skip
-// .env entirely so it can't refill a real key underneath them.
-if (process.env.NODE_ENV !== "test") {
+// .env entirely so it can't refill a real key underneath them. SKIP_DOTENV=1
+// does the same for a production-shaped keyless run (the e2e smoke), where
+// NODE_ENV must stay "production" but the blank-key cleanup below would
+// otherwise let .env put the developer's real OPENAI_API_KEY back.
+if (process.env.NODE_ENV !== "test" && process.env.SKIP_DOTENV !== "1") {
   // An empty OPENAI_API_KEY inherited from the launching shell would otherwise
   // shadow the real value in .env — dotenv never overrides an already-set var.
   // An empty key is never useful, so drop it and let .env win.
