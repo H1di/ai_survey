@@ -21,11 +21,11 @@
 }
 
 .step-rail::before {
-  background: var(--gold-20);
+  background: var(--line-20);
 }
 
 .step-rail::after {
-  background: var(--gold);
+  background: var(--line);
   transform-origin: left;
   transform: scaleX(calc(var(--rail-done, 0) / 6));
   transition: transform var(--t-base) var(--ease-out);
@@ -58,16 +58,16 @@
 
 .step-rail-item--done::before,
 .step-rail-item--done > button::before {
-  background-color: var(--gold);
-  border-color: var(--gold);
+  background-color: var(--line);
+  border-color: var(--line);
 }
 
 .step-rail-item,
 .step-rail-item > button {
   padding: 8px 16px;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--gold-20);
-  background: var(--pill-idle);
+  border: 1px solid var(--line-20);
+  background: var(--surface-raised);
   color: var(--text-60);
   font: 600 12px/1 var(--font-display);
   letter-spacing: 0.01em;
@@ -82,7 +82,7 @@
 }
 
 .step-rail-item > button:hover:enabled {
-  border-color: var(--gold-50);
+  border-color: var(--line-50);
   color: var(--text);
 }
 
@@ -91,10 +91,18 @@
   cursor: default;
 }
 
+/* "Now": the one place on the rail the accent appears. The pill keeps ink
+   text (the accent fails AA as text); the wash, the ring and the filled dot
+   carry the state. */
 .step-rail-item--active {
-  background: var(--gold);
-  border-color: var(--gold);
-  color: var(--ink-on-gold);
+  background: var(--accent-wash);
+  border-color: var(--text);
+  color: var(--text);
+}
+
+.step-rail-item--active::before {
+  background-color: var(--accent);
+  border-color: var(--text);
 }
 
 .step-rail-item--inert:not(.step-rail-item--active):not(.step-rail-item--done) {
@@ -104,7 +112,7 @@
 /* --- Shared button set --- */
 .btn {
   border-radius: var(--radius-pill);
-  font: 700 14px/1 var(--font-display);
+  font: 500 14px/1 var(--font-display);
   letter-spacing: 0.01em;
   padding: 15px 30px;
   transition: background var(--t-fast) ease, transform var(--t-fast) ease,
@@ -117,48 +125,53 @@
 }
 
 
-.btn--bone {
-  background: var(--bone);
-  color: var(--ink-on-gold);
-  padding: 16px 30px;
+/* Entry and sign-in: the hero's single ink-outline pill; it fills with ink
+   on hover. */
+.btn--outline {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--line);
+  padding: 15px 32px;
 }
 
-.btn--bone:hover:enabled {
-  background: var(--gold);
-  transform: translateY(-2px);
-  box-shadow: 0 12px 30px rgba(255, 217, 140, 0.35);
+.btn--outline:hover:enabled {
+  background: var(--line);
+  color: var(--text-on-line);
 }
 
-.btn--gold {
-  background: var(--gold);
-  color: var(--ink-on-gold);
+/* The step's main action: solid ink, white type. The accent is never a
+   button fill. */
+.btn--primary {
+  background: var(--line);
+  color: var(--text-on-line);
+  border: 1px solid var(--line);
   font-size: 13px;
   padding: 14px 28px;
 }
 
-.btn--gold:hover:enabled {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 30px rgba(255, 217, 140, 0.35);
+.btn--primary:hover:enabled {
+  background: var(--text-72);
+  border-color: var(--text-72);
 }
 
 .btn--ghost {
   background: transparent;
   color: var(--text-72);
-  border: 1px solid var(--text-30);
+  border: 1px solid var(--line-30);
   font-weight: 500;
   padding: 14px 20px;
 }
 
 .btn--ghost:hover:enabled {
   color: var(--text);
-  border-color: var(--gold-50);
+  border-color: var(--line);
 }
 
 /* Pressed: the button settles back from its hover lift. After the hover rules
    on purpose — same specificity, so order decides. */
 .btn:active:enabled,
-.btn--bone:active:enabled,
-.btn--gold:active:enabled {
+.btn--outline:active:enabled,
+.btn--primary:active:enabled {
   transform: scale(0.97);
   box-shadow: none;
 }
@@ -167,18 +180,20 @@
 .hero {
   position: relative;
   min-height: 100vh;
-  background: var(--ink-void);
+  background: var(--surface-page);
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
+/* Entry and sign-in: the stacked logo top left, the copy in one left column,
+   the branch field and its one path (BranchCanvas) to the right. */
 .hero-bar {
   position: relative;
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 22px 40px;
+  align-items: flex-start;
+  padding: 28px 56px 0;
 }
 
 .hero-nav {
@@ -191,59 +206,58 @@
   font: 400 12px/1 var(--font-mono);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--bone-50);
+  color: var(--text-55);
   text-decoration: none;
   transition: color var(--t-fast) ease;
 }
 
 .hero-nav button:hover,
 .hero-nav a:hover {
-  color: var(--gold);
+  color: var(--text);
 }
 
 .hero-body {
   position: relative;
   flex: 1;
-  padding: 60px 48px 0;
+  padding: 7vh 56px 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .hero-title {
   margin: 0;
-  width: 100%;
-  max-width: 1100px;
+  max-width: 640px;
   text-align: left;
-  font: 900 68px/1.05 var(--font-display);
+  font: 300 58px/1.06 var(--font-display);
   letter-spacing: -0.02em;
-  text-transform: uppercase;
   color: var(--text);
-  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
 }
 
+/* The last word is set apart by weight, not colour: the accent never sets
+   text. */
 .hero-accent {
-  color: var(--gold);
+  font-weight: 500;
 }
 
 .hero-input {
-  margin-top: 16px;
+  margin-top: 34px;
   width: 100%;
-  max-width: 520px;
+  max-width: 460px;
   min-height: 90px;
   resize: none;
   padding: 16px 18px;
   border-radius: var(--radius-field);
-  background: var(--field);
-  border: 1px solid var(--field-border);
+  background: var(--surface-raised);
+  border: 1px solid var(--line-30);
   color: var(--text);
   font: 400 15px/1.5 var(--font-body);
   outline: none;
 }
 
 .hero-input:focus {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 3px var(--gold-focus);
+  border-color: var(--text);
+  box-shadow: 0 0 0 3px var(--accent-focus);
 }
 
 .hero-body > .btn {
@@ -253,14 +267,19 @@
 .hero-disclaimer {
   margin: 16px 0 0;
   max-width: 420px;
-  text-align: center;
+  text-align: left;
   font: 400 12.5px/1.5 var(--font-body);
   color: var(--text-60);
 }
 
+/* Full width and centred: the path runs out of the lower left corner, so the
+   attribution sits clear of it in the middle. */
 .hero-footer {
+  align-self: stretch;
+  display: flex;
+  justify-content: center;
   margin-top: auto;
-  padding-bottom: 24px;
+  padding: 40px 0 24px;
 }
 
 /* --- Sign-in (hero frame, a single-line field instead of the dream box) --- */
@@ -268,7 +287,7 @@
 .signin-sent {
   margin-top: 28px;
   width: 100%;
-  max-width: 520px;
+  max-width: 460px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -329,11 +348,11 @@
   max-width: 480px;
   text-align: center;
   font: 300 10.5px/1.5 var(--font-body);
-  color: var(--bone-40);
+  color: var(--text-45);
 }
 
 .hero .onet-attribution a {
-  color: var(--gold-70);
+  color: var(--text-72);
 }
 
 .hero .error-text {
@@ -358,8 +377,21 @@
   max-width: 640px;
 }
 
+/* RIASEC's way out, before the first answer: a quiet mono link under the
+   scale, in the same voice as Back. */
 .skip-action {
-  margin-top: 24px;
+  margin-top: 22px;
+  padding: 6px 4px;
+  background: none;
+  font: 400 11px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-40);
+  transition: color var(--t-fast) ease;
+}
+
+.skip-action:hover:enabled {
+  color: var(--text);
 }
 
 .demo-grid {
@@ -371,10 +403,37 @@
   text-align: left;
 }
 
+/* Field questions in the display face, a step under the Likert statement, so
+   the form reads as the same family. */
 .demo-question {
-  font: 600 15px/1.4 var(--font-body);
+  font: 400 21px/1.3 var(--font-display);
+  letter-spacing: -0.005em;
   color: var(--text);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+}
+
+/* A form on a question screen: heading, fields and its button stacked and
+   centred in the page. */
+.instrument-stage--form {
+  flex-direction: column;
+}
+
+.screen--question .demo-grid {
+  gap: 36px 56px;
+}
+
+.form-title {
+  margin: 0 0 clamp(28px, 4vh, 44px);
+  font-size: clamp(30px, 3.2vw, 44px);
+}
+
+/* A journey question: the statement in the middle, its answer row under it. */
+.instrument--journey .item-statement {
+  max-width: 24ch;
+}
+
+.journey-form {
+  width: min(560px, 100%);
 }
 
 .demo-choices {
@@ -387,7 +446,7 @@
   align-items: center;
   gap: 12px;
   padding: 10px 0;
-  border-bottom: 1px solid var(--gold-15);
+  border-bottom: 1px solid var(--line-15);
   cursor: pointer;
 }
 
@@ -402,18 +461,18 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 1px solid var(--gold-50);
+  border: 1px solid var(--line-50);
   flex-shrink: 0;
-  transition: background var(--t-fast) ease, box-shadow var(--t-fast) ease;
+  transition: background var(--t-fast) ease, border-color var(--t-fast) ease;
 }
 
 .demo-choice input:checked + .demo-choice-ring {
-  background: var(--gold);
-  box-shadow: 0 0 12px var(--gold-focus);
+  background: var(--accent);
+  border-color: var(--text);
 }
 
 .demo-choice input:focus-visible + .demo-choice-ring {
-  outline: 2px solid var(--gold);
+  outline: 2px solid var(--text);
   outline-offset: 2px;
 }
 
@@ -430,7 +489,7 @@
   width: 100%;
   padding: 10px 0;
   border: none;
-  border-bottom: 1px solid var(--gold-35);
+  border-bottom: 1px solid var(--line-35);
   background: transparent;
   color: var(--text);
   font: 400 15px/1.4 var(--font-body);
@@ -439,7 +498,7 @@
 }
 
 .demo-input:focus {
-  border-bottom-color: var(--gold);
+  border-bottom-color: var(--text);
 }
 
 /* `outline: none` above is emitted after the global :focus-visible rule and
@@ -447,7 +506,7 @@
    of demographics and the journey question — had no focus indicator at all.
    Section 8 makes the ring the accessibility floor. */
 .demo-input:focus-visible {
-  outline: 2px solid var(--gold);
+  outline: 2px solid var(--text);
   outline-offset: 2px;
 }
 
@@ -466,7 +525,6 @@
 .screen--tournament .screen-title {
   font-size: 44px;
   line-height: 1.05;
-  text-transform: uppercase;
   margin-bottom: 34px;
 }
 
@@ -480,7 +538,7 @@
   max-width: 560px;
   font: 500 11px/1.5 var(--font-mono);
   letter-spacing: 0.06em;
-  color: var(--gold-70);
+  color: var(--text-72);
 }
 
 /* The interest result's Continue. */
@@ -519,8 +577,8 @@
   padding: 4px;
   margin-bottom: 26px;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--gold-20);
-  background: var(--pill-idle);
+  border: 1px solid var(--line-20);
+  background: var(--surface-raised);
 }
 
 .intent-segment-option {
@@ -539,10 +597,12 @@
   color: var(--text);
 }
 
+/* Selected: the same wash-and-ring as the rail's current step. */
 .intent-segment-option--on,
 .intent-segment-option--on:hover:enabled {
-  background: var(--gold);
-  color: var(--ink-on-gold);
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 1px var(--text);
+  color: var(--text);
 }
 
 .intent-hint {
@@ -597,9 +657,9 @@
 }
 
 /* The stroke lives here, not on the element: it is a colour, so it is a token
-   (--gold-30 is the spec's dashed-rule value). */
+   (--line-30 is the spec's dashed-rule value). */
 .dotted-rule line {
-  stroke: var(--gold-30);
+  stroke: var(--line-30);
 }
 
 .dotted-rule {
@@ -625,13 +685,13 @@
 .experience-rule {
   width: 1px;
   align-self: stretch;
-  background: var(--gold-25);
+  background: var(--line-25);
   flex-shrink: 0;
 }
 
 .experience-heading {
   margin: 0 0 10px;
-  font: 700 20px/1.25 var(--font-display);
+  font: 500 20px/1.25 var(--font-display);
   color: var(--text);
 }
 
@@ -655,7 +715,7 @@
 
 .link-action {
   font: 400 12px/1.4 var(--font-body);
-  color: var(--gold-70);
+  color: var(--text-72);
   text-decoration: underline;
   text-underline-offset: 3px;
   background: none;
@@ -680,16 +740,16 @@
   padding: 16px 18px;
   margin-bottom: 22px;
   border-radius: var(--radius-field);
-  background: var(--field);
-  border: 1px solid var(--field-border);
+  background: var(--surface-raised);
+  border: 1px solid var(--line-30);
   color: var(--text);
   font: 400 14px/1.6 var(--font-body);
   outline: none;
 }
 
 .cv-paste:focus {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 3px var(--gold-focus);
+  border-color: var(--text);
+  box-shadow: 0 0 0 3px var(--accent-focus);
 }
 
 .journey-list {
@@ -706,13 +766,13 @@
   align-items: baseline;
   gap: 20px;
   padding: 14px 0;
-  border-bottom: 1px solid var(--gold-18);
+  border-bottom: 1px solid var(--line-18);
 }
 
 .journey-number {
   font: 400 11px/1 var(--font-mono);
   letter-spacing: 0.1em;
-  color: var(--gold-60);
+  color: var(--text-60);
 }
 
 .journey-label {
@@ -747,7 +807,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--gold-40);
+  background: var(--line-40);
   animation: screen-loading-pulse 1.2s infinite;
 }
 
@@ -761,9 +821,9 @@
 
 .screen .summary-archetype {
   margin: 0;
-  font: 900 34px/1.1 var(--font-display);
+  font: 400 34px/1.1 var(--font-display);
   letter-spacing: -0.02em;
-  color: var(--gold);
+  color: var(--text);
 }
 
 .screen .summary-tagline {
@@ -793,30 +853,30 @@
   width: min(1100px, calc(100vw - 64px));
   padding: 26px 0 22px;
   text-align: center;
-  background: var(--ink-screen);
+  background: var(--surface-page);
+  border: 1px solid var(--line-15);
   border-radius: var(--radius-surface);
 }
 
 .output-field {
   margin: 0 0 30px;
-  font: 900 40px/1.05 var(--font-display);
-  letter-spacing: -0.02em;
-  text-transform: uppercase;
+  font: 300 40px/1.08 var(--font-display);
+  letter-spacing: -0.015em;
   color: var(--text);
 }
 
 .output-columns {
   display: flex;
   align-items: stretch;
-  border-top: 1px solid var(--gold-25);
-  border-bottom: 1px solid var(--gold-25);
+  border-top: 1px solid var(--line-25);
+  border-bottom: 1px solid var(--line-25);
   text-align: left;
 }
 
 .output-column {
   flex: 1;
   padding: 30px;
-  border-right: 1px solid var(--gold-25);
+  border-right: 1px solid var(--line-25);
 }
 
 .output-column:last-child {
@@ -828,12 +888,12 @@
   font: 500 10px/1 var(--font-mono);
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--gold);
+  color: var(--text);
 }
 
 .output-title {
   margin: 0;
-  font: 700 22px/1.15 var(--font-display);
+  font: 500 22px/1.15 var(--font-display);
   letter-spacing: -0.01em;
   color: var(--text);
 }
@@ -845,7 +905,7 @@
 }
 
 .output-fit {
-  color: var(--gold-70);
+  color: var(--text-72);
 }
 
 .output-meta {
@@ -891,7 +951,7 @@
 
 @media (max-width: 1200px) {
   .hero-title {
-    font-size: 54px;
+    font-size: 50px;
   }
 
   .screen-title {
@@ -912,8 +972,27 @@
     padding: 76px 24px 48px;
   }
 
+  .hero-bar {
+    padding: 20px 24px 0;
+    gap: 16px;
+  }
+
+  .hero-bar .wordmark-lockup {
+    height: 72px;
+  }
+
+  .hero-nav {
+    gap: 16px;
+  }
+
+  .hero-nav button,
+  .hero-nav a {
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
   .hero-body {
-    padding: 40px 24px 0;
+    padding: 36px 24px 0;
   }
 
   .hero-title {
@@ -963,7 +1042,7 @@
 
   .output-column {
     border-right: none;
-    border-bottom: 1px solid var(--gold-25);
+    border-bottom: 1px solid var(--line-25);
   }
 
   /* .output-columns draws its own bottom rule, so the last column's would
@@ -978,14 +1057,4 @@
      reach them. The cap that fixes it now lives on .graph-question-dock, which
      measures the canvas instead of the viewport and so cannot reach over the
      page header. */
-
-  .likert {
-    flex-wrap: wrap;
-    gap: 12px;
-    justify-content: center;
-  }
-
-  .likert-option {
-    width: 84px;
-  }
 }

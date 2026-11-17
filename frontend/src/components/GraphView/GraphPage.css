@@ -3,10 +3,10 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--ink-graph);
+  background: var(--surface-page);
 }
 
-/* The glowing branch sits behind everything else on the page — decorative,
+/* The branch sits behind everything else on the page — decorative,
    never interactive (BranchCanvas is already pointer-events: none). */
 .graph-branch {
   opacity: 0.55;
@@ -31,7 +31,7 @@
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding: 16px 24px;
-  border-bottom: 1px solid var(--gold-20);
+  border-bottom: 1px solid var(--line-20);
   flex-shrink: 0;
   gap: 16px;
 }
@@ -56,7 +56,7 @@
   font: 500 10px/1 var(--font-mono);
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--gold-70);
+  color: var(--text-72);
   text-align: center;
 }
 
@@ -72,8 +72,8 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-60);
-  background: var(--pill-idle);
-  border: 1px solid var(--gold-20);
+  background: var(--surface-raised);
+  border: 1px solid var(--line-20);
   border-radius: var(--radius-pill);
   padding: 8px 14px;
   transition: color var(--t-fast) ease, border-color var(--t-fast) ease,
@@ -82,9 +82,9 @@
 
 .graph-profile-toggle:hover,
 .graph-profile-toggle.active {
-  background: var(--gold);
-  border-color: var(--gold);
-  color: var(--ink-on-gold);
+  background: var(--line);
+  border-color: var(--line);
+  color: var(--text-on-line);
 }
 
 .graph-canvas {
@@ -149,5 +149,10 @@
   .graph-question-dock {
     bottom: 16px;
     width: calc(100vw - 24px);
+  }
+
+  /* The row is tight at phone width: the bird alone carries the brand. */
+  .graph-header .wordmark-word {
+    display: none;
   }
 }

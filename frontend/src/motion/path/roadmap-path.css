@@ -1,0 +1,455 @@
+/* Roadmap path — one line through months from now. White page, ink
+   hairlines, one turquoise (--accent) for the "now" dot only; focus and the
+   selected stage are drawn in ink. Data labels are mono. Geometry (plot size,
+   marker and pill boxes) comes from pathLayout.js as inline px. */
+
+.rp {
+  box-sizing: border-box;
+  background: var(--surface-page);
+  border: 1px solid var(--line-15);
+  border-radius: 2px;
+  padding: 26px 32px 28px;
+  color: var(--text);
+  text-align: left;
+  cursor: default;
+  /* Pill widths are computed from the mono advance; a phone's text
+     autosizer must not inflate the type underneath them. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+.rp *,
+.rp *::before,
+.rp *::after {
+  box-sizing: border-box;
+}
+
+.rp--vertical {
+  width: 360px;
+  padding: 20px 16px 16px;
+}
+
+/* ---- Header ------------------------------------------------------------ */
+
+.rp-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--line-15);
+}
+
+.rp-head-title {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  min-width: 0;
+}
+
+.rp-kicker,
+.rp-axis-note,
+.rp-panel-heading,
+.rp-detail-kicker,
+.rp-detail-label {
+  font: 600 11px/1.2 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-55);
+}
+
+.rp-kicker {
+  color: var(--text);
+}
+
+.rp-title {
+  margin: 0;
+  font: 500 17px/1.25 var(--font-display);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rp-axis-note {
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.rp--vertical .rp-head {
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.rp--vertical .rp-head-title {
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rp--vertical .rp-title {
+  white-space: normal;
+}
+
+/* ---- Body: plot | panel ------------------------------------------------ */
+
+.rp-body {
+  display: flex;
+  align-items: stretch;
+  gap: 32px;
+}
+
+.rp--vertical .rp-body {
+  flex-direction: column;
+  gap: 0;
+}
+
+.rp-main {
+  flex: none;
+  min-width: 0;
+}
+
+.rp-plot {
+  position: relative;
+}
+
+.rp-svg {
+  display: block;
+  overflow: visible;
+}
+
+/* ---- SVG strokes ------------------------------------------------------- */
+
+.rp-grid {
+  stroke: var(--line-15);
+  stroke-width: 1;
+}
+
+.rp-axis {
+  stroke: var(--line);
+  stroke-width: 1.25;
+}
+
+.rp--vertical .rp-axis {
+  stroke: var(--line-20);
+  stroke-width: 1;
+}
+
+.rp-tick {
+  stroke: var(--line);
+  stroke-width: 1.25;
+}
+
+.rp-tick-label {
+  font: 500 12px/1 var(--font-mono);
+  fill: var(--text-60);
+}
+
+.rp-tick-label--now {
+  font-weight: 700;
+  fill: var(--text);
+  letter-spacing: 0.04em;
+}
+
+.rp-line {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Everything after the current stage is still ahead: dashed. */
+.rp-line--future {
+  stroke-width: 1.5;
+  stroke-dasharray: 6 6;
+  stroke-linecap: butt;
+}
+
+.rp-leader {
+  stroke: var(--line-60);
+  stroke-width: 1;
+}
+
+.rp-now {
+  fill: var(--accent);
+}
+
+.rp-now-drop {
+  stroke: var(--accent);
+  stroke-width: 1.25;
+  stroke-dasharray: 3 4;
+}
+
+/* ---- Markers and pills (buttons over the SVG) -------------------------- */
+
+.rp-marker,
+.rp-pill {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  color: var(--text);
+  background: var(--surface-page);
+  cursor: pointer;
+  transform-origin: center;
+  transition:
+    background-color var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out),
+    color var(--t-fast) var(--ease-out);
+}
+
+.rp-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--line);
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.rp-marker:hover {
+  background: var(--line-wash);
+}
+
+.rp-marker--selected,
+.rp-marker--selected:hover {
+  background: var(--line);
+  color: var(--text-on-line);
+}
+
+.rp-pill {
+  display: block;
+  padding: 0 12px;
+  border: 1px dashed var(--line-50);
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 24px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.rp--vertical .rp-pill {
+  padding: 0 11px;
+  font-size: 11px;
+  text-align: left;
+}
+
+/* The stage you are in now: a solid rule, like the solid stretch of line. */
+.rp-pill--current {
+  border-style: solid;
+  border-color: var(--line-70);
+}
+
+.rp-pill:hover {
+  border-color: var(--line);
+}
+
+.rp-pill--selected {
+  border: 1.5px solid var(--line);
+  font-weight: 600;
+}
+
+.rp-marker:focus-visible,
+.rp-pill:focus-visible,
+.rp-panel-toggle:focus-visible {
+  outline: 2px solid var(--line);
+  outline-offset: 2px;
+}
+
+/* ---- Stage detail ------------------------------------------------------ */
+
+.rp-detail {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-15);
+  max-width: 720px;
+  cursor: text;
+  user-select: text;
+  transition: opacity var(--t-base) var(--ease-out);
+}
+
+.rp-detail-title {
+  margin: 8px 0 6px;
+  font: 500 18px/1.3 var(--font-display);
+  color: var(--text);
+}
+
+.rp-detail-desc {
+  margin: 0 0 10px;
+  font: 400 14px/1.6 var(--font-body);
+  color: var(--text-72);
+}
+
+.rp-detail-milestone {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  font: 500 14px/1.5 var(--font-body);
+  color: var(--text);
+}
+
+.rp--vertical .rp-detail {
+  margin-top: 6px;
+}
+
+.rp--vertical .rp-detail-title {
+  font-size: 17px;
+}
+
+/* ---- Side panel -------------------------------------------------------- */
+
+.rp-panel {
+  flex: 0 0 248px;
+  padding-left: 32px;
+  border-left: 1px solid var(--line-20);
+  display: flex;
+  flex-direction: column;
+  gap: 34px;
+}
+
+.rp-panel-heading {
+  margin: 0 0 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.rp-scores {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.rp-score {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.rp-score dt {
+  font: 500 13px/1.2 var(--font-mono);
+  color: var(--text);
+}
+
+.rp-score dd {
+  margin: 0;
+  font: 600 13px/1.2 var(--font-mono);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.rp-interests {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rp-interest {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "name name"
+    "bar value";
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 7px;
+}
+
+.rp-interest-name {
+  grid-area: name;
+  font: 500 13px/1.2 var(--font-mono);
+  color: var(--text);
+}
+
+.rp-interest-bar {
+  grid-area: bar;
+  display: block;
+  height: 4px;
+  margin-left: 22px;
+}
+
+.rp-interest-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--line);
+}
+
+.rp-interest--top .rp-interest-bar > span {
+  background: var(--accent);
+}
+
+.rp-interest-value {
+  grid-area: value;
+  font: 600 13px/1 var(--font-mono);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Phone: the panel folds into one row under the path. */
+.rp-panel--compact {
+  flex: none;
+  margin-top: 16px;
+  padding: 0;
+  border-left: none;
+  border-top: 1px solid var(--line-20);
+  gap: 0;
+}
+
+.rp-panel-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 2px 2px;
+  border: none;
+  background: none;
+  font: 500 15px/1.3 var(--font-body);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.rp-chevron {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1.5;
+  transition: transform var(--t-base) var(--ease-out);
+}
+
+.rp-panel-toggle[aria-expanded="true"] .rp-chevron {
+  transform: rotate(180deg);
+}
+
+.rp-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  padding-top: 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rp-marker,
+  .rp-pill,
+  .rp-detail,
+  .rp-chevron {
+    transition: none;
+  }
+}

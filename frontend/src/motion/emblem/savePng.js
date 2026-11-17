@@ -35,23 +35,23 @@ export async function saveEmblemPng(emblem) {
 
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = tk.bone;
+  ctx.fillStyle = tk.strong;
   ctx.font = `600 60px ${tk.body}`;
   ctx.fillText(emblem.archetype.name, W / 2, 1056);
   ctx.fillStyle = tk.text60;
   ctx.font = `400 28px ${tk.body}`;
   wrapLines(ctx, emblem.archetype.tagline, 820).forEach((line, i) => ctx.fillText(line, W / 2, 1110 + i * 40));
-  ctx.fillStyle = tk.gold70;
+  ctx.fillStyle = tk.line70;
   ctx.font = `500 22px ${tk.mono}`;
   ctx.fillText(`${emblem.riasecCode} · ${emblem.serial}`, W / 2, 1210);
 
-  ctx.strokeStyle = tk.gold15;
+  ctx.strokeStyle = tk.line15;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(W / 2 - 40, 1262);
   ctx.lineTo(W / 2 + 40, 1262);
   ctx.stroke();
-  ctx.fillStyle = tk.bone50;
+  ctx.fillStyle = tk.strong50;
   ctx.font = `500 20px ${tk.body}`;
   ctx.fillText("Invector", W / 2, 1300);
 

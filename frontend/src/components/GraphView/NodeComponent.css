@@ -1,19 +1,19 @@
 /* The legacy card base. Every Invector variant below declares its own box, so
    the old 200-240px clamp only ever silenced them: it capped .node--output at
-   240px (the spec's 480px card) and .node--roadmap at 240px (the spec's 360px
-   row), and .node--me carried a reset for exactly that reason. Sizing belongs
+   240px (the spec's 480px card), and .node--me carried a reset for exactly
+   that reason. Sizing belongs
    to the variants. */
 .node {
-  background: var(--ink-screen);
-  border: 1px solid var(--gold-20);
+  background: var(--surface-page);
+  border: 1px solid var(--line-20);
   border-radius: 2px;
   padding: 20px 24px;
   cursor: default;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease;
 }
 
 .node:hover {
-  box-shadow: 0 0 20px var(--gold-15);
+  border-color: var(--line-40);
 }
 
 .node--me {
@@ -24,11 +24,10 @@
   justify-content: center;
   padding: 0;
   border-radius: 50%;
-  border: 1.5px solid var(--gold-60);
-  background: var(--gold-wash);
-  box-shadow: 0 0 24px rgba(255, 217, 140, 0.15);
-  font: 700 15px/1 var(--font-display);
-  color: var(--gold);
+  border: 1.5px solid var(--line-60);
+  background: var(--line-wash);
+  font: 500 15px/1 var(--font-display);
+  color: var(--text);
   position: relative;
   cursor: default;
 }
@@ -44,7 +43,7 @@
 
 .me-ring circle {
   fill: none;
-  stroke: var(--gold);
+  stroke: var(--accent);
   stroke-width: 1;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
@@ -67,7 +66,7 @@
   font: 500 10px/1 var(--font-mono);
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--gold-50);
+  color: var(--text-55);
 }
 
 @keyframes me-label-fade {
@@ -78,12 +77,12 @@
   font: 600 10px/1 var(--font-mono);
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--gold);
+  color: var(--text);
   margin-bottom: 8px;
 }
 
 .node-title {
-  font: 900 34px/1.1 var(--font-display);
+  font: 400 34px/1.1 var(--font-display);
   letter-spacing: -0.01em;
   margin-bottom: 16px;
   color: var(--text);
@@ -114,7 +113,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--gold-40);
+  background: var(--line-40);
   animation: pulse 1.2s infinite;
 }
 
@@ -126,8 +125,7 @@
   50% { opacity: 1; transform: scale(1); }
 }
 
-/* Side panel for a roadmap step's detail, and (via InfoPanel in App.jsx,
-   which shares these exact class names) for an output's full trace and the
+/* Side panel (InfoPanel in App.jsx) for an output's full trace and the
    advice-block lists. The O*NET attribution footnote rides in here as
    .detail-footnote — keep it visible wherever O*NET data shows. */
 .detail-panel {
@@ -136,8 +134,8 @@
   top: 0;
   bottom: 0;
   width: 360px;
-  background: var(--ink-screen);
-  border-left: 1px solid var(--gold-20);
+  background: var(--surface-page);
+  border-left: 1px solid var(--line-20);
   padding: 48px 40px;
   overflow-y: auto;
   z-index: 100;
@@ -160,19 +158,19 @@
 }
 
 .detail-close:hover {
-  color: var(--gold);
+  color: var(--text);
 }
 
 .detail-archetype {
   font: 500 10px/1 var(--font-mono);
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--gold-60);
+  color: var(--text-60);
   margin-bottom: 8px;
 }
 
 .detail-title {
-  font: 700 22px/1.2 var(--font-display);
+  font: 500 22px/1.2 var(--font-display);
   letter-spacing: -0.01em;
   margin-bottom: 24px;
   color: var(--text);
@@ -187,7 +185,7 @@
 .detail-section {
   margin-bottom: 24px;
   padding-bottom: 24px;
-  border-bottom: 1px solid var(--gold-15);
+  border-bottom: 1px solid var(--line-15);
 }
 
 .detail-section:last-child {
@@ -198,7 +196,7 @@
   font: 500 11px/1 var(--font-mono);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--gold-60);
+  color: var(--text-60);
   margin-bottom: 10px;
 }
 
@@ -232,7 +230,7 @@
   content: '—';
   position: absolute;
   left: 0;
-  color: var(--gold-50);
+  color: var(--text-55);
 }
 
 /* Fast pop at the moment the edge's line arrives (delay set per-node via --appear-delay) */
@@ -252,7 +250,7 @@
   border: none;
   /* Dim by default, full strength on the branch the dock is talking about —
      the rule is the state. See the block below. */
-  border-left: 2px solid var(--gold-40);
+  border-left: 2px solid var(--line-40);
   border-radius: 0;
   background: none;
   cursor: pointer;
@@ -264,9 +262,12 @@
 /* The output is a left rule, not a card: the rule carries the latest/accepted
    and hover states; "Accepted" in the meta row names the accepted one. */
 .node--output-latest,
-.node--output-accepted,
+.node--output-accepted {
+  border-left-color: var(--accent);
+}
+
 .node--output:hover {
-  border-left-color: var(--gold);
+  border-left-color: var(--line);
 }
 
 .node--output:hover {
@@ -286,15 +287,15 @@
 }
 
 .node-head-dot {
-  font: 700 10px/1 var(--font-display);
-  color: var(--gold-50);
+  font: 600 10px/1 var(--font-display);
+  color: var(--text-55);
 }
 
 .node-fit {
-  font: 700 10px/1 var(--font-display);
+  font: 600 10px/1 var(--font-display);
   letter-spacing: 0.02em;
   text-transform: uppercase;
-  color: var(--gold);
+  color: var(--text);
 }
 
 .node-thesis {
@@ -314,8 +315,7 @@
   color: var(--text-45);
 }
 
-.node-advice-count,
-.node-roadmap-timeframe {
+.node-advice-count {
   font: 400 11px/1 var(--font-mono);
   color: var(--text-45);
 }
@@ -324,19 +324,19 @@
   margin-top: 6px;
 }
 .node-accepted-tag {
-  font: 700 11px/1 var(--font-display);
+  font: 600 11px/1 var(--font-display);
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  color: var(--positive);
+  color: var(--text);
   background: none;
 }
 .node--advice {
   width: 220px;
   padding: 18px 22px;
   border: none;
-  border-top: 1px solid var(--gold-20);
-  border-bottom: 1px solid var(--gold-20);
-  border-right: 1px solid var(--gold-20);
+  border-top: 1px solid var(--line-20);
+  border-bottom: 1px solid var(--line-20);
+  border-right: 1px solid var(--line-20);
   border-radius: 0;
   background: none;
   cursor: pointer;
@@ -347,78 +347,18 @@
 
 /* The advice cell's own type ramp; .node-title's 34px/900 is the output node's. */
 .node--advice .node-title {
-  font: 700 15px/1.2 var(--font-display);
+  font: 500 15px/1.2 var(--font-display);
   letter-spacing: 0;
   margin-bottom: 0;
 }
 
-.node--roadmap {
-  width: 360px;
-  padding: 10px 0;
-  border: none;
-  border-bottom: 1px solid var(--gold-15);
-  border-radius: 0;
-  background: none;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  cursor: pointer;
-  text-align: left;
-  animation: node-pop 180ms ease-out both;
-  animation-delay: var(--appear-delay, 0ms);
-}
-
-/* Inside a roadmap reveal the clock sets opacity and the rise inline; the CSS
-   entrance would fight it. */
-.node--roadmap.node--clocked {
-  animation: none;
-  will-change: opacity, transform;
-}
-
-.node-roadmap-index {
-  font: 900 20px/1 var(--font-display);
-  color: var(--gold-40);
-  min-width: 24px;
-  flex-shrink: 0;
-}
-
-.node--roadmap-last .node-roadmap-index {
-  color: var(--gold);
-}
-
-.node--roadmap-last {
-  border-bottom: none;
-}
-
-.node-roadmap-body {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.node-roadmap-title {
-  font: 600 14px/1.3 var(--font-body);
-  color: var(--text);
-}
-
-/* Small screens: a taller tap target for the roadmap chain. The rule sits at
-   the end of the file because .node--roadmap's own padding is declared below
-   the old position of this block, and a media query adds no specificity — the
-   previous card-era override (padding: 20px 22px) never applied at all. */
-@media (max-width: 600px) {
-  .node--roadmap {
-    padding: 16px 0;
-  }
-}
-
-/* Same reason this sits at the end of the file: all three node types declare
+/* Same reason this sits at the end of the file: both card node types declare
    `animation: node-pop` below where this block used to be, and a media query
    adds no specificity — so the suppression never applied. On main it worked
    only because it happened to sit under the one rule it had to beat. */
 @media (prefers-reduced-motion: reduce) {
   .node--output,
-  .node--advice,
-  .node--roadmap {
+  .node--advice {
     animation: none;
   }
 }

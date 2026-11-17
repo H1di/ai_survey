@@ -6,18 +6,23 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
+  useStoreApi,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { MeNode, OutputNode, AdviceNode, RoadmapNode, LoadingNode } from './NodeComponent';
+import { MeNode, OutputNode, AdviceNode, RoadmapPathNode, LoadingNode } from './NodeComponent';
 import BranchEdge from './BranchEdge';
 import { RoadmapReveal } from '../../motion/roadmap/RoadmapReveal';
+import { NARROW_QUERY } from '../../motion/path/useNarrowViewport';
 import './GraphView.css';
+
+// Gutter around the roadmap path when it is fitted by width on a phone.
+const TOP_FIT_MARGIN = 12;
 
 const nodeTypes = {
   me: MeNode,
   output: OutputNode,
   advice: AdviceNode,
-  roadmap: RoadmapNode,
+  roadmapPath: RoadmapPathNode,
   loading: LoadingNode,
 };
 
@@ -26,7 +31,7 @@ const edgeTypes = {
 };
 
 const defaultEdgeOptions = {
-  style: { stroke: 'var(--gold-40)', strokeWidth: 1.5 },
+  style: { stroke: 'var(--line-40)', strokeWidth: 1.5 },
   type: 'branch',
 };
 
@@ -34,7 +39,8 @@ const defaultEdgeOptions = {
 // focusKey changes. focusNodeIds is read through a ref so the effect fires
 // on focusKey transitions only, not on every parent render.
 function CameraDirector({ focusKey, focusNodeIds }) {
-  const { fitView } = useReactFlow();
+  const { fitView, getInternalNode, setViewport } = useReactFlow();
+  const store = useStoreApi();
   const idsRef = useRef(focusNodeIds);
 
   // Sync the ref after every commit (not during render, which the
@@ -47,15 +53,36 @@ function CameraDirector({ focusKey, focusNodeIds }) {
   useEffect(() => {
     if (!focusKey || !idsRef.current?.length) return undefined;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const raf = requestAnimationFrame(() => {
-      fitView({
-        nodes: idsRef.current.map((id) => ({ id })),
-        duration: reduced ? 0 : 900,
-        padding: 0.25,
-      });
-    });
+    const duration = reduced ? 0 : 900;
+    let raf = 0;
+    // On a phone the roadmap path is a tall column: fitting all of it would
+    // shrink it past reading. Fit its width instead and start at its top —
+    // the rest is a drag away. The node may need a frame or two to be measured.
+    const place = (attempt) => {
+      const ids = idsRef.current;
+      const only = ids.length === 1 ? getInternalNode(ids[0]) : null;
+      const topFit =
+        only?.type === 'roadmapPath' && window.matchMedia(NARROW_QUERY).matches;
+      if (topFit && !only.measured?.width && attempt < 30) {
+        raf = requestAnimationFrame(() => place(attempt + 1));
+        return;
+      }
+      if (topFit && only.measured?.width) {
+        const paneW = store.getState().width;
+        const { x, y } = only.internals.positionAbsolute;
+        const { width } = only.measured;
+        const zoom = Math.min(1, (paneW - TOP_FIT_MARGIN * 2) / width);
+        setViewport(
+          { x: (paneW - width * zoom) / 2 - x * zoom, y: TOP_FIT_MARGIN * 3 - y * zoom, zoom },
+          { duration }
+        );
+        return;
+      }
+      fitView({ nodes: ids.map((id) => ({ id })), duration, padding: 0.25 });
+    };
+    raf = requestAnimationFrame(() => place(0));
     return () => cancelAnimationFrame(raf);
-  }, [focusKey, fitView]);
+  }, [focusKey, fitView, getInternalNode, setViewport, store]);
 
   return null;
 }
@@ -98,7 +125,7 @@ export default function GraphView({
         maxZoom={2}
         attributionPosition="bottom-left"
       >
-        <Background color="var(--gold-15)" gap={32} size={1} />
+        <Background color="var(--line-15)" gap={32} size={1} />
         <Controls showInteractive={false} className="graph-controls" />
         <CameraDirector focusKey={focusKey} focusNodeIds={focusNodeIds} />
       </ReactFlow>

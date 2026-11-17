@@ -1,17 +1,18 @@
 // Roadmap-draw timeline — pure. Step i of the roadmap gets one window:
 //
-//   edgeStart ── edge draws (600 ms) ── edgeEnd = nodeIn ── node fades + rises
-//   (220 ms) ── nodeEnd = labelIn ── timeframe label fades (140 ms) ── labelEnd
+//   edgeStart ── line draws into marker i (600 ms) ── edgeEnd = nodeIn ──
+//   marker comes in (220 ms) ── nodeEnd = labelIn ── its pill fades (140 ms)
+//   ── labelEnd
 //
-// and the next edge starts at nodeEnd, so edges and nodes never overlap; only
-// the small timeframe label fades in while the next edge is already drawing.
+// and the next stretch starts at nodeEnd, so line and markers never overlap;
+// only the small pill fades in while the next stretch is already drawing.
+// motion/path/RoadmapPath paints it.
 // The frame is a function of T only — the painter never accumulates state.
 import { clamp } from "../timeline";
 
 export const EDGE_S = 0.6;
 export const NODE_S = 0.22;
 export const LABEL_S = 0.14;
-export const NODE_RISE_PX = 6;
 
 // --ease-out from tokens.css (cubic-bezier(0.22, 1, 0.36, 1)), solved in JS
 // because the frame is computed, not left to CSS transitions.

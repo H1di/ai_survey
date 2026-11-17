@@ -14,13 +14,15 @@ function readTokens() {
   const css = getComputedStyle(document.documentElement);
   const v = (name) => css.getPropertyValue(name).trim();
   return {
-    gold: v("--gold"),
-    gold60: v("--gold-60"),
-    gold70: v("--gold-70"),
-    bone: v("--bone"),
+    line: v("--line"),
+    accent: v("--accent"),
+    onAccent: v("--text-on-accent"),
+    line60: v("--line-60"),
+    line70: v("--line-70"),
+    strong: v("--text"),
     text30: v("--text-30"),
     text45: v("--text-45"),
-    void: v("--ink-void"),
+    page: v("--surface-page"),
     mono: v("--font-mono"),
     body: v("--font-body"),
   };
@@ -62,8 +64,8 @@ function drawDots(ctx, dots, X, Y, tk, k) {
   };
   for (const d of dots) {
     const r = (d.tint > 0.5 ? LIVE_R : DOT_R) * k;
-    if (d.tint < 1) add(tk.bone, d.alpha * (1 - d.tint), r, d);
-    if (d.tint > 0) add(tk.gold60, d.alpha * d.tint, r, d);
+    if (d.tint < 1) add(tk.strong, d.alpha * (1 - d.tint), r, d);
+    if (d.tint > 0) add(tk.line60, d.alpha * d.tint, r, d);
   }
   for (const b of buckets.values()) {
     ctx.globalAlpha = b.alpha;
@@ -83,7 +85,7 @@ function drawDots(ctx, dots, X, Y, tk, k) {
 // Text with a black knockout so it stays legible over the dot cloud.
 function label(ctx, text, x, y, color, tk) {
   ctx.lineWidth = 2.5;
-  ctx.strokeStyle = tk.void;
+  ctx.strokeStyle = tk.page;
   ctx.strokeText(text, x, y);
   ctx.fillStyle = color;
   ctx.fillText(text, x, y);
@@ -129,7 +131,7 @@ function paint(canvas, f) {
   ctx.globalAlpha = 1;
 
   // You.
-  ctx.strokeStyle = tk.gold;
+  ctx.strokeStyle = tk.accent;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.arc(X(f.you.x), Y(f.you.y), 5, 0, Math.PI * 2);
@@ -174,7 +176,7 @@ function paint(canvas, f) {
     const x = Math.min(width - EDGE - b.w / 2, Math.max(EDGE + b.w / 2, b.x));
     if (fam.live > 0) {
       ctx.globalAlpha = fam.live;
-      label(ctx, b.text, x, b.y - 6, tk.gold70, tk);
+      label(ctx, b.text, x, b.y - 6, tk.line70, tk);
     }
     if (fam.outline > 0) {
       ctx.globalAlpha = fam.outline;
@@ -184,29 +186,29 @@ function paint(canvas, f) {
   }
   ctx.globalAlpha = 1;
   ctx.textAlign = "left";
-  label(ctx, "YOU", you.x - you.w / 2, you.y, tk.gold, tk);
+  label(ctx, "YOU", you.x - you.w / 2, you.y, tk.line, tk);
 
-  // The pick: gold pill above its occupation's dot, tied by a short stem.
+  // The pick: accent pill above its occupation's dot, tied by a short stem.
   for (const p of pills) {
     const a = p.fam.pill;
     const grow = 0.92 + 0.08 * a; // settles in place; no bounce
     const w = p.w * grow;
     const h = p.h * grow;
     ctx.globalAlpha = a;
-    ctx.strokeStyle = tk.gold;
+    ctx.strokeStyle = tk.accent;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(p.ax, p.ay);
     ctx.lineTo(p.ax, p.y - (p.side * h) / 2);
     ctx.stroke();
-    ctx.fillStyle = tk.gold;
+    ctx.fillStyle = tk.accent;
     ctx.beginPath();
     ctx.arc(p.ax, p.ay, 3, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
     ctx.roundRect(p.x - w / 2, p.y - h / 2, w, h, h / 2);
     ctx.fill();
-    ctx.fillStyle = tk.void;
+    ctx.fillStyle = tk.onAccent;
     ctx.font = p.fitted.font;
     ctx.textAlign = "center";
     ctx.fillText(p.fitted.text, p.x, p.y + 0.5);

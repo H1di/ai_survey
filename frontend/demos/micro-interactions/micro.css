@@ -19,7 +19,7 @@
 .micro-panel {
   margin: 0 0 40px;
   padding-top: 28px;
-  border-top: 1px solid var(--gold-15);
+  border-top: 1px solid var(--line-15);
 }
 
 .micro-panel-head {
@@ -31,7 +31,7 @@
 .micro-panel-head h2 {
   margin: 0;
   font: 500 20px/1.3 var(--font-body);
-  color: var(--bone);
+  color: var(--text);
 }
 
 .micro-panel-head p {
@@ -50,15 +50,15 @@
   font: 500 11px/1 var(--font-mono);
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--gold-70);
+  color: var(--line-70);
 }
 
 .micro-col {
   position: relative;
   min-width: 0;
-  border: 1px solid var(--gold-15);
+  border: 1px solid var(--line-15);
   border-radius: var(--radius-surface);
-  background: var(--ink-screen);
+  background: var(--surface-page);
   overflow: hidden;
 }
 

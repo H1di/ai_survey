@@ -11,14 +11,15 @@ function readTokens() {
   const css = getComputedStyle(document.documentElement);
   const v = (name) => css.getPropertyValue(name).trim();
   return {
-    gold: v("--gold"),
-    gold60: v("--gold-60"),
-    gold70: v("--gold-70"),
-    gold40: v("--gold-40"),
-    bone: v("--bone"),
+    line: v("--line"),
+    accent: v("--accent"),
+    line60: v("--line-60"),
+    line70: v("--line-70"),
+    line40: v("--line-40"),
+    strong: v("--text"),
     text30: v("--text-30"),
-    void: v("--ink-void"),
-    screen: v("--ink-screen"),
+    page: v("--surface-page"),
+    screen: v("--surface-page"),
     mono: v("--font-mono"),
     body: v("--font-body"),
   };
@@ -41,8 +42,8 @@ function drawDots(ctx, dots, X, Y, tk) {
     buckets.get(key).dots.push(d);
   };
   for (const d of dots) {
-    if (d.tint < 1) add(tk.bone, d.alpha * (1 - d.tint), d);
-    if (d.tint > 0) add(tk.gold60, d.alpha * d.tint, d);
+    if (d.tint < 1) add(tk.strong, d.alpha * (1 - d.tint), d);
+    if (d.tint > 0) add(tk.line60, d.alpha * d.tint, d);
   }
   for (const b of buckets.values()) {
     ctx.globalAlpha = b.alpha;
@@ -62,7 +63,7 @@ function drawDots(ctx, dots, X, Y, tk) {
 // Text with a black knockout so it stays legible over the dot cloud.
 function label(ctx, text, x, y, color, tk) {
   ctx.lineWidth = 3;
-  ctx.strokeStyle = tk.void;
+  ctx.strokeStyle = tk.page;
   ctx.strokeText(text, x, y);
   ctx.fillStyle = color;
   ctx.fillText(text, x, y);
@@ -98,7 +99,7 @@ function paint(canvas, f) {
   HEX_VERTICES.forEach((v) => ctx.fillText(v.key, cx + v.x * (R + 15), cy + v.y * (R + 15)));
 
   // You → shortlist lines, under the dots.
-  ctx.strokeStyle = tk.gold40;
+  ctx.strokeStyle = tk.line40;
   ctx.lineWidth = 0.75;
   for (const l of f.lines) {
     if (l.grow <= 0 || l.alpha <= 0) continue;
@@ -114,14 +115,14 @@ function paint(canvas, f) {
   // You.
   if (f.you.alpha > 0) {
     ctx.globalAlpha = f.you.alpha;
-    ctx.strokeStyle = tk.gold;
+    ctx.strokeStyle = tk.accent;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(X(f.you.x), Y(f.you.y), 5.5, 0, Math.PI * 2);
     ctx.stroke();
     ctx.font = `500 10px ${tk.mono}`;
     ctx.textAlign = "left";
-    label(ctx, "YOU", X(f.you.x) + 10, Y(f.you.y) - 10, tk.gold, tk);
+    label(ctx, "YOU", X(f.you.x) + 10, Y(f.you.y) - 10, tk.line, tk);
   }
 
   // Family names at their centroids, de-overlapped in pixel space.
@@ -133,7 +134,7 @@ function paint(canvas, f) {
     );
     for (const b of boxes) {
       ctx.globalAlpha = b.alpha;
-      label(ctx, b.text, b.x, b.y, tk.gold70, tk);
+      label(ctx, b.text, b.x, b.y, tk.line70, tk);
     }
   }
 
@@ -153,7 +154,7 @@ function paint(canvas, f) {
     ]).slice(1);
     for (const b of boxes) {
       ctx.globalAlpha = b.alpha;
-      label(ctx, b.text, b.x, b.y, tk.gold, tk);
+      label(ctx, b.text, b.x, b.y, tk.line, tk);
     }
   }
 
@@ -180,19 +181,19 @@ function paint(canvas, f) {
     ctx.globalAlpha = 1;
     ctx.beginPath();
     ctx.roundRect(px - w / 2, py - h / 2, w, h, h / 2);
-    ctx.fillStyle = tk.gold;
+    ctx.fillStyle = tk.accent;
     ctx.globalAlpha = 1 - m;
     ctx.fill();
     ctx.fillStyle = tk.screen;
     ctx.globalAlpha = m;
     ctx.fill();
-    ctx.strokeStyle = tk.gold60;
+    ctx.strokeStyle = tk.line60;
     ctx.lineWidth = 1;
     ctx.stroke();
 
     if (p.chars > 0) {
       ctx.globalAlpha = 1;
-      ctx.fillStyle = tk.bone;
+      ctx.fillStyle = tk.strong;
       ctx.textAlign = "left";
       // Laid out against the full title so typing never shifts the line.
       ctx.fillText(p.title.slice(0, p.chars), px - textW / 2, py + TITLE_GAP * (1 - m));

@@ -13,7 +13,7 @@ const base = {
 };
 
 describe("EntryScreen", () => {
-  it("renders the headline with the last word set apart in gold", () => {
+  it("renders the headline with the last word set apart", () => {
     render(<EntryScreen {...base} />);
     const heading = screen.getByRole("heading", { level: 1 });
     // The design breaks the line four ways, and <br> contributes no whitespace

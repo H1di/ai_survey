@@ -63,12 +63,12 @@
 .vfit-grid path,
 .vfit-grid line {
   fill: none;
-  stroke: var(--gold-15);
+  stroke: var(--line-15);
   stroke-width: 1;
 }
 
 .vfit-region {
-  fill: var(--gold-25);
+  fill: var(--line-25);
   stroke: none;
 }
 
@@ -80,19 +80,19 @@
 }
 
 .vfit-user {
-  stroke: var(--bone);
+  stroke: var(--text);
 }
 
 .vfit-job {
-  stroke: var(--gold);
+  stroke: var(--accent);
 }
 
 .vfit-dot-user {
-  fill: var(--bone);
+  fill: var(--text);
 }
 
 .vfit-dot-job {
-  fill: var(--gold);
+  fill: var(--accent);
 }
 
 .vfit-label {
@@ -105,7 +105,7 @@
 }
 
 .vfit-val-user {
-  fill: var(--bone);
+  fill: var(--text);
 }
 
 .vfit-val-sep {
@@ -113,12 +113,12 @@
 }
 
 .vfit-val-job {
-  fill: var(--gold);
+  fill: var(--text);
 }
 
 .vfit-tick {
   fill: none;
-  stroke: var(--gold);
+  stroke: var(--line);
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -143,17 +143,17 @@
   font: 500 11px var(--font-mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--gold-70);
+  color: var(--text-72);
 }
 
 .vfit-number {
   display: flex;
   align-items: baseline;
   font-family: var(--font-display);
-  font-weight: 700;
+  font-weight: 300;
   line-height: 1;
   font-variant-numeric: tabular-nums;
-  color: var(--bone);
+  color: var(--text);
 }
 
 .vfit-num {
@@ -164,7 +164,7 @@
 .vfit-pct {
   margin-left: 4px;
   font-size: 26px;
-  color: var(--gold-70);
+  color: var(--text-72);
 }
 
 .vfit-caption {
@@ -215,12 +215,12 @@
    rules above, so they are restated at matching specificity. */
 .detail-section .vfit-eyebrow {
   font: 500 11px var(--font-mono);
-  color: var(--gold-70);
+  color: var(--text-72);
 }
 
 .detail-section .vfit-number {
-  font: 700 48px / 1 var(--font-display);
-  color: var(--bone);
+  font: 300 48px / 1 var(--font-display);
+  color: var(--text);
 }
 
 .detail-section .vfit-caption {

@@ -31,7 +31,7 @@ export default function ValuesHierarchyScreen({
         </p>
       )}
       <RankList items={items} onReorder={onReorder} disabled={busy} />
-      <button type="button" className="btn btn--gold rank-confirm" onClick={onConfirm} disabled={busy}>
+      <button type="button" className="btn btn--primary rank-confirm" onClick={onConfirm} disabled={busy}>
         {busy ? "Saving…" : "Confirm hierarchy"}
       </button>
     </ScreenShell>

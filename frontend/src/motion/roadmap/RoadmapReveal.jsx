@@ -1,8 +1,8 @@
-// The roadmap's reveal clock. The plan is a sequence you walk: each edge
-// draws, then its step fades up, then its timeframe — in the order and timing
-// roadmapTimeline.js defines. Nodes and edges read their frame through
-// context, so a tick re-renders only them: React Flow never re-lays-out and
-// the camera fits once.
+// The roadmap's reveal clock. The plan is a sequence you walk: the path line
+// draws into each stage, then its marker comes in, then its pill — in the
+// order and timing roadmapTimeline.js defines. The roadmap path node reads
+// its frame through context, so a tick re-renders only it: React Flow never
+// re-lays-out and the camera fits once.
 //
 // Reduced motion (and no provider at all): everything is simply there.
 import { useMemo } from "react";

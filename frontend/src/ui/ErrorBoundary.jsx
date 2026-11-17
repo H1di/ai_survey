@@ -24,7 +24,7 @@ export default class ErrorBoundary extends Component {
             The page hit an unexpected error. Reloading usually fixes it, and your progress is kept.
           </p>
           <div className="confirm-actions">
-            <button type="button" className="btn btn--gold" onClick={() => location.reload()}>
+            <button type="button" className="btn btn--primary" onClick={() => location.reload()}>
               Reload
             </button>
           </div>

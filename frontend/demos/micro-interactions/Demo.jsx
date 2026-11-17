@@ -59,8 +59,8 @@ function SlidePanel() {
         title="Mini-IPIP-20"
       >
         <div className="instrument">
-          <p className="item-statement item-statement--italic">&quot;{ITEMS[index]}&quot;</p>
-          <LikertScale anchors={ANCHORS} value={null} onSelect={advance} />
+          <p className="item-statement">{ITEMS[index]}</p>
+          <LikertScale key={index} anchors={ANCHORS} ends={{ low: "inaccurate", high: "accurate" }} value={null} onSelect={advance} />
         </div>
       </ScreenShell>
     </Panel>
@@ -74,11 +74,11 @@ function LikertPanel() {
       id="micro-b"
       k="b"
       title="Likert"
-      note="Press and hold: the option settles to 97 %. The fill grows from the centre of the ring. Tab in: the focus ring hugs the circle and never shows on a mouse click."
+      note="Pick: the turquoise fill swells past the ring and settles to a dot with a soft halo. Hover or focus a ring and its anchor is named under the scale. Tab in: the focus ring hugs the circle and never shows on a mouse click; arrow keys walk the rings."
     >
       <div className="micro-likert">
-        <p className="item-statement item-statement--italic item-statement--sm">&quot;{ITEMS[1]}&quot;</p>
-        <LikertScale anchors={ANCHORS} value={value} onSelect={setValue} />
+        <p className="item-statement item-statement--sm">{ITEMS[1]}</p>
+        <LikertScale anchors={ANCHORS} ends={{ low: "inaccurate", high: "accurate" }} value={value} onSelect={setValue} />
       </div>
     </Panel>
   );
@@ -108,7 +108,7 @@ function RailPanel() {
           onNavigate={(target) => setActive(JOURNEY_RAIL.findIndex((r) => r.step === target))}
         />
         <div className="micro-actions">
-          <button type="button" className="btn btn--gold" onClick={complete} disabled={active === last}>
+          <button type="button" className="btn btn--primary" onClick={complete} disabled={active === last}>
             Complete step
           </button>
           <button

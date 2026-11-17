@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { BRANCH_PRESETS, MAX_TIPS, seedTips, tickTips, tickDrops } from "./branchEngine";
+import { BRANCH_PRESETS, MAX_TIPS, seedTips, tickTips, tickDrops, samplePath, pathSlice } from "./branchEngine";
 
 // A deterministic stand-in for Math.random: 0.5 is the "no wander, no branch,
 // no drop" midpoint, which makes growth exactly predictable.
@@ -7,9 +7,9 @@ const mid = () => 0.5;
 
 describe("seedTips", () => {
   it("seeds one tip per origin, just below the frame, pointing up", () => {
-    const tips = seedTips(BRANCH_PRESETS.hero, 1000, 500, mid);
+    const tips = seedTips(BRANCH_PRESETS.graph, 1000, 500, mid);
     expect(tips).toHaveLength(1);
-    expect(tips[0].x).toBe(720);
+    expect(tips[0].x).toBe(500);
     expect(tips[0].y).toBe(504);
     expect(tips[0].a).toBeCloseTo(-Math.PI / 2);
     expect(tips[0].main).toBe(true);
@@ -17,9 +17,29 @@ describe("seedTips", () => {
   });
 });
 
+describe("seedTips (radial)", () => {
+  it("seeds `count` tips at the radial centre, fanned evenly around it", () => {
+    const opt = BRANCH_PRESETS.hero;
+    const tips = seedTips(opt, 1000, 500, mid);
+    expect(tips).toHaveLength(opt.radial.count);
+    for (const t of tips) {
+      expect(t.x).toBe(1000 * opt.radial.x);
+      expect(t.y).toBe(500 * opt.radial.y);
+      expect(t.main).toBe(true);
+    }
+    expect(tips[1].a - tips[0].a).toBeCloseTo((Math.PI * 2) / opt.radial.count);
+  });
+
+  it("retires a tip that grows out through the bottom edge", () => {
+    const opt = BRANCH_PRESETS.hero;
+    const below = [{ ...seedTips(opt, 1000, 500, mid)[0], y: 530, a: Math.PI / 2 }];
+    expect(tickTips(below, opt, 1000, 500, mid).tips).toHaveLength(0);
+  });
+});
+
 describe("tickTips", () => {
   it("advances a tip along its angle and reports the segment it drew", () => {
-    const opt = BRANCH_PRESETS.hero;
+    const opt = BRANCH_PRESETS.graph;
     const tips = seedTips(opt, 1000, 500, mid);
     const { tips: next, segments } = tickTips(tips, opt, 1000, 500, mid);
     expect(segments).toHaveLength(1);
@@ -31,7 +51,7 @@ describe("tickTips", () => {
   });
 
   it("does not mutate the tips it is given", () => {
-    const opt = BRANCH_PRESETS.hero;
+    const opt = BRANCH_PRESETS.graph;
     const tips = seedTips(opt, 1000, 500, mid);
     const before = { ...tips[0] };
     tickTips(tips, opt, 1000, 500, mid);
@@ -39,21 +59,21 @@ describe("tickTips", () => {
   });
 
   it("drops a tip that has run out of life", () => {
-    const opt = BRANCH_PRESETS.hero;
+    const opt = BRANCH_PRESETS.graph;
     const spent = [{ ...seedTips(opt, 1000, 500, mid)[0], life: 1 }];
     const { tips: next } = tickTips(spent, opt, 1000, 500, mid);
     expect(next).toHaveLength(0);
   });
 
   it("drops a tip that has left the frame", () => {
-    const opt = BRANCH_PRESETS.hero;
+    const opt = BRANCH_PRESETS.graph;
     const escaped = [{ ...seedTips(opt, 1000, 500, mid)[0], y: -30 }];
     const { tips: next } = tickTips(escaped, opt, 1000, 500, mid);
     expect(next).toHaveLength(0);
   });
 
   it("spawns a child with the branch hue when the roll succeeds, and never past maxDepth", () => {
-    const opt = BRANCH_PRESETS.hero;
+    const opt = BRANCH_PRESETS.graph;
     const always = () => 0; // 0 is below every threshold, so every roll succeeds
     const tips = seedTips(opt, 1000, 500, mid);
     const { tips: next } = tickTips(tips, opt, 1000, 500, always);
@@ -69,7 +89,7 @@ describe("tickTips", () => {
   });
 
   it("emits a drop when the roll succeeds", () => {
-    const opt = BRANCH_PRESETS.hero;
+    const opt = BRANCH_PRESETS.graph;
     const always = () => 0;
     const { drops } = tickTips(seedTips(opt, 1000, 500, mid), opt, 1000, 500, always);
     expect(drops).toHaveLength(1);
@@ -104,12 +124,41 @@ describe("tickDrops", () => {
 });
 
 describe("BRANCH_PRESETS", () => {
-  it("carries both presets with the artifact's values", () => {
-    expect(BRANCH_PRESETS.hero.origins).toEqual([0.72]);
-    expect(BRANCH_PRESETS.hero.maxDepth).toBe(4);
-    expect(BRANCH_PRESETS.hero.pause).toBe(270);
+  it("names a token for every colour role, never a literal", () => {
+    for (const opt of Object.values(BRANCH_PRESETS)) {
+      for (const role of [opt.mainHue, opt.branchHue, opt.dropHue]) expect(role).toMatch(/^--/);
+      expect(opt.bg).toBe("transparent");
+    }
+  });
+
+  it("keeps the graph preset's growth shape", () => {
     expect(BRANCH_PRESETS.graph.origins).toEqual([0.5]);
     expect(BRANCH_PRESETS.graph.maxDepth).toBe(6);
     expect(BRANCH_PRESETS.graph.bg).toBe("transparent");
+  });
+});
+
+describe("samplePath / pathSlice", () => {
+  const path = BRANCH_PRESETS.hero.path;
+
+  it("samples the hero path from its start to its last end point, in pixels", () => {
+    const { pts, lens, total } = samplePath(path, 1000, 500);
+    expect(pts[0]).toEqual({ x: 0, y: 487.5 });
+    const [, , end] = path.curves[path.curves.length - 1];
+    expect(pts[pts.length - 1].x).toBeCloseTo(end[0] * 1000);
+    expect(pts[pts.length - 1].y).toBeCloseTo(end[1] * 500);
+    expect(lens[lens.length - 1]).toBe(total);
+    const chord = Math.hypot(pts[pts.length - 1].x - pts[0].x, pts[pts.length - 1].y - pts[0].y);
+    expect(total).toBeGreaterThan(chord); // a curve is longer than its chord
+  });
+
+  it("slices by length fraction, ending exactly where asked", () => {
+    const sampled = samplePath(path, 1000, 500);
+    const whole = pathSlice(sampled, 0, 1);
+    expect(whole[0]).toEqual(sampled.pts[0]);
+    expect(whole[whole.length - 1].x).toBeCloseTo(sampled.pts[sampled.pts.length - 1].x);
+    const tip = pathSlice(sampled, path.accentFrom, 1);
+    expect(tip.length).toBeGreaterThan(1);
+    expect(pathSlice(sampled, 0.5, 0.5)).toEqual([]);
   });
 });

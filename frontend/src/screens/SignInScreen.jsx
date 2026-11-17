@@ -80,7 +80,7 @@ export default function SignInScreen({ onMagicLink, onGoogle, reducedMotion }) {
             />
             <button
               type="submit"
-              className="btn btn--bone"
+              className="btn btn--outline"
               disabled={!EMAIL_PATTERN.test(trimmed) || Boolean(busy)}
             >
               {busy === "link" ? "Sending…" : "Email me a sign-in link"}

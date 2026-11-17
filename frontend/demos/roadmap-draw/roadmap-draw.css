@@ -1,42 +1,14 @@
-/* Fixed box height: the roadmap animates inside it, never resizes it. */
+/* Fixed box height: the path animates inside it, never resizes it. */
 .rd-stage {
   position: relative;
-  height: 720px;
+  min-height: 720px;
 }
 
-.rd-flow {
+.rd-box {
   width: 100%;
-  height: 100%;
-}
-
-/* The app's node classes carry their own CSS entrance (node-pop) and a hover
-   glow; here the clock owns the motion and demos never glow. */
-.rd-stage .node,
-.rd-stage .node:hover {
-  animation: none;
-  box-shadow: none;
-  cursor: default;
-}
-
-.rd-stage--chain .rd-chosen {
-  width: 300px;
-}
-
-.rd-stage--chain .rd-chosen .node-title {
-  font-size: 28px;
-}
-
-.rd-stage--chain .node--roadmap {
-  width: 300px;
-}
-
-/* A stage this small has no chosen-path pulse; the draw is the subject. */
-.rd-stage .branch-edge-flow {
-  display: none;
-}
-
-.rd-chosen .node-title {
-  margin-bottom: 12px;
+  display: flex;
+  justify-content: center;
+  padding: 24px 0 64px;
 }
 
 .rd-replay {

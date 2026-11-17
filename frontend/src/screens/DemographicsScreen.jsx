@@ -1,5 +1,6 @@
 import ScreenShell from "../ui/ScreenShell";
 import { demographicsComplete } from "../lifePath";
+import MindGraph from "../motion/mind/MindGraph";
 import "./screens.css";
 
 // Radios are real radios: one native input per option, hidden behind the
@@ -31,47 +32,62 @@ export default function DemographicsScreen({
   onDraftChange,
   busy,
   onSubmit,
-  footer,
+  reducedMotion,
 }) {
   const ready = demographicsComplete(questions, drafts) && !busy;
+  // All four questions share one page, so the graph and the line count filled
+  // answers (the same emptiness test the Continue gate uses) rather than a cursor.
+  const answered = questions.filter((q) => demographicsComplete([q], drafts)).length;
 
   return (
     <ScreenShell
-      eyebrow="step 1 · demographics"
-      title="A little about you"
-      sub="Four quick questions — sex, age, country, city."
-      footer={footer}
+      question
+      progress={{ current: answered, total: questions.length, variant: "answered" }}
+      backdrop={
+        <MindGraph
+          seed="demographics"
+          total={questions.length}
+          answered={answered}
+          reducedMotion={reducedMotion}
+        />
+      }
     >
-      <div className="demo-grid">
-        {questions.map((question) => (
-          <div className="demo-field" key={question.id}>
-            <div className="demo-question">{question.question}</div>
-            {question.kind === "single" ? (
-              <ChoiceField
-                question={question}
-                value={drafts[question.id] ?? null}
-                onChange={onDraftChange}
-                busy={busy}
-              />
-            ) : (
-              <input
-                className="demo-input"
-                type={question.kind === "number" ? "number" : "text"}
-                min={question.min}
-                max={question.max}
-                placeholder={question.placeholder}
-                value={drafts[question.id] ?? ""}
-                disabled={busy}
-                onChange={(event) => onDraftChange(question.id, event.target.value)}
-              />
-            )}
-          </div>
-        ))}
-      </div>
+      {/* A form, not a single statement: it keeps its own heading and field
+          questions, centred in the page like a Likert item. */}
+      <div className="instrument-stage instrument-stage--form">
+        <h2 className="screen-title form-title">A little about you</h2>
+        <div className="demo-grid">
+          {questions.map((question) => (
+            <div className="demo-field" key={question.id}>
+              <div className="demo-question">{question.question}</div>
+              {question.kind === "single" ? (
+                <ChoiceField
+                  question={question}
+                  value={drafts[question.id] ?? null}
+                  onChange={onDraftChange}
+                  busy={busy}
+                />
+              ) : (
+                <input
+                  className="demo-input"
+                  aria-label={question.question}
+                  type={question.kind === "number" ? "number" : "text"}
+                  min={question.min}
+                  max={question.max}
+                  placeholder={question.placeholder}
+                  value={drafts[question.id] ?? ""}
+                  disabled={busy}
+                  onChange={(event) => onDraftChange(question.id, event.target.value)}
+                />
+              )}
+            </div>
+          ))}
+        </div>
 
-      <button type="button" className="btn btn--gold demo-submit" onClick={onSubmit} disabled={!ready}>
-        {busy ? "Saving…" : "Continue"}
-      </button>
+        <button type="button" className="btn btn--primary demo-submit" onClick={onSubmit} disabled={!ready}>
+          {busy ? "Saving…" : "Continue"}
+        </button>
+      </div>
     </ScreenShell>
   );
 }

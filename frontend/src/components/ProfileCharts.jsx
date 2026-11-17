@@ -53,8 +53,8 @@ export function PersonalityRadarChart({ scores }) {
           <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
           <Radar
             dataKey="value"
-            stroke={palette.accent}
-            fill={palette.accentSoft}
+            stroke={palette.line}
+            fill={palette.lineSoft}
             fillOpacity={1}
             isAnimationActive={false}
           />
@@ -118,7 +118,7 @@ function RiasecBarChart({ scores, code, inferred }) {
           />
           <Bar dataKey="value" barSize={10} radius={[0, 2, 2, 0]} isAnimationActive={false}>
             {data.map((entry) => (
-              <Cell key={entry.id} fill={entry.value >= 65 ? palette.accent : palette.accentSoft} />
+              <Cell key={entry.id} fill={entry.value >= 65 ? palette.line : palette.lineSoft} />
             ))}
           </Bar>
         </BarChart>
@@ -153,8 +153,8 @@ export function WorkValuesRadar({ user, title = "Work values" }) {
           <Radar
             name="You"
             dataKey="you"
-            stroke={palette.accent}
-            fill={palette.accentSoft}
+            stroke={palette.line}
+            fill={palette.lineSoft}
             fillOpacity={1}
             isAnimationActive={false}
           />

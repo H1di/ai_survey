@@ -23,7 +23,7 @@
 .rset-grid path,
 .rset-grid line {
   fill: none;
-  stroke: var(--gold-15);
+  stroke: var(--line-15);
   stroke-width: 1;
 }
 
@@ -38,15 +38,15 @@
 }
 
 .rset-spoke.is-lit {
-  stroke: var(--gold);
+  stroke: var(--line);
 }
 
 .rset-vertex {
-  fill: var(--gold-40);
+  fill: var(--line-40);
 }
 
 .rset-vertex.is-lit {
-  fill: var(--gold);
+  fill: var(--line);
 }
 
 .rset-label {
@@ -63,11 +63,11 @@
 }
 
 .rset-key.is-lit {
-  fill: var(--gold);
+  fill: var(--text);
 }
 
 .rset-name.is-lit {
-  fill: var(--bone);
+  fill: var(--text);
 }
 
 .rset-score {
@@ -82,16 +82,16 @@
 }
 
 .rset-trail-stop {
-  stop-color: var(--gold);
+  stop-color: var(--accent);
 }
 
 .rset-point {
-  fill: var(--gold);
+  fill: var(--accent);
 }
 
 .rset-ring {
   fill: none;
-  stroke: var(--gold-40);
+  stroke: var(--line-40);
   stroke-width: 1;
 }
 
@@ -138,7 +138,7 @@
   font: 500 11px var(--font-mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--gold-70);
+  color: var(--text-72);
 }
 
 .rset-code {
@@ -158,13 +158,13 @@
 .rset-letter,
 .rset-sep {
   font: 500 44px / 1 var(--font-mono);
-  color: var(--gold);
+  color: var(--text);
 }
 
 .rset-sep {
   font-size: 26px;
   line-height: 44px;
-  color: var(--gold-40);
+  color: var(--text-45);
   padding: 0 2px;
 }
 

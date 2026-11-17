@@ -79,7 +79,7 @@ describe("ExperienceScreen", () => {
     render(<ExperienceScreen {...base} intent="new" />);
     expect(screen.getByRole("heading", { name: "With a CV" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Without a CV" })).toBeInTheDocument();
-    expect(screen.getByText('"What is your current or most recent role?"')).toBeInTheDocument();
+    expect(screen.getByText("What is your current or most recent role?")).toBeInTheDocument();
     expect(
       screen.getByPlaceholderText("e.g. shift manager at a cafe; student")
     ).toBeInTheDocument();
@@ -134,6 +134,27 @@ describe("ExperienceScreen", () => {
     expect(screen.getAllByRole("button", { name: "← Back" })).toHaveLength(2);
   });
 
+  it("turns a running journey question into a question screen: no step copy, no split, no footer", () => {
+    const { container } = render(
+      <ExperienceScreen {...base} intent="new" mode="journey" footer={<p>rail</p>} reducedMotion />
+    );
+    expect(container.querySelector(".screen")).toHaveClass("screen--question");
+    expect(
+      screen.getByRole("heading", { name: "What is your current or most recent role?" })
+    ).toBeInTheDocument();
+    expect(screen.queryByText("step 5 · experience")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Where should we start from?" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "With a CV" })).not.toBeInTheDocument();
+    expect(screen.queryByText("rail")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "What is your current or most recent role?" })).toBeInTheDocument();
+  });
+
+  it("keeps the footer on the choice screen", () => {
+    render(<ExperienceScreen {...base} intent="new" footer={<p>rail</p>} />);
+    expect(screen.getByText("rail")).toBeInTheDocument();
+  });
+
   it("cancels a locked file drop so the browser cannot navigate away", () => {
     const onUploadFile = vi.fn();
     render(<ExperienceScreen {...base} intent="new" busy onUploadFile={onUploadFile} />);
@@ -153,8 +174,18 @@ describe("ExperienceScreen", () => {
     expect(screen.getByRole("button", { name: "Analyse my CV" })).toBeEnabled();
   });
 
-  it("counts the journey questions in the eyebrow once they are running", () => {
-    render(<ExperienceScreen {...base} intent="new" mode="journey" />);
-    expect(screen.getByText("step 5 · experience · question 2 of 7")).toBeInTheDocument();
+  it("counts the journey questions on the progress line once they are running", () => {
+    const { container } = render(<ExperienceScreen {...base} intent="new" mode="journey" reducedMotion />);
+    expect(screen.getByRole("progressbar", { name: "Step progress" })).toHaveAttribute(
+      "aria-valuetext",
+      "Question 2 of 7"
+    );
+    expect(container.querySelector("canvas.mind-graph")).toHaveAttribute("data-answered", "1");
+  });
+
+  it("draws no progress line and no graph before the journey starts", () => {
+    const { container } = render(<ExperienceScreen {...base} intent="new" />);
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+    expect(container.querySelector("canvas.mind-graph")).toBeNull();
   });
 });

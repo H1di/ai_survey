@@ -21,7 +21,7 @@ rules below bind the shipped scenes exactly as they bind a demo.
 | values-insertion | `insertion/InsertionBoard` | `ValuesTournamentScreen` (the cards are the answer buttons) |
 | riasec-settle | `settle/RiasecSettle` | `screens/RiasecResultScreen`, once after the quiz closes |
 | archetype-emblem | `emblem/ArchetypeEmblem` | `SummaryScreen` |
-| roadmap-draw | `roadmap/RoadmapReveal` + `revealContext` | `GraphView` (roadmap nodes and edges read the clock) |
+| roadmap-draw | `path/RoadmapPath` (+ the `roadmap/RoadmapReveal` clock via `revealContext`) | `GraphView` — the roadmap path node under the accepted output |
 | micro-interactions | plain CSS in `ui/ui.css` + `screens/screens.css`, `viewTransition.js`, `ui/RankList.jsx` | every assessment screen |
 
 In the app a scene gets its data from the session snapshot, never from
@@ -44,10 +44,10 @@ scientific, calm, mature, premium, and earn trust in 3 seconds.
 - Every animation explains a real mechanism of the product with real data;
   nothing is decoration.
 - No glow, neon, purple, rainbow gradients, emoji, bouncy springs, or particle
-  confetti. (Note: `--glow-*` tokens and the purple `branchHue` in
-  `ui/branchEngine.js` exist in the app — demos do not use them.)
-- Thin lines, lots of black, gold (`--gold` ramp) as the only accent,
-  bone/white text, IBM Plex Mono for data labels, Manrope for prose.
+  confetti.
+- White page, thin ink lines (`--line` ramp), ink text (`--text-*`), and
+  `--accent` (turquoise) only for the now / chosen / selected state — never
+  as text. IBM Plex Mono for data labels, Manrope for prose.
 - Motion: `--ease-out`, 140–600 ms for UI, scenes ≤ 12 s, calm.
 
 ## Tech

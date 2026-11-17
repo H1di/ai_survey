@@ -4,7 +4,7 @@
   align-items: center;
   gap: 12px;
   padding: 12px 16px 14px;
-  border-top: 1px solid var(--gold-15);
+  border-top: 1px solid var(--line-15);
 }
 
 .shift-count {

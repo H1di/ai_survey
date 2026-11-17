@@ -1,25 +1,22 @@
 // Pure helpers for the Life Path tree: the React Flow graph builder and the
 // dock-card state machine. Kept side-effect-free and out of App.jsx so both
 // can be unit-tested without rendering the whole app.
-import { buildTimeline } from "./motion/roadmap/roadmapTimeline";
 
 const ME_NODE = { id: "me", type: "me", position: { x: 0, y: 0 }, data: {} };
 
 // Vertical story: Me -> output iteration chain (horizontal trail) -> the
-// accepted output grows 4 advice cards and its roadmap chain.
+// accepted output grows 4 advice cards and its roadmap path.
 const OUTPUT_Y = 240;
 // Node positions are left edges, so the widths below are what centres one row
 // under another. They mirror NodeComponent.css: a 480px output card, 220px
-// advice cells, 360px roadmap rows, an 80px loading dot.
+// advice cells, an 80px loading dot. The roadmap path centres itself (origin).
 const OUTPUT_W = 480;
 const ADVICE_W = 220;
-const ROADMAP_W = 360;
 const LOADING_W = 80;
 // Siblings are spaced against the card's width plus an 80px alley.
 const OUTPUT_GAP_X = OUTPUT_W + 80;
 const ADVICE_Y = 520;
 const ROADMAP_START_Y = 780;
-const ROADMAP_GAP = 200;
 
 // Cascade timing: a node appears exactly when its edge finishes drawing.
 const EDGE_DRAW_MS = 600;
@@ -31,6 +28,9 @@ export const ADVICE_BLOCKS = [
   { key: "universities", label: "Universities & Majors" },
   { key: "courses", label: "Courses" },
 ];
+
+// The roadmap path's node id — App's camera focuses it once the roadmap lands.
+export const roadmapNodeId = (outputId) => `roadmap-${outputId}`;
 
 export function outputX(index) {
   return index * OUTPUT_GAP_X;
@@ -87,9 +87,9 @@ export function buildLifePathGraph({
   roadmaps = {},
   roadmapPending = false,
   detailPending = false,
+  profile = null,
   onOutputOpen,
   onAdviceOpen,
-  onStageOpen,
 }) {
   const nodes = [ME_NODE];
   const edges = [];
@@ -175,44 +175,31 @@ export function buildLifePathGraph({
   if (roadmapPending) pushLoading("roadmap-loading", ROADMAP_START_Y);
 
   const roadmap = roadmaps[accepted.id];
-  if (roadmap) {
-    // One source for the sequence: motion/roadmap/roadmapTimeline. The reveal
-    // clock in GraphView animates from it (revealIndex); the same numbers ride
-    // along as CSS delays for anything rendered outside that clock.
-    const timeline = buildTimeline(roadmap.stages.length);
-    const ms = (seconds) => Math.round(seconds * 1000);
-    roadmap.stages.forEach((stage, index) => {
-      const nodeId = `stage-${accepted.id}-${stage.id}`;
-      const parentId =
-        index === 0 ? accepted.id : `stage-${accepted.id}-${roadmap.stages[index - 1].id}`;
-      const step = timeline[index];
-      nodes.push({
-        id: nodeId,
-        type: "roadmap",
-        position: { x: centerX - ROADMAP_W / 2, y: ROADMAP_START_Y + index * ROADMAP_GAP },
-        draggable: true,
-        style: { "--appear-delay": `${ms(step.nodeIn)}ms` },
-        data: {
-          index: index + 1,
-          revealIndex: index,
-          title: stage.title,
-          timeframe: stage.timeframe,
-          last: index === roadmap.stages.length - 1,
-          onOpen: () => onStageOpen(stage, index),
-        },
-      });
-      edges.push({
-        id: `${parentId}-${nodeId}`,
-        source: parentId,
-        target: nodeId,
-        type: "branch",
-        data: {
-          delay: ms(step.edgeStart),
-          active: true,
-          flowDelayMs: ms(step.edgeEnd),
-          revealIndex: index,
-        },
-      });
+  if (roadmap?.stages?.length) {
+    // One wide node holds the whole path (motion/path). It hangs from its top
+    // centre (origin [0.5, 0]) so it centres under the card at any width —
+    // the path is horizontal on a desktop and vertical on a phone. The reveal
+    // clock (motion/roadmap) plays inside it; only the edge in is plain.
+    const nodeId = roadmapNodeId(accepted.id);
+    nodes.push({
+      id: nodeId,
+      type: "roadmapPath",
+      origin: [0.5, 0],
+      position: { x: centerX, y: ROADMAP_START_Y },
+      draggable: true,
+      data: {
+        stages: roadmap.stages,
+        jobTitle: accepted.jobTitle,
+        bigFive: profile?.bigFiveScores || null,
+        riasec: profile?.riasecScores || null,
+      },
+    });
+    edges.push({
+      id: `${accepted.id}-${nodeId}`,
+      source: accepted.id,
+      target: nodeId,
+      type: "branch",
+      data: { delay: 0, active: true, flowDelayMs: EDGE_DRAW_MS },
     });
   }
 

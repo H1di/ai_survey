@@ -29,11 +29,19 @@ const base = {
 };
 
 describe("DemographicsScreen", () => {
-  it("carries the step copy verbatim", () => {
-    render(<DemographicsScreen {...base} />);
-    expect(screen.getByText("step 1 · demographics")).toBeInTheDocument();
+  it("is a question screen: its own heading, no eyebrow, no instrument sub-headline, no footer", () => {
+    const { container } = render(<DemographicsScreen {...base} footer={<p>rail</p>} />);
+    expect(container.querySelector(".screen")).toHaveClass("screen--question");
     expect(screen.getByRole("heading", { name: "A little about you" })).toBeInTheDocument();
-    expect(screen.getByText("Four quick questions — sex, age, country, city.")).toBeInTheDocument();
+    expect(screen.queryByText("step 1 · demographics")).not.toBeInTheDocument();
+    expect(screen.queryByText("Four quick questions — sex, age, country, city.")).not.toBeInTheDocument();
+    expect(container.querySelector(".screen-footer")).toBeNull();
+  });
+
+  it("names every text field by its question", () => {
+    render(<DemographicsScreen {...base} />);
+    expect(screen.getByRole("textbox", { name: "Which city are you based in?" })).toBeInTheDocument();
+    expect(screen.getByRole("spinbutton", { name: "How old are you?" })).toBeInTheDocument();
   });
 
   it("shows all four questions at once", () => {
@@ -81,5 +89,15 @@ describe("DemographicsScreen", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts filled answers on the progress line and in the graph", () => {
+    const { container } = render(
+      <DemographicsScreen {...base} drafts={{ sex: "female", age: "30", city: "  " }} reducedMotion />
+    );
+    const bar = screen.getByRole("progressbar", { name: "Step progress" });
+    expect(bar).toHaveAttribute("aria-valuetext", "2 of 4 answered");
+    expect(screen.getByText("2 of 4 answered")).toBeInTheDocument();
+    expect(container.querySelector("canvas.mind-graph")).toHaveAttribute("data-answered", "2");
   });
 });

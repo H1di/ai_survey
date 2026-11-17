@@ -10,19 +10,15 @@ const steps = profile.roadmap.stages;
 const timeline = buildTimeline(steps.length);
 const STAGES = buildStages(steps, timeline);
 
-const chosen = {
-  title: profile.chosen.title,
-  field: profile.topDirections.find((d) => d.id === profile.chosen.directionId)?.label ?? "",
-  fit: profile.valuesFit.overall,
-  stepCount: steps.length,
-};
+const chosen = { title: profile.chosen.title };
+const scores = { bigFive: profile.bigFiveScores, riasec: profile.riasecScores };
 
 export default function Demo() {
   return (
     <DemoShell
       slug="roadmap-draw"
       title="Roadmap draw"
-      explains="The plan is a sequence you walk, not a wall of text: each step follows from the one before."
+      explains="The plan is a path through the months ahead, not a wall of text: each stage follows from the one before."
       stages={STAGES}
       footnote={profile.onetAttribution}
     >
@@ -34,6 +30,7 @@ export default function Demo() {
           chosen={chosen}
           steps={steps}
           timeline={timeline}
+          scores={scores}
         />
       )}
     </DemoShell>

@@ -1,0 +1,48 @@
+/* The mind graph sits behind the question, centred on the step's body (the
+   body is its containing block; the isolated screen is its stacking context,
+   see .screen--backdrop in ui/ui.css), so z-index -1 lands above the page and
+   below every word and control. Its own view-transition name lifts it out of
+   the sliding body: the graph stays put and grows while the question slides. */
+.mind-graph {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: -1;
+  width: min(calc(100vw - 32px), 1280px);
+  height: 600px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  view-transition-name: mind-graph;
+}
+
+::view-transition-group(mind-graph),
+::view-transition-old(mind-graph),
+::view-transition-new(mind-graph) {
+  animation: none;
+}
+
+::view-transition-old(mind-graph) {
+  display: none;
+}
+
+/* A phone stacks the question taller: a taller box, a touch fainter. */
+@media (max-width: 759.98px) {
+  .mind-graph {
+    height: 640px;
+    opacity: 0.85;
+  }
+}
+
+/* The question reads through the graph: a halo of page colour around the
+   letters, as the design draws it. */
+.screen--backdrop > .screen-sub,
+.screen-body--backdrop .item-statement,
+.screen-body--backdrop .demo-question,
+.screen-body--backdrop .screen-title,
+.screen-body--backdrop .likert-end,
+.screen-body--backdrop .likert-caption,
+.screen-body--backdrop .experience-heading {
+  text-shadow:
+    0 0 6px var(--surface-page),
+    0 0 14px var(--surface-page);
+}

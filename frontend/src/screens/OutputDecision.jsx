@@ -91,7 +91,7 @@ export default function OutputDecision({
       </p>
 
       <div className="output-actions">
-        <button type="button" className="btn btn--gold" onClick={onAccept} disabled={locked}>
+        <button type="button" className="btn btn--primary" onClick={onAccept} disabled={locked}>
           {busy.accept ? "Building next steps…" : "Yes — accept this path"}
         </button>
         <button type="button" className="btn btn--ghost" onClick={onRegenerate} disabled={locked}>

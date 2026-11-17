@@ -55,7 +55,7 @@ export default function FirstPathScreen({
           {/* Always in the layout so its arrival moves nothing. */}
           <button
             type="button"
-            className="btn btn--gold first-path-cta"
+            className="btn btn--primary first-path-cta"
             onClick={onDone}
             disabled={!ready}
             style={{ visibility: ready ? "visible" : "hidden" }}

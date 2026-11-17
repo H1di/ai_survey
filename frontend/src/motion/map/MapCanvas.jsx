@@ -30,12 +30,13 @@ import {
 } from "./mapEngine";
 
 const TOKENS = {
-  ink: "--ink-page",
-  screen: "--ink-screen",
-  bone: "--bone",
-  gold: "--gold",
-  gold60: "--gold-60",
-  gold40: "--gold-40",
+  ink: "--surface-page",
+  screen: "--surface-page",
+  strong: "--text",
+  line: "--line",
+  accent: "--accent",
+  line60: "--line-60",
+  line40: "--line-40",
   text30: "--text-30",
   text72: "--text-72",
   mono: "--font-mono",
@@ -101,7 +102,7 @@ export default function MapCanvas({
     posRef.current = pos;
 
     // Dots: one path per opacity bucket.
-    ctx.fillStyle = tk.bone;
+    ctx.fillStyle = tk.strong;
     buckets.forEach((members, b) => {
       if (members.length === 0) return;
       ctx.globalAlpha = figure ? FIGURE_DOT_ALPHA : bucketOpacity(b);
@@ -159,7 +160,7 @@ export default function MapCanvas({
       // You → the pick: the one line on the map.
       if (you && marks.chosen >= 0) {
         ctx.globalAlpha = 0.7;
-        ctx.strokeStyle = tk.gold40;
+        ctx.strokeStyle = tk.line40;
         ctx.lineWidth = 0.75;
         ctx.beginPath();
         ctx.moveTo(yx, yy);
@@ -169,7 +170,7 @@ export default function MapCanvas({
 
       // The shortlist, then the pick over it.
       ctx.globalAlpha = 1;
-      ctx.fillStyle = tk.gold60;
+      ctx.fillStyle = tk.line60;
       ctx.beginPath();
       for (const s of marks.shortlist) {
         if (s.index === marks.chosen) continue;
@@ -182,11 +183,11 @@ export default function MapCanvas({
       if (marks.chosen >= 0) {
         const x = pos[marks.chosen * 2];
         const y = pos[marks.chosen * 2 + 1];
-        ctx.fillStyle = tk.gold;
+        ctx.fillStyle = tk.accent;
         ctx.beginPath();
         ctx.arc(x, y, 3.4, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = tk.gold60;
+        ctx.strokeStyle = tk.line60;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(x, y, 7, 0, Math.PI * 2);
@@ -196,7 +197,7 @@ export default function MapCanvas({
       if (you) {
         ctx.globalAlpha = 1;
         ctx.fillStyle = tk.screen;
-        ctx.strokeStyle = tk.gold;
+        ctx.strokeStyle = tk.accent;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.arc(yx, yy, 4.5, 0, Math.PI * 2);
@@ -211,7 +212,7 @@ export default function MapCanvas({
         ctx.lineJoin = "round";
         ctx.strokeStyle = tk.screen;
         ctx.strokeText("YOU", lx, yy);
-        ctx.fillStyle = tk.gold;
+        ctx.fillStyle = tk.line;
         ctx.fillText("YOU", lx, yy);
       }
 
@@ -221,14 +222,14 @@ export default function MapCanvas({
         const x = pos[h.index * 2];
         const y = pos[h.index * 2 + 1];
         ctx.globalAlpha = h.alpha;
-        ctx.strokeStyle = tk.bone;
+        ctx.strokeStyle = tk.strong;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(x, y, h.index === marks.chosen ? 10 : 5.5, 0, Math.PI * 2);
         ctx.stroke();
         ctx.font = `400 ${LABEL.size}px ${tk.mono}`;
         ctx.textAlign = "center";
-        ctx.fillStyle = h.index === marks.chosen ? tk.gold : tk.text72;
+        ctx.fillStyle = h.index === marks.chosen ? tk.line : tk.text72;
         // A long title gives way; the "· r 0.93" after it never does.
         const full = captionFor(field, marks, h.index);
         const cut = full.lastIndexOf(" · r ");
@@ -241,7 +242,7 @@ export default function MapCanvas({
       const y = pos[h.index * 2 + 1];
       const title = field[h.index].title;
       ctx.globalAlpha = h.alpha;
-      ctx.fillStyle = tk.gold;
+      ctx.fillStyle = tk.line;
       ctx.beginPath();
       ctx.arc(x, y, dotR + 1.1, 0, Math.PI * 2);
       ctx.fill();

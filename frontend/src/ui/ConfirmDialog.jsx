@@ -53,7 +53,7 @@ export default function ConfirmDialog({
           >
             {cancelLabel}
           </button>
-          <button type="button" className="btn btn--gold" onClick={onConfirm}>
+          <button type="button" className="btn btn--primary" onClick={onConfirm}>
             {confirmLabel}
           </button>
         </div>

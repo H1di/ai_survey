@@ -3,7 +3,7 @@
 .app-shell {
   min-height: 100vh;
   color: var(--text);
-  background: var(--ink-page);
+  background: var(--surface-page);
 }
 
 /* Stage wrapper only: the screens are full-bleed and cap their own content. */
@@ -24,7 +24,7 @@
 .demo-notice {
   margin: 0 0 14px;
   padding: 6px 12px;
-  border: 1px dashed var(--gold-25);
+  border: 1px dashed var(--line-25);
   border-radius: 10px;
   display: inline-block;
   font-size: 0.82rem;
@@ -54,9 +54,9 @@
 .error-row.graph-error,
 .questions-screen > .error-row {
   z-index: 20;
-  background: var(--ink-screen);
+  background: var(--surface-page);
   padding: 8px 12px;
-  border: 1px solid var(--gold-25);
+  border: 1px solid var(--line-25);
   border-radius: 10px;
 }
 
@@ -75,8 +75,8 @@
 
 .ghost-action {
   appearance: none;
-  border: 1px solid var(--gold-25);
-  background: var(--ink-page);
+  border: 1px solid var(--line-25);
+  background: var(--surface-page);
   color: var(--text-60);
   font-family: inherit;
   font-size: 1rem;
@@ -89,8 +89,8 @@
 }
 
 .ghost-action:hover:enabled {
-  border-color: var(--gold-50);
-  color: var(--gold);
+  border-color: var(--line-50);
+  color: var(--text);
 }
 
 /* Shared by the survey error row and the graph page. */

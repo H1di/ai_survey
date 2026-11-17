@@ -31,7 +31,7 @@ function Legend({ emblem, frame }) {
       </div>
       <div style={{ opacity: Math.max(0.35, frame.ringAlpha) }}>
         <dt>Middle · Interests</dt>
-        <dd>Six RIASEC segments, thickness = score. Your code {emblem.riasecCode} in gold.</dd>
+        <dd>Six RIASEC segments, thickness = score. Your code {emblem.riasecCode} is marked in turquoise.</dd>
       </div>
       <div style={{ opacity: Math.max(0.35, frame.tickAlpha) }}>
         <dt>Outer · Priorities</dt>

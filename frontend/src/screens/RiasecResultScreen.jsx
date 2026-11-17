@@ -26,7 +26,7 @@ export default function RiasecResultScreen({
       footer={footer}
     >
       <RiasecSettle scores={scores} code={code} reducedMotion={reducedMotion} />
-      <button type="button" className="btn btn--gold result-continue" onClick={onContinue}>
+      <button type="button" className="btn btn--primary result-continue" onClick={onContinue}>
         Continue to values
       </button>
     </ScreenShell>

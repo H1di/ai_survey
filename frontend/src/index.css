@@ -16,7 +16,7 @@ body,
 
 body {
   font-family: var(--font-body);
-  background: var(--ink-page);
+  background: var(--surface-page);
   color: var(--text);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -38,6 +38,6 @@ button {
 }
 
 :focus-visible {
-  outline: 2px solid var(--gold);
+  outline: 2px solid var(--text);
   outline-offset: 2px;
 }

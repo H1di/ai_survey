@@ -1,6 +1,11 @@
 const { test, expect } = require("@playwright/test");
 
-test("keyless user reaches a roadmap", async ({ page }) => {
+test("keyless user reaches a roadmap", async ({ page, request }) => {
+  // Guard: a real key leaking in from backend/.env would make this run spend
+  // money and stop proving the keyless path.
+  const health = await (await request.get("/api/health")).json();
+  expect(health.hasOpenAIKey).toBe(false);
+
   const consoleErrors = [];
   page.on("console", (msg) => {
     if (msg.type() === "error") consoleErrors.push(msg.text());
@@ -74,11 +79,14 @@ test("keyless user reaches a roadmap", async ({ page }) => {
     .locator(".output-body");
   await expect(jobBody).toHaveText(/\S+/);
 
-  // Accept -> roadmap nodes render in the graph.
+  // Accept -> the roadmap path renders in the graph, a marker per stage.
   await accept.click();
-  await expect(page.locator(".node--roadmap").first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".rp-marker").first()).toBeVisible({ timeout: 30_000 });
 
-  // The O*NET attribution rides in the output's details panel.
+  // The O*NET attribution rides in the output's details panel. The camera
+  // frames the roadmap path alone, so bring the output card back into view
+  // the way a user would: the graph's fit-view control.
+  await page.getByRole("button", { name: /fit view/i }).click();
   await page.locator(".node--output").click();
   await expect(page.getByText(/This product includes information from the O\*NET/)).toBeVisible();
 

@@ -14,7 +14,7 @@ import { STAGES, frameAt } from "./engine";
 function readTokens() {
   const css = getComputedStyle(document.documentElement);
   const v = (name) => css.getPropertyValue(name).trim();
-  return { gold: v("--gold"), gold40: v("--gold-40"), gold70: v("--gold-70"), mono: v("--font-mono") };
+  return { gold: v("--line"), gold40: v("--line-40"), gold70: v("--line-70"), mono: v("--font-mono") };
 }
 
 // Draw `fraction` of the closed polyline's perimeter.

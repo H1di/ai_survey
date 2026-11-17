@@ -22,7 +22,7 @@
   display: block;
   font-size: 10px;
   text-transform: uppercase;
-  color: var(--gold-50);
+  color: var(--text-55);
   margin-bottom: 8px;
 }
 
@@ -105,11 +105,11 @@
 }
 
 .vins-card--chosen {
-  background: var(--gold-hover);
+  background: var(--accent-wash);
 }
 
 .vins-card--chosen .split-title {
-  color: var(--gold);
+  color: var(--text);
 }
 
 .vins-card--other {
@@ -140,7 +140,7 @@
   font-size: 10px;
   text-transform: uppercase;
   color: var(--text-55);
-  border: 1px solid var(--gold-18);
+  border: 1px solid var(--line-18);
   padding: 5px 8px;
 }
 
@@ -157,7 +157,7 @@
 .vins .vins-list {
   max-width: none;
   height: calc(6 * 49px);
-  border-top: 1px solid var(--gold-18);
+  border-top: 1px solid var(--line-18);
 }
 
 .vins .rank-row {
@@ -169,11 +169,11 @@
 
 .vins .rank-number {
   font-size: 24px;
-  color: var(--gold-70);
+  color: var(--text-72);
 }
 
 .vins .rank-number.vins-rank--open {
-  color: var(--gold-25);
+  color: var(--text-30);
 }
 
 .vins .rank-label {
@@ -182,7 +182,7 @@
 
 .vins .vins-row--open {
   border-bottom-style: dashed;
-  border-bottom-color: var(--gold-40);
+  border-bottom-color: var(--line-40);
 }
 
 .vins-legend {
@@ -196,7 +196,7 @@
 
 .vins-key {
   width: 18px;
-  border-top: 1px solid var(--gold-40);
+  border-top: 1px solid var(--line-40);
 }
 
 .vins-key--open {
@@ -208,7 +208,7 @@
   margin-top: 12px;
   font-size: 11px;
   text-transform: uppercase;
-  color: var(--gold);
+  color: var(--text);
   transition: opacity var(--t-base) var(--ease-out);
 }
 

@@ -9,8 +9,8 @@
 html,
 body {
   margin: 0;
-  background: var(--ink-void);
-  color: var(--bone);
+  background: var(--surface-page);
+  color: var(--text);
   font-family: var(--font-body);
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
@@ -53,11 +53,11 @@ input {
 
 .demo-back:hover,
 .demo-back:focus-visible {
-  color: var(--gold);
+  color: var(--line);
 }
 
 .demo-slug {
-  color: var(--gold-70);
+  color: var(--line-70);
 }
 
 .demo-title {
@@ -66,7 +66,7 @@ input {
   font-weight: 500;
   font-size: clamp(22px, 3vw, 30px);
   letter-spacing: -0.01em;
-  color: var(--bone);
+  color: var(--text);
 }
 
 .demo-explains {
@@ -87,9 +87,9 @@ input {
 .demo-stage {
   position: relative;
   width: 100%;
-  border: 1px solid var(--gold-15);
+  border: 1px solid var(--line-15);
   border-radius: var(--radius-surface);
-  background: var(--ink-page);
+  background: var(--surface-page);
   overflow: hidden;
 }
 
@@ -109,7 +109,7 @@ input {
   max-width: 1280px;
   margin: 28px auto 0;
   padding-top: 18px;
-  border-top: 1px solid var(--gold-15);
+  border-top: 1px solid var(--line-15);
 }
 
 .demo-stage-label {
@@ -122,11 +122,11 @@ input {
 }
 
 .demo-stage-index {
-  color: var(--gold-70);
+  color: var(--line-70);
 }
 
 .demo-stage-name {
-  color: var(--bone);
+  color: var(--text);
 }
 
 .demo-time {
@@ -142,7 +142,7 @@ input {
 .demo-scrub input[type="range"] {
   width: 100%;
   margin: 0;
-  accent-color: var(--gold);
+  accent-color: var(--line);
 }
 
 .demo-ticks {
@@ -156,7 +156,7 @@ input {
   top: 0;
   width: 1px;
   height: 6px;
-  background: var(--gold-40);
+  background: var(--line-40);
 }
 
 .demo-buttons {
@@ -167,7 +167,7 @@ input {
 
 .demo-group {
   display: inline-flex;
-  border: 1px solid var(--gold-20);
+  border: 1px solid var(--line-20);
   border-radius: var(--radius-pill);
   overflow: hidden;
 }
@@ -175,7 +175,7 @@ input {
 .demo-btn {
   min-height: 36px;
   padding: 0 14px;
-  border: 1px solid var(--gold-20);
+  border: 1px solid var(--line-20);
   border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-72);
@@ -189,25 +189,25 @@ input {
 }
 
 .demo-btn:hover {
-  background: var(--gold-hover);
-  color: var(--bone);
+  background: var(--line-hover);
+  color: var(--text);
 }
 
 .demo-btn:focus-visible {
-  outline: 2px solid var(--gold-60);
+  outline: 2px solid var(--line-60);
   outline-offset: 2px;
 }
 
 .demo-btn[aria-pressed="true"] {
-  background: var(--gold-wash);
-  border-color: var(--gold-50);
-  color: var(--gold);
+  background: var(--line-wash);
+  border-color: var(--line-50);
+  color: var(--line);
 }
 
 .demo-btn-primary {
   min-width: 108px;
-  border-color: var(--gold-40);
-  color: var(--gold);
+  border-color: var(--line-40);
+  color: var(--line);
 }
 
 .demo-seg {
@@ -216,7 +216,7 @@ input {
 }
 
 .demo-seg + .demo-seg {
-  border-left: 1px solid var(--gold-20);
+  border-left: 1px solid var(--line-20);
 }
 
 /* ---- Index page ---------------------------------------------------------- */
@@ -225,7 +225,7 @@ input {
   list-style: none;
   margin: 0;
   padding: 0;
-  border-top: 1px solid var(--gold-15);
+  border-top: 1px solid var(--line-15);
 }
 
 .demo-index li {
@@ -234,20 +234,20 @@ input {
   justify-content: space-between;
   gap: 16px;
   padding: 14px 0;
-  border-bottom: 1px solid var(--gold-15);
+  border-bottom: 1px solid var(--line-15);
   font-family: var(--font-mono);
   font-size: 13px;
 }
 
 .demo-index a {
-  color: var(--bone);
+  color: var(--text);
   text-decoration: none;
   transition: color var(--t-fast) var(--ease-out);
 }
 
 .demo-index a:hover,
 .demo-index a:focus-visible {
-  color: var(--gold);
+  color: var(--line);
 }
 
 .demo-index .demo-missing {
@@ -270,7 +270,7 @@ input {
 }
 
 .demo-explains a {
-  color: var(--gold-70);
+  color: var(--line-70);
   font-family: var(--font-mono);
   font-size: 13px;
 }

@@ -57,7 +57,7 @@ export default function EntryScreen({
           placeholder="Write your honest answer"
         />
 
-        <button type="button" className="btn btn--bone" onClick={onStart} disabled={!ready}>
+        <button type="button" className="btn btn--outline" onClick={onStart} disabled={!ready}>
           {busy ? "Entering…" : "Start the assessment"}
         </button>
 

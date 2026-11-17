@@ -1,5 +1,5 @@
 // recharts takes colours as JS props — they end up as SVG `fill`/`stroke`
-// attributes, not as styles — so a chart cannot write `var(--gold)` the way a
+// attributes, not as styles — so a chart cannot write `var(--line)` the way a
 // stylesheet can. It can, however, ask the document what that token resolved
 // to. This is that question, so theme/tokens.css stays the one place a colour
 // is written down and the charts cannot drift from the rest of the app.
@@ -7,9 +7,9 @@
 // Every name here must exist in theme/tokens.css; chartPalette.test.js reads
 // that file and fails if one goes missing.
 export const CHART_TOKENS = {
-  accent: "--gold",
-  accentSoft: "--gold-18",
-  grid: "--gold-25",
+  line: "--line",
+  lineSoft: "--line-18",
+  grid: "--line-25",
   muted: "--text-55",
 };
 

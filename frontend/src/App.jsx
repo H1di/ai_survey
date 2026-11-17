@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion as Motion } from "framer-motion";
 import GraphView from "./components/GraphView";
-import { DetailPanel } from "./components/GraphView/NodeComponent";
 import Wordmark from "./ui/Wordmark";
 import { HomeNavContext } from "./ui/homeNav";
 import ConfirmDialog from "./ui/ConfirmDialog";
@@ -64,6 +63,7 @@ import {
   demographicsPayloads,
   firstUnansweredIndex,
   moveRankItemTo,
+  roadmapNodeId,
   selectDockCard,
   whyThisFitsSections,
   onetSection,
@@ -77,29 +77,7 @@ import "./components/GraphView/GraphPage.css";
 captureDevToken();
 const DEV_MODE = isDevMode();
 
-// One journey, one bar. Unknown-yet block sizes assume the short variants so
-// the bar can only get more accurate, never jump backwards. The CV block
-// counts as the 7 journey questions until a CV text makes them moot.
-function overallProgress(progress) {
-  if (!progress) return null;
-  const bigFiveTotal = progress.bigFive.total || 20;
-  const riasecTotal = progress.riasec.total || 12;
-  const valuesTotal = progress.values?.total || 10;
-  const journeyTotal = progress.journey.active ? progress.journey.total : 0;
-  const total =
-    progress.demographics.total + bigFiveTotal + riasecTotal + valuesTotal + journeyTotal;
-  const answered =
-    progress.demographics.answered +
-    progress.bigFive.answered +
-    progress.riasec.answered +
-    (progress.values?.confirmed ? valuesTotal : progress.values?.answered || 0) +
-    (progress.journey.active ? progress.journey.answered : 0);
-  if (!total) return null;
-  return { answered, total, percent: Math.min(100, Math.round((answered / total) * 100)) };
-}
-
-// Side panel for output details and advice lists — same visual language as
-// the roadmap DetailPanel, but section-driven.
+// Side panel for output details and advice lists, section-driven.
 function InfoPanel({ view, onClose }) {
   if (!view) return null;
   return (
@@ -288,7 +266,6 @@ function LifePathApp({ onReset }) {
   const [acceptedOutputId, setAcceptedOutputId] = useState(null);
   const [roadmaps, setRoadmaps] = useState({});
 
-  const [stageDetail, setStageDetail] = useState(null);
   const [infoView, setInfoView] = useState(null);
 
   const [profile, setProfile] = useState(null);
@@ -332,6 +309,9 @@ function LifePathApp({ onReset }) {
       derivedTraits: data.derivedTraits || null,
       personaSummary: data.personaSummary || null,
       riasecScores: data.riasecScores || null,
+      // What the backend ranks families with (near-flat quiz → steadied by
+      // Big Five); the scenes re-derive the shortlist from it.
+      rankingRiasecScores: data.rankingRiasecScores || data.riasecScores || null,
       riasecCode: data.riasecCode || null,
       riasecInferred: Boolean(data.riasecInferred),
       userValues: data.userValues || null,
@@ -475,8 +455,9 @@ function LifePathApp({ onReset }) {
     return run("bigFive", "Could not save.", async () => {
       const data = await submitBigFiveAnswer({ sessionId, itemId: item.id, value });
       // The busy flag clears inside the transition so the incoming slide is
-      // captured live, not dimmed.
-      withViewTransition(() => {
+      // captured live, not dimmed — and the task awaits the commit, so run()'s
+      // own clear cannot land first and re-arm the answered item.
+      await withViewTransition(() => {
         applySessionSnapshot(data);
         if (bigFiveIndex < bigFiveItems.length - 1) setBigFiveIndex((i) => i + 1);
         setBusy((p) => ({ ...p, bigFive: false }));
@@ -502,7 +483,7 @@ function LifePathApp({ onReset }) {
     if (!sessionId || !item) return;
     return run("riasec", "Could not save.", async () => {
       const data = await submitRiasecAnswer({ sessionId, itemId: item.id, value });
-      withViewTransition(() => {
+      await withViewTransition(() => {
         applySessionSnapshot(data);
         // The quiz just closed: show its result once before the values step.
         if (data.step !== "riasec") setRiasecReveal(Boolean(data.riasecScores));
@@ -624,7 +605,6 @@ function LifePathApp({ onReset }) {
   const acceptedOutput = outputs.find((o) => o.id === acceptedOutputId) || null;
 
   const handleOutputOpen = (output) => {
-    setStageDetail(null);
     const userScores = profile?.userValues?.scores;
     const fitFigure =
       output.valuesFit && output.workValues && userScores ? (
@@ -663,7 +643,6 @@ function LifePathApp({ onReset }) {
   const handleAdviceOpen = (blockKey) => {
     if (!acceptedOutput?.detail) return;
     const view = ADVICE_VIEWS[blockKey];
-    setStageDetail(null);
     setInfoView({
       archetype: acceptedOutput.jobTitle,
       title: view.title,
@@ -750,11 +729,6 @@ function LifePathApp({ onReset }) {
       hydrateFromSnapshot(data);
     });
 
-  const handleStageOpen = (stageItem, index) => {
-    setInfoView(null);
-    setStageDetail({ stage: stageItem, index });
-  };
-
   const handleOpenMethodology = (key) => setInfoView(METHODOLOGY_VIEWS[key] || null);
 
   // Kick off the values tournament the moment the step opens (once).
@@ -809,7 +783,7 @@ function LifePathApp({ onReset }) {
     detailPending: busy.accept,
     onOutputOpen: handleOutputOpen,
     onAdviceOpen: handleAdviceOpen,
-    onStageOpen: handleStageOpen,
+    profile,
   });
 
   const selectedRoadmap = acceptedOutputId ? roadmaps[acceptedOutputId] : null;
@@ -823,10 +797,9 @@ function LifePathApp({ onReset }) {
   let focusNodeIds = ["me"];
   if (roadmapVisible) {
     focusKey = `roadmap-${acceptedOutputId}`;
-    focusNodeIds = [
-      acceptedOutputId,
-      ...selectedRoadmap.stages.map((st) => `stage-${acceptedOutputId}-${st.id}`),
-    ];
+    // The path node alone: it is wide, and fitting the card above it too
+    // would shrink its labels past reading.
+    focusNodeIds = [roadmapNodeId(acceptedOutputId)];
   } else if (acceptedOutput?.detail) {
     focusKey = `detail-${acceptedOutputId}`;
     focusNodeIds = [acceptedOutputId, "advice-aiRecommendations", "advice-courses"];
@@ -849,7 +822,7 @@ function LifePathApp({ onReset }) {
           onRegenerate={handleNotSuitable}
           onOpenDetails={handleOutputOpen}
           field={onetField}
-          riasecScores={profile?.riasecScores}
+          riasecScores={profile?.rankingRiasecScores}
           outputs={outputs}
           animateArrival={latestOutput.id === arrivalId}
         />
@@ -857,26 +830,11 @@ function LifePathApp({ onReset }) {
     };
   }
 
-  const overall = overallProgress(progress);
   // `railStep` lets a view that sits over a step (the interest result) show
-  // the rail where the user thinks they are.
+  // the rail where the user thinks they are. Overall progress is the rail's own
+  // underline; the per-step count is the question screen's progress line.
   const renderFooter = (railStep = step) => (
     <>
-      {overall && (
-        <div className="screen-progress">
-          <div
-            className="screen-progress-track"
-            role="progressbar"
-            aria-valuenow={overall.answered}
-            aria-valuemin={0}
-            aria-valuemax={overall.total}
-            aria-label={`Overall: ${overall.answered} of ${overall.total} questions`}
-          >
-            <div className="screen-progress-fill" style={{ width: `${overall.percent}%` }} />
-          </div>
-          <span className="screen-progress-percent">{overall.percent}%</span>
-        </div>
-      )}
       <StepRail
         step={railStep}
         furthestStep={furthestStep}
@@ -891,6 +849,10 @@ function LifePathApp({ onReset }) {
     </>
   );
 
+  // The footer (rail + Restart) is for screens between questions; a question
+  // screen (demographics, Big Five, RIASEC, a journey question) has none — the
+  // per-step Back is its only way out. ExperienceScreen drops it itself once
+  // the journey questions are running.
   const surveyFooter = renderFooter();
 
   if (restoring) {
@@ -942,7 +904,6 @@ function LifePathApp({ onReset }) {
                 onDraftChange={handleDemoDraftChange}
                 busy={busy.demo}
                 onSubmit={handleSubmitDemographics}
-                footer={surveyFooter}
               />
             )}
 
@@ -956,7 +917,6 @@ function LifePathApp({ onReset }) {
                 onAnswer={handleSubmitBigFive}
                 onBack={() => withViewTransition(() => setBigFiveIndex((i) => Math.max(0, i - 1)))}
                 canGoBack={bigFiveIndex > 0}
-                footer={surveyFooter}
               />
             )}
 
@@ -980,7 +940,6 @@ function LifePathApp({ onReset }) {
                 canGoBack={riasecIndex > 0}
                 onSkip={handleSkipRiasec}
                 canSkip={Object.keys(riasecAnswers).length === 0}
-                footer={surveyFooter}
               />
             )}
 
@@ -1073,7 +1032,7 @@ function LifePathApp({ onReset }) {
             {step === "tree" && (
               <FirstPathScreen
                 field={onetField}
-                riasecScores={profile?.riasecScores}
+                riasecScores={profile?.rankingRiasecScores}
                 riasecCode={profile?.riasecCode}
                 output={outputs[0] || null}
                 onDone={handleFirstPathShown}
@@ -1153,24 +1112,6 @@ function LifePathApp({ onReset }) {
                 </AnimatePresence>
               </div>
             </div>
-
-            <AnimatePresence>
-              {stageDetail && (
-                <Motion.div key="stage-detail" {...PANEL_MOTION}>
-                  <DetailPanel
-                    data={{
-                      path: {
-                        archetype: `Step ${stageDetail.index + 1}${stageDetail.stage.timeframe ? ` · ${stageDetail.stage.timeframe}` : ""}`,
-                        title: stageDetail.stage.title,
-                        description: stageDetail.stage.description,
-                        careerTrajectory: stageDetail.stage.milestone || null,
-                      },
-                      onClose: () => setStageDetail(null),
-                    }}
-                  />
-                </Motion.div>
-              )}
-            </AnimatePresence>
 
             <ErrorRow error={error} retryAction={retryAction} className="graph-error" />
           </div>

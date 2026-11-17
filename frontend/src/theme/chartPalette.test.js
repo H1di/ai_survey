@@ -22,9 +22,9 @@ function styleRoot(css) {
 describe("readChartPalette", () => {
   it("resolves every chart colour from the document's tokens", () => {
     styleRoot(`:root {
-      --gold: #ffd98c;
-      --gold-18: rgba(255, 217, 140, 0.18);
-      --gold-25: rgba(255, 217, 140, 0.25);
+      --line: #ffd98c;
+      --line-18: rgba(255, 217, 140, 0.18);
+      --line-25: rgba(255, 217, 140, 0.25);
       --text-55: rgba(255, 255, 255, 0.55);
     }`);
 
@@ -32,8 +32,8 @@ describe("readChartPalette", () => {
     // spaces inside rgba(), a browser keeps the author's text. Both are the
     // same colour, and both are valid in an SVG fill/stroke.
     expect(readChartPalette()).toEqual({
-      accent: "#ffd98c",
-      accentSoft: "rgba(255,217,140,0.18)",
+      line: "#ffd98c",
+      lineSoft: "rgba(255,217,140,0.18)",
       grid: "rgba(255,217,140,0.25)",
       muted: "rgba(255,255,255,0.55)",
     });
@@ -41,10 +41,10 @@ describe("readChartPalette", () => {
 
   it("reads from the element it is given, not only the document", () => {
     const el = document.createElement("div");
-    el.style.setProperty("--gold", "#111111");
+    el.style.setProperty("--line", "#111111");
     document.body.appendChild(el);
 
-    expect(readChartPalette(el).accent).toBe("#111111");
+    expect(readChartPalette(el).line).toBe("#111111");
     document.body.removeChild(el);
   });
 

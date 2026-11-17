@@ -6,15 +6,16 @@ export function readTokens() {
   const css = getComputedStyle(document.documentElement);
   const v = (name) => css.getPropertyValue(name).trim();
   return {
-    bg: v("--ink-page"),
-    gold: v("--gold"),
-    gold70: v("--gold-70"),
-    gold40: v("--gold-40"),
-    gold15: v("--gold-15"),
-    goldWash: v("--gold-wash"),
-    bone: v("--bone"),
-    bone50: v("--bone-50"),
-    bone40: v("--bone-40"),
+    bg: v("--surface-page"),
+    line: v("--line"),
+    accent: v("--accent"),
+    accentWash: v("--accent-wash"),
+    line70: v("--line-70"),
+    line40: v("--line-40"),
+    line15: v("--line-15"),
+    strong: v("--text"),
+    strong50: v("--text-55"),
+    strong40: v("--text-45"),
     text60: v("--text-60"),
     mono: v("--font-mono"),
     body: v("--font-body"),
@@ -58,7 +59,7 @@ export function drawEmblem(ctx, { cx, cy, R, emblem, frame, tk }) {
 
   // --- Inner layer: Big Five lobes over a two-circle scale (50 / 100). ---
   ctx.globalAlpha = frame.scaleAlpha;
-  ctx.strokeStyle = tk.gold15;
+  ctx.strokeStyle = tk.line15;
   ctx.lineWidth = lw;
   const mid = LAYOUT.lobeMin + (LAYOUT.lobeMax - LAYOUT.lobeMin) / 2;
   circle(ctx, cx, cy, mid * R);
@@ -77,24 +78,24 @@ export function drawEmblem(ctx, { cx, cy, R, emblem, frame, tk }) {
     const pts = l.points.map((p) => ({ x: cx + p.x * R, y: cy + p.y * R }));
     if (f >= 1) {
       ctx.globalAlpha = 0.06;
-      ctx.fillStyle = tk.bone;
+      ctx.fillStyle = tk.strong;
       ctx.beginPath();
       pts.forEach((p, k) => (k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
       ctx.fill();
     }
     ctx.globalAlpha = 1;
-    ctx.strokeStyle = tk.bone;
+    ctx.strokeStyle = tk.strong;
     ctx.lineWidth = lw * 1.25;
     strokePartial(ctx, pts, f);
     ctx.globalAlpha = f;
-    ctx.fillStyle = tk.bone50;
+    ctx.fillStyle = tk.strong50;
     const lp = at(l.angle, (LAYOUT.lobeMax + LAYOUT.ringBase) / 2);
     ctx.fillText(l.abbr, lp.x, lp.y);
   });
 
-  // --- Middle ring: six RIASEC segments; the code letters in gold. ---
+  // --- Middle ring: six RIASEC segments; the code segments in the accent. ---
   ctx.globalAlpha = frame.ringAlpha;
-  ctx.strokeStyle = tk.gold15;
+  ctx.strokeStyle = tk.line15;
   ctx.lineWidth = lw;
   circle(ctx, cx, cy, LAYOUT.ringBase * R);
 
@@ -110,21 +111,21 @@ export function drawEmblem(ctx, { cx, cy, R, emblem, frame, tk }) {
     ctx.closePath();
     ctx.globalAlpha = 1;
     if (inCode) {
-      ctx.fillStyle = tk.goldWash;
+      ctx.fillStyle = tk.accentWash;
       ctx.fill();
     }
-    ctx.strokeStyle = inCode ? tk.gold : tk.bone40;
+    ctx.strokeStyle = inCode ? tk.accent : tk.strong40;
     ctx.lineWidth = lw;
     ctx.stroke();
     ctx.globalAlpha = f;
-    ctx.fillStyle = inCode ? tk.gold : tk.bone40;
+    ctx.fillStyle = inCode ? tk.line : tk.strong40;
     const lp = at(g.mid, LAYOUT.ringBase + LAYOUT.ringMax + 0.05);
     ctx.fillText(g.key, lp.x, lp.y);
   });
 
   // --- Outer ring: graduated circle + six work-value ticks, length by rank. ---
   ctx.globalAlpha = frame.tickAlpha;
-  ctx.strokeStyle = tk.gold15;
+  ctx.strokeStyle = tk.line15;
   ctx.lineWidth = lw;
   circle(ctx, cx, cy, LAYOUT.tickBase * R);
   for (let k = 0; k < 60; k += 1) {
@@ -144,14 +145,14 @@ export function drawEmblem(ctx, { cx, cy, R, emblem, frame, tk }) {
     const p0 = at(t.angle, t.inner);
     const p1 = at(t.angle, t.inner + (t.outer - t.inner) * f);
     ctx.globalAlpha = 1;
-    ctx.strokeStyle = lead ? tk.gold : tk.bone;
+    ctx.strokeStyle = lead ? tk.accent : tk.strong;
     ctx.lineWidth = lw * 1.5;
     ctx.beginPath();
     ctx.moveTo(p0.x, p0.y);
     ctx.lineTo(p1.x, p1.y);
     ctx.stroke();
     ctx.globalAlpha = f;
-    ctx.fillStyle = lead ? tk.gold : tk.bone50;
+    ctx.fillStyle = lead ? tk.line : tk.strong50;
     const lp = at(t.angle, t.outer + 0.06);
     ctx.fillText(t.abbr, lp.x, lp.y);
   });

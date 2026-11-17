@@ -2,9 +2,10 @@
 // badge linking to services.onetcenter.org plus the exact attribution
 // sentence with the USDOL/ETA trademark acknowledgment. Keep the wording
 // as published — it is a license condition. The badge is a local copy of
-// onetcenter.org/image/link/onet-in-it.svg adapted for the dark theme
-// (white backing rect removed, "o*net" → bone, swoosh → gold,
-// "in-it" on the swoosh → page ink); keep the shapes themselves untouched.
+// onetcenter.org/image/link/onet-in-it.svg recoloured for the light theme
+// (white backing rect removed so the page shows through; "o*net" and the
+// swoosh #048 / #fd4 → ink #111, "in-it" on the swoosh → white). Only fills
+// changed — keep the shapes themselves untouched.
 import onetBadge from "../assets/onet-in-it.svg";
 
 export default function OnetAttribution() {

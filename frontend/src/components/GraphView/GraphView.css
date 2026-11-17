@@ -3,7 +3,7 @@
   height: 100%;
 }
 
-/* Let the glowing branch canvas behind the graph show through. */
+/* Let the branch canvas behind the graph show through. */
 .react-flow,
 .react-flow__pane,
 .react-flow__renderer {
@@ -23,14 +23,14 @@
 }
 
 .react-flow__controls-button {
-  background: var(--ink-screen);
-  border-bottom: 1px solid var(--gold-20);
-  fill: var(--gold-70);
+  background: var(--surface-page);
+  border-bottom: 1px solid var(--line-20);
+  fill: var(--line-70);
 }
 
 .react-flow__controls-button:hover {
-  background: var(--gold-hover);
-  fill: var(--gold);
+  background: var(--line-hover);
+  fill: var(--line);
 }
 
 /* Our output node type is literally named "output", which collides with React
@@ -79,13 +79,13 @@
 }
 
 .react-flow__edge-path {
-  stroke: var(--gold-20);
+  stroke: var(--line-20);
   stroke-width: 1;
 }
 
 .branch-edge {
   fill: none;
-  stroke: var(--gold-40);
+  stroke: var(--line-40);
   stroke-width: 1.5;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
@@ -98,10 +98,10 @@
 }
 
 /* Continuous downstream pulse on the chosen path; fades in only after the
-   draw-in completes (--flow-delay = edge delay + EDGE_DRAW_MS). Its brighter
-   gold, over the resting gold-40 hairline, is what marks the chosen path now. */
+   draw-in completes (--flow-delay = edge delay + EDGE_DRAW_MS). The accent,
+   over the resting --line-40 hairline, is what marks the chosen path now. */
 .branch-edge-flow {
-  stroke: var(--gold);
+  stroke: var(--accent);
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-dasharray: 6 10;
@@ -113,7 +113,7 @@
 }
 
 @keyframes flow-fade {
-  to { opacity: 0.45; }
+  to { opacity: 0.9; }
 }
 
 /* -16 = -(6 + 10): one full dash period per cycle, moving source -> target */

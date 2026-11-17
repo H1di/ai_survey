@@ -19,7 +19,7 @@ export default function JourneyIntroScreen({ onBegin }) {
           </li>
         ))}
       </ol>
-      <button type="button" className="btn btn--gold journey-begin" onClick={onBegin}>
+      <button type="button" className="btn btn--primary journey-begin" onClick={onBegin}>
         Start
       </button>
     </ScreenShell>

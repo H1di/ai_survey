@@ -44,7 +44,7 @@ export default function SummaryScreen({
         <WorkValuesRadar user={userValues.scores} title="What matters to you" />
       )}
 
-      <button type="button" className="btn btn--gold summary-cta" onClick={onContinue} disabled={busy}>
+      <button type="button" className="btn btn--primary summary-cta" onClick={onContinue} disabled={busy}>
         {busy ? "Preparing…" : "Enter the Life Path Engine"}
       </button>
 

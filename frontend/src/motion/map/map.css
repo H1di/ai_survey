@@ -37,10 +37,9 @@
 
 .omap-title {
   margin: 0;
-  font: 900 clamp(26px, 3cqi, 44px) / 1.05 var(--font-display);
+  font: 300 clamp(26px, 3cqi, 44px) / 1.05 var(--font-display);
   white-space: nowrap;
   letter-spacing: -0.02em;
-  text-transform: uppercase;
   color: var(--text);
 }
 
@@ -49,7 +48,7 @@
 }
 
 .omap-accent {
-  color: var(--gold);
+  color: var(--text);
 }
 
 .omap-lede {

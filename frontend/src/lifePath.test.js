@@ -7,6 +7,7 @@ import {
   demographicsPayloads,
   moveRankItemTo,
   outputX,
+  roadmapNodeId,
   ADVICE_BLOCKS,
   JOURNEY_RAIL,
   railIndexForStep,
@@ -210,7 +211,7 @@ const noop = () => {};
 
 describe("buildLifePathGraph (output chain)", () => {
   it("renders only Me with no outputs", () => {
-    const { nodes, edges } = buildLifePathGraph({ onOutputOpen: noop, onAdviceOpen: noop, onStageOpen: noop });
+    const { nodes, edges } = buildLifePathGraph({ onOutputOpen: noop, onAdviceOpen: noop });
     expect(nodes).toHaveLength(1);
     expect(edges).toHaveLength(0);
   });
@@ -220,7 +221,6 @@ describe("buildLifePathGraph (output chain)", () => {
       outputs: OUTPUTS,
       onOutputOpen: noop,
       onAdviceOpen: noop,
-      onStageOpen: noop,
     });
     const outputNodes = nodes.filter((n) => n.type === "output");
     expect(outputNodes).toHaveLength(2);
@@ -241,7 +241,6 @@ describe("buildLifePathGraph (output chain)", () => {
       acceptedOutputId: "output_2",
       onOutputOpen,
       onAdviceOpen: noop,
-      onStageOpen: noop,
     });
     const second = nodes.find((n) => n.id === "output_2");
     expect(second.data.fit).toBe(84);
@@ -267,7 +266,6 @@ describe("buildLifePathGraph (output chain)", () => {
       acceptedOutputId: "output_2",
       onOutputOpen: noop,
       onAdviceOpen,
-      onStageOpen: noop,
     });
     const advice = nodes.filter((n) => n.type === "advice");
     expect(advice).toHaveLength(4);
@@ -280,63 +278,65 @@ describe("buildLifePathGraph (output chain)", () => {
     }
   });
 
-  it("roadmap chain hangs under the accepted output, keyed by outputId", () => {
+  it("the roadmap is one path node under the accepted output, keyed by outputId", () => {
     const outputs = [{ ...OUTPUTS[0], accepted: true, detail: DETAIL }];
-    const roadmaps = {
-      output_1: {
-        professionId: "output_1",
-        stages: [
-          { id: "stage_1", title: "T1", timeframe: "1m" },
-          { id: "stage_2", title: "T2", timeframe: "2m" },
-        ],
-      },
+    const stages = [
+      { id: "stage_1", title: "T1", timeframe: "1m", description: "d1", milestone: "m1" },
+      { id: "stage_2", title: "T2", timeframe: "2m", description: "d2", milestone: "m2" },
+    ];
+    const profile = {
+      bigFiveScores: { O: 94, C: 75, E: 44, A: 75, N: 25 },
+      riasecScores: { R: 13, I: 100, A: 88, S: 50, E: 63, C: 38 },
     };
     const { nodes, edges } = buildLifePathGraph({
       outputs,
       acceptedOutputId: "output_1",
-      roadmaps,
+      roadmaps: { output_1: { professionId: "output_1", stages } },
+      profile,
       onOutputOpen: noop,
       onAdviceOpen: noop,
-      onStageOpen: noop,
     });
-    const stages = nodes.filter((n) => n.type === "roadmap");
-    expect(stages).toHaveLength(2);
-    expect(edges.find((e) => e.id === "output_1-stage-output_1-stage_1")).toBeTruthy();
-    expect(edges.find((e) => e.id === "stage-output_1-stage_1-stage-output_1-stage_2")).toBeTruthy();
-    expect(stages[1].data.last).toBe(true);
+    const paths = nodes.filter((n) => n.type === "roadmapPath");
+    expect(paths).toHaveLength(1);
+    expect(paths[0].id).toBe(roadmapNodeId("output_1"));
+    expect(paths[0].id).toBe("roadmap-output_1");
+    // every stage rides along whole — description and milestone stay reachable
+    expect(paths[0].data.stages).toBe(stages);
+    expect(paths[0].data.jobTitle).toBe(OUTPUTS[0].jobTitle);
+    expect(paths[0].data.bigFive).toBe(profile.bigFiveScores);
+    expect(paths[0].data.riasec).toBe(profile.riasecScores);
+    // no per-stage nodes or edges any more: one edge in, from the card
+    expect(nodes.some((n) => n.type === "roadmap")).toBe(false);
+    const into = edges.filter((e) => e.target === paths[0].id);
+    expect(into).toHaveLength(1);
+    expect(into[0].source).toBe("output_1");
   });
 
-  it("sequences the roadmap from the reveal timeline: edge, then its step, then the next edge", () => {
+  it("emits no path node for a roadmap without stages, and survives a missing profile", () => {
     const outputs = [{ ...OUTPUTS[0], accepted: true, detail: DETAIL }];
-    const stages = ["a", "b", "c"].map((id) => ({ id, title: id, timeframe: "1m" }));
-    const { nodes, edges } = buildLifePathGraph({
+    const empty = buildLifePathGraph({
       outputs,
       acceptedOutputId: "output_1",
-      roadmaps: { output_1: { stages } },
+      roadmaps: { output_1: { stages: [] } },
       onOutputOpen: noop,
       onAdviceOpen: noop,
-      onStageOpen: noop,
     });
-    const steps = nodes.filter((n) => n.type === "roadmap");
-    const links = edges.filter((e) => e.data?.revealIndex !== undefined);
-    expect(steps.map((n) => n.data.revealIndex)).toEqual([0, 1, 2]);
-    expect(links.map((e) => e.data.revealIndex)).toEqual([0, 1, 2]);
+    expect(empty.nodes.some((n) => n.type === "roadmapPath")).toBe(false);
 
-    const appear = steps.map((n) => Number.parseInt(n.style["--appear-delay"], 10));
-    links.forEach((edge, i) => {
-      // The step appears exactly when its edge has finished drawing…
-      expect(appear[i]).toBe(edge.data.flowDelayMs);
-      expect(edge.data.flowDelayMs).toBe(edge.data.delay + 600);
-      // …and the next edge starts only after that step is in (220 ms).
-      if (i > 0) expect(edge.data.delay).toBe(appear[i - 1] + 220);
+    const noProfile = buildLifePathGraph({
+      outputs,
+      acceptedOutputId: "output_1",
+      roadmaps: { output_1: { stages: [{ id: "a", title: "A", timeframe: "" }] } },
+      onOutputOpen: noop,
+      onAdviceOpen: noop,
     });
-    // Other node types are not part of the roadmap clock.
-    expect(nodes.filter((n) => n.type !== "roadmap").every((n) => n.data.revealIndex === undefined)).toBe(true);
+    const path = noProfile.nodes.find((n) => n.type === "roadmapPath");
+    expect(path.data).toMatchObject({ bigFive: null, riasec: null });
   });
 
   // Node positions are left edges and the card is 480px wide, so
   // "centred" here means the row's own centre lands on the card's.
-  it("abuts the advice cells and centres both rows under the accepted card", () => {
+  it("abuts the advice cells and centres them and the roadmap under the accepted card", () => {
     const outputs = [OUTPUTS[0], { ...OUTPUTS[1], accepted: true, detail: DETAIL }];
     const { nodes } = buildLifePathGraph({
       outputs,
@@ -349,7 +349,6 @@ describe("buildLifePathGraph (output chain)", () => {
       },
       onOutputOpen: noop,
       onAdviceOpen: noop,
-      onStageOpen: noop,
     });
     const cardCentre = outputX(1) + 480 / 2;
 
@@ -360,8 +359,10 @@ describe("buildLifePathGraph (output chain)", () => {
     const rowRight = advice[advice.length - 1].position.x + 220;
     expect((rowLeft + rowRight) / 2).toBe(cardCentre);
 
-    const stage = nodes.find((n) => n.type === "roadmap");
-    expect(stage.position.x + 360 / 2).toBe(cardCentre);
+    // the path node hangs from its top centre, whatever its width
+    const path = nodes.find((n) => n.type === "roadmapPath");
+    expect(path.origin).toEqual([0.5, 0]);
+    expect(path.position.x).toBe(cardCentre);
 
     // and siblings never overlap: the gap clears the card's own width
     expect(outputX(1) - outputX(0)).toBeGreaterThanOrEqual(480);
@@ -375,7 +376,6 @@ describe("buildLifePathGraph (output chain)", () => {
       detailPending: true,
       onOutputOpen: noop,
       onAdviceOpen: noop,
-      onStageOpen: noop,
     });
     expect(pendingDetail.nodes.find((n) => n.id === "detail-loading")).toBeTruthy();
 
@@ -385,7 +385,6 @@ describe("buildLifePathGraph (output chain)", () => {
       roadmapPending: true,
       onOutputOpen: noop,
       onAdviceOpen: noop,
-      onStageOpen: noop,
     });
     expect(pendingRoadmap.nodes.find((n) => n.id === "roadmap-loading")).toBeTruthy();
   });

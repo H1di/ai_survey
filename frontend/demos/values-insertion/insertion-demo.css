@@ -16,7 +16,7 @@
 .vins-counter {
   white-space: nowrap;
   font-size: 12px;
-  color: var(--gold-70);
+  color: var(--line-70);
   font-variant-numeric: tabular-nums;
 }
 

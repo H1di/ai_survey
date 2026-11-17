@@ -1,4 +1,5 @@
 import ScreenShell from "../ui/ScreenShell";
+import MindGraph from "../motion/mind/MindGraph";
 import "./screens.css";
 
 const CV_INTENT_OPTIONS = [
@@ -36,11 +37,12 @@ export default function ExperienceScreen({
   onBackToChoice,
   onJourneyBack,
   footer,
+  reducedMotion,
 }) {
-  const eyebrow =
-    mode === "journey"
-      ? `step 5 · experience · question ${journeyIndex + 1} of ${journeyTotal}`
-      : "step 5 · experience";
+  const eyebrow = "step 5 · experience";
+  // The count starts once the journey path is taken; before that the screen is
+  // a choice, not a questionnaire, and keeps the footer.
+  const journeyRunning = mode === "journey";
 
   const backControl = (onBack) => (
     <button type="button" className="screen-back" onClick={onBack} disabled={busy}>
@@ -66,7 +68,7 @@ export default function ExperienceScreen({
         />
         <button
           type="button"
-          className="btn btn--gold"
+          className="btn btn--primary"
           onClick={onSubmitCvText}
           disabled={busy || !cvDraft.trim()}
         >
@@ -81,10 +83,73 @@ export default function ExperienceScreen({
   const locked = !intent || busy;
   const lastQuestion = journeyIndex >= journeyTotal - 1;
 
+  // The answer row both layouts share: the field, then Back / Next.
+  const journeyForm = (
+    <form
+      key={journeyQuestion.id}
+      className="journey-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmitJourney();
+      }}
+    >
+      <input
+        className="demo-input"
+        aria-label={journeyQuestion.question}
+        value={journeyDraft}
+        maxLength={400}
+        disabled={locked}
+        placeholder={journeyQuestion.placeholder}
+        onChange={(event) => onJourneyDraftChange(event.target.value)}
+      />
+      <div className="journey-nav">
+        <button
+          type="button"
+          className="btn btn--ghost"
+          disabled={busy || mode !== "journey"}
+          onClick={onJourneyBack}
+        >
+          ← Back
+        </button>
+        <button type="submit" className="btn btn--primary" disabled={locked || !journeyDraft.trim()}>
+          {busy && mode === "journey" ? "Saving…" : lastQuestion ? "Finish →" : "Next →"}
+        </button>
+      </div>
+    </form>
+  );
+
+  // Once the journey path is taken, each question is a question screen like a
+  // Likert item: the header row, the question alone, its answer under it — no
+  // eyebrow, no step title, no footer. Back from the first question returns to
+  // the choice (and the CV path).
+  if (journeyRunning) {
+    return (
+      <ScreenShell
+        question
+        headerSlot={backControl(onJourneyBack)}
+        progress={{ current: journeyIndex + 1, total: journeyTotal }}
+        backdrop={
+          <MindGraph
+            seed="journey"
+            total={journeyTotal}
+            answered={journeyIndex}
+            reducedMotion={reducedMotion}
+          />
+        }
+      >
+        <div className="instrument instrument--journey">
+          <div className="instrument-stage">
+            <h2 className="item-statement item-statement--sm">{journeyQuestion.question}</h2>
+          </div>
+          {journeyForm}
+        </div>
+      </ScreenShell>
+    );
+  }
+
   return (
     <ScreenShell
       eyebrow={eyebrow}
-      headerSlot={mode === "journey" ? backControl(onJourneyBack) : null}
       title="Where should we start from?"
       sub="Paste or upload a CV — or answer seven career-journey questions if you don't have one."
       footer={footer}
@@ -163,42 +228,8 @@ export default function ExperienceScreen({
 
             <div className="experience-half experience-half--b">
               <h3 className="experience-heading">Without a CV</h3>
-              <p className="item-statement item-statement--italic item-statement--sm">
-                &quot;{journeyQuestion.question}&quot;
-              </p>
-              <form
-                key={journeyQuestion.id}
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  onSubmitJourney();
-                }}
-              >
-                <input
-                  className="demo-input"
-                  value={journeyDraft}
-                  maxLength={400}
-                  disabled={locked}
-                  placeholder={journeyQuestion.placeholder}
-                  onChange={(event) => onJourneyDraftChange(event.target.value)}
-                />
-                <div className="journey-nav">
-                  <button
-                    type="button"
-                    className="btn btn--ghost"
-                    disabled={busy || mode !== "journey"}
-                    onClick={onJourneyBack}
-                  >
-                    ← Back
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn--gold"
-                    disabled={locked || !journeyDraft.trim()}
-                  >
-                    {busy && mode === "journey" ? "Saving…" : lastQuestion ? "Finish →" : "Next →"}
-                  </button>
-                </div>
-              </form>
+              <p className="item-statement item-statement--sm">{journeyQuestion.question}</p>
+              {journeyForm}
             </div>
           </div>
 

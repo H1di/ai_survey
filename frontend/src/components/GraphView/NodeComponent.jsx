@@ -1,6 +1,6 @@
 import { Handle, Position } from '@xyflow/react';
-import { useStepReveal } from '../../motion/roadmap/revealContext';
-import { NODE_RISE_PX } from '../../motion/roadmap/roadmapTimeline';
+import RoadmapPath from '../../motion/path/RoadmapPath';
+import { useNarrowViewport } from '../../motion/path/useNarrowViewport';
 import './NodeComponent.css';
 
 export function MeNode() {
@@ -31,7 +31,7 @@ export function OutputNode({ data }) {
       onClick={onOpen}
     >
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
-      {/* Field tag and fit share one header row, split by a gold interpunct. */}
+      {/* Field tag and fit share one header row, split by an interpunct. */}
       <span className="node-output-head">
         <span className="node-archetype">{orientedField}</span>
         {hasFit && (
@@ -70,47 +70,21 @@ export function AdviceNode({ data }) {
   );
 }
 
-// A roadmap step. Inside a running reveal (motion/roadmap) the clock owns its
-// entrance: a fade with a 6 px rise, then the timeframe. The handles sit
-// outside the animated box — React Flow measures them once, so they must not
-// ride the rise.
-export function RoadmapNode({ data }) {
-  const { index, title, timeframe, last, onOpen, revealIndex } = data;
-  const reveal = useStepReveal(revealIndex);
-
+// The roadmap: one wide node holding the whole path through months from now
+// (motion/path). It reads the roadmap clock itself, so the reveal plays inside
+// the node and React Flow never re-lays-out. On a phone the path turns vertical.
+export function RoadmapPathNode({ data }) {
+  const compact = useNarrowViewport();
   return (
     <>
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
-      <button
-        type="button"
-        className={`node node--roadmap ${last ? 'node--roadmap-last' : ''} ${
-          reveal ? 'node--clocked' : ''
-        }`}
-        style={
-          reveal
-            ? {
-                opacity: reveal.node,
-                transform: `translateY(${(1 - reveal.node) * NODE_RISE_PX}px)`,
-                pointerEvents: reveal.node > 0 ? undefined : 'none',
-              }
-            : undefined
-        }
-        onClick={onOpen}
-      >
-        <span className="node-roadmap-index">{index}</span>
-        <span className="node-roadmap-body">
-          <span className="node-roadmap-title">{title}</span>
-          {timeframe && (
-            <span
-              className="node-roadmap-timeframe"
-              style={reveal ? { opacity: reveal.label } : undefined}
-            >
-              {timeframe}
-            </span>
-          )}
-        </span>
-      </button>
-      <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
+      <RoadmapPath
+        stages={data.stages}
+        jobTitle={data.jobTitle}
+        bigFive={data.bigFive}
+        riasec={data.riasec}
+        compact={compact}
+      />
     </>
   );
 }
@@ -122,45 +96,6 @@ export function LoadingNode() {
       <div className="node-loading-dots">
         <span /><span /><span />
       </div>
-    </div>
-  );
-}
-
-export function DetailPanel({ data }) {
-  const { path, onClose } = data;
-  if (!path) return null;
-
-  return (
-    <div className="detail-panel">
-      <button className="detail-close" onClick={onClose}>×</button>
-      <p className="detail-archetype">{path.archetype}</p>
-      <h2 className="detail-title">{path.title}</h2>
-      <p className="detail-desc">{path.description}</p>
-
-      {path.lifestyle && (
-        <div className="detail-section">
-          <h4>Clarity gain</h4>
-          <p>{path.lifestyle}</p>
-        </div>
-      )}
-      {path.careerTrajectory && (
-        <div className="detail-section">
-          <h4>Milestone</h4>
-          <p>{path.careerTrajectory}</p>
-        </div>
-      )}
-      {path.financialOutlook && (
-        <div className="detail-section">
-          <h4>Constraints</h4>
-          <p>{path.financialOutlook}</p>
-        </div>
-      )}
-      {path.risks && (
-        <div className="detail-section">
-          <h4>Risks</h4>
-          <ul>{path.risks.map((r, i) => <li key={i}>{r}</li>)}</ul>
-        </div>
-      )}
     </div>
   );
 }

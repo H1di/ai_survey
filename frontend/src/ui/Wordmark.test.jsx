@@ -4,9 +4,16 @@ import Wordmark from "./Wordmark";
 import { HomeNavContext } from "./homeNav";
 
 describe("Wordmark", () => {
-  it("renders the product name in lower case, as the design draws it", () => {
-    render(<Wordmark />);
-    expect(screen.getByText("invector")).toBeInTheDocument();
+  it("names the product for assistive tech; the drawn logo is decorative", () => {
+    const { container } = render(<Wordmark />);
+    expect(screen.getByText("Invector")).toHaveClass("sr-only");
+    expect(container.querySelectorAll('[aria-hidden="true"] svg')).toHaveLength(2);
+  });
+
+  it("draws the stacked lockup in the hero tone", () => {
+    const { container } = render(<Wordmark tone="hero" />);
+    expect(container.querySelector(".wordmark-lockup svg")).not.toBeNull();
+    expect(container.querySelector(".wordmark-mark")).toBeNull();
   });
 
   it("defaults to the screen tone and accepts the hero tone", () => {

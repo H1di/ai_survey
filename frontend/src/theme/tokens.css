@@ -1,55 +1,59 @@
-/* Invector design tokens. Values are transcribed from the design artifact —
-   do not invent shades. Every colour used anywhere in the app resolves to one
-   of these. */
+/* Invector design tokens: white page, ink hairlines, one turquoise accent.
+   Every colour used anywhere in the app resolves to one of these; canvases
+   and charts read them at runtime (theme/chartPalette.js, motion/*).
+
+   Names are semantic, not hues:
+   - --surface-*  backgrounds. The page is white; --surface-raised is the warm
+                  off-white for fields, idle pills and inset plates.
+   - --line       the ink the interface is drawn with; --line-NN is its alpha
+                  ramp (the hairline system). Lines and shapes, never text.
+   - --accent     the one accent: only for the "now" / chosen / selected state
+                  dot. It fails WCAG AA as text on white (2.5:1) and 3:1 as
+                  a stroke, so it is never a text colour, never the fill of an
+                  ordinary button, and never a focus ring or selected border —
+                  those are drawn in --text (ink).
+   - --text-*     type. The suffix is an emphasis step (it began as an alpha
+                  on the dark theme); every step is a solid grey that clears
+                  4.5:1 on both surfaces. */
 :root {
-  /* Surfaces — three related blacks, used deliberately for depth. */
-  --ink-void: #000000;
-  --ink-page: #0a0a0a;
-  --ink-screen: #0e0e0e;
-  --ink-graph: #050308;
-  --ink-on-gold: #05070b;
+  /* Surfaces */
+  --surface-page: #ffffff;
+  --surface-raised: #faf9f6;
+  --scrim: rgba(250, 249, 246, 0.86);
 
-  /* Gold ramp. The alpha steps are the hairline system. */
-  --gold: #ffd98c;
-  --gold-70: rgba(255, 217, 140, 0.7);
-  --gold-60: rgba(255, 217, 140, 0.6);
-  --gold-50: rgba(255, 217, 140, 0.5);
-  --gold-40: rgba(255, 217, 140, 0.4);
-  --gold-35: rgba(255, 217, 140, 0.35);
-  --gold-30: rgba(255, 217, 140, 0.3);
-  --gold-25: rgba(255, 217, 140, 0.25);
-  --gold-20: rgba(255, 217, 140, 0.2);
-  --gold-18: rgba(255, 217, 140, 0.18);
-  --gold-15: rgba(255, 217, 140, 0.15);
-  --gold-wash: rgba(255, 217, 140, 0.06);
-  --gold-hover: rgba(255, 217, 140, 0.05);
-  --gold-focus: rgba(255, 217, 140, 0.18);
+  /* Line (ink) ramp */
+  --line: #111111;
+  --line-70: rgba(17, 17, 17, 0.7);
+  --line-60: rgba(17, 17, 17, 0.6);
+  --line-50: rgba(17, 17, 17, 0.5);
+  --line-40: rgba(17, 17, 17, 0.4);
+  --line-35: rgba(17, 17, 17, 0.35);
+  --line-30: rgba(17, 17, 17, 0.3);
+  --line-25: rgba(17, 17, 17, 0.25);
+  --line-20: rgba(17, 17, 17, 0.2);
+  --line-18: rgba(17, 17, 17, 0.16);
+  --line-15: rgba(17, 17, 17, 0.12);
+  --line-wash: rgba(17, 17, 17, 0.04);
+  --line-hover: rgba(17, 17, 17, 0.035);
 
-  /* Text */
-  --bone: #f4f0e7;
-  --bone-50: rgba(244, 240, 231, 0.5);
-  --bone-40: rgba(244, 240, 231, 0.4);
-  --text: #ffffff;
-  --text-72: rgba(255, 255, 255, 0.72);
-  --text-60: rgba(255, 255, 255, 0.6);
-  --text-55: rgba(255, 255, 255, 0.55);
-  --text-45: rgba(255, 255, 255, 0.45);
-  --text-40: rgba(255, 255, 255, 0.4);
-  --text-30: rgba(255, 255, 255, 0.3);
-  --field: rgba(255, 255, 255, 0.07);
-  --field-border: rgba(255, 217, 140, 0.32);
-  --pill-idle: rgba(255, 255, 255, 0.06);
+  /* Accent */
+  --accent: #2fb8a6;
+  --accent-wash: rgba(47, 184, 166, 0.1);
+  --accent-focus: rgba(47, 184, 166, 0.28);
+
+  /* Text — contrast on #ffffff / #faf9f6 */
+  --text: #111111; /* 18.9 / 17.9 */
+  --text-72: #3a3a3a; /* 11.4 / 10.8 */
+  --text-60: #4f4f4f; /* 8.2 / 7.8 */
+  --text-55: #555555; /* 7.5 / 7.1 */
+  --text-45: #5c5c5c; /* 6.7 / 6.4 */
+  --text-40: #636363; /* 6.0 / 5.7 */
+  --text-30: #6b6b6b; /* 5.3 / 5.1 */
+  --text-on-line: #ffffff; /* on --line: 18.9 */
+  --text-on-accent: #111111; /* on --accent: 7.7 */
 
   /* State */
-  --positive: #7cffb2;
-  --error: #ff9b9b;
-
-  /* Backgrounds composed from the ramp */
-  --glow-corners:
-    radial-gradient(ellipse 480px 320px at 100% 0%, rgba(255, 217, 140, 0.07), transparent 60%),
-    radial-gradient(ellipse 420px 280px at 0% 100%, rgba(163, 120, 255, 0.06), transparent 60%);
-  --glow-center:
-    radial-gradient(ellipse 600px 360px at 50% 0%, rgba(255, 217, 140, 0.08), transparent 65%);
+  --error: #b3261e; /* 6.5 / 6.2 */
 
   /* Type */
   --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;

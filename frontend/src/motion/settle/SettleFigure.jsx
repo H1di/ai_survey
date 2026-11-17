@@ -18,7 +18,7 @@ const hexPath = (scale) =>
   `${HEX_VERTICES.map((v, i) => `${i ? "L" : "M"}${fmt(CX + v.x * R * scale)} ${fmt(CY + v.y * R * scale)}`).join("")}Z`;
 
 // Two-line block per vertex: "I Investigative" over the score. The lit copy
-// repeats line one in gold at identical metrics and crossfades over it.
+// repeats line one in ink at identical metrics and crossfades over it.
 function VertexLabel({ v, score, scoreAlpha, lit }) {
   const x = CX + v.x * LABEL_R;
   const y = CY + v.y * LABEL_R;
