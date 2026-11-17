@@ -3,8 +3,8 @@
 // Since question-engine v2 the primary interest signal is the measured RIASEC
 // quiz (see riasecItems.js + computeRiasecScores). This module keeps two
 // things: the per-direction Holland weights used to rank the catalog, and a
-// Big Five–only heuristic used ONLY when the user skips the quiz and the AI
-// inference is unavailable.
+// Big Five–only heuristic used when the user skips the quiz and the AI
+// inference is unavailable, and to steady a near-flat quiz (rankingRiasec).
 
 const RIASEC_KEYS = ["R", "I", "A", "S", "E", "C"];
 
@@ -52,20 +52,52 @@ function inferRiasecScores(bigFiveScores) {
   };
 }
 
+// Below this spread (max − min of the six scores, in points) a measured
+// profile has too little shape to rank families by: answering every item alike
+// ties all fifteen, and a tie used to fall to catalog — alphabetical — order,
+// so Agriculture won by default. Under it the measured scores are blended
+// toward the Big Five inference in proportion to how flat they are: a flat
+// quiz ranks by personality alone, a spread of 40+ by the quiz alone.
+const RIASEC_MIN_SPREAD = 40;
+
+// The scores family/occupation ranking uses. Pure; the snapshot exposes the
+// result (rankingRiasecScores) so the frontend scenes rank exactly the same.
+function rankingRiasec(riasecScores, bigFiveScores) {
+  const inferred = inferRiasecScores(bigFiveScores);
+  if (!riasecScores) return inferred;
+  const measured = RIASEC_KEYS.map((k) => riasecScores[k] ?? 50);
+  const spread = Math.max(...measured) - Math.min(...measured);
+  const w = Math.min(1, spread / RIASEC_MIN_SPREAD);
+  if (w === 1) return riasecScores;
+  return Object.fromEntries(
+    RIASEC_KEYS.map((k, i) => [k, Math.round(w * measured[i] + (1 - w) * inferred[k])])
+  );
+}
+
 // Rank catalog directions against a measured (or inferred) RIASEC score
 // vector — weighted dot product, high to low. excludeIds drops rejected ids.
+// Sorted on the unrounded score: rounding first manufactured ties that then
+// fell to catalog order.
 function rankDirections(riasecScores, { excludeIds = [] } = {}) {
   const excluded = new Set(excludeIds);
   return Object.entries(DIRECTION_RIASEC)
     .filter(([id]) => !excluded.has(id))
     .map(([id, weights]) => {
-      let score = 0;
+      let raw = 0;
       for (const [key, weight] of Object.entries(weights)) {
-        score += weight * (riasecScores?.[key] ?? 50);
+        raw += weight * (riasecScores?.[key] ?? 50);
       }
-      return { id, score: Math.round(score) };
+      return { id, raw };
     })
-    .sort((a, b) => b.score - a.score);
+    .sort((a, b) => b.raw - a.raw)
+    .map(({ id, raw }) => ({ id, score: Math.round(raw) }));
 }
 
-module.exports = { RIASEC_KEYS, DIRECTION_RIASEC, inferRiasecScores, rankDirections };
+module.exports = {
+  RIASEC_KEYS,
+  DIRECTION_RIASEC,
+  RIASEC_MIN_SPREAD,
+  inferRiasecScores,
+  rankingRiasec,
+  rankDirections,
+};

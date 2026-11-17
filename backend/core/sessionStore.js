@@ -9,6 +9,7 @@ const {
   serializeRiasecItem,
 } = require("../assessment/questionEngine");
 const { WORK_VALUES_ORDER } = require("../engine/workValues");
+const { rankingRiasec } = require("../engine/riasec");
 const { nextComparison, finalOrder } = require("../assessment/valuesTournament");
 const { MINI_IPIP_20 } = require("../assessment/bigFiveItems");
 
@@ -398,6 +399,12 @@ class SessionStore {
       cvAnalysis: session.cvAnalysis,
       riasecAnswers: session.riasecAnswers,
       riasecScores: session.riasecScores,
+      // Derived, never stored: what family/occupation ranking actually uses
+      // (the quiz, blended toward Big Five when near-flat). The funnel and
+      // output figure rank with it so they show the backend's real shortlist.
+      rankingRiasecScores: session.riasecScores
+        ? rankingRiasec(session.riasecScores, session.bigFiveScores)
+        : null,
       riasecCode: session.riasecCode,
       riasecInferred: session.riasecInferred,
       careerJourneyAnswers: session.careerJourneyAnswers,

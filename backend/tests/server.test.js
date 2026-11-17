@@ -50,7 +50,8 @@ async function walkThroughValues(sessionId) {
   return data;
 }
 
-async function walkToCv() {
+// bigFive / riasec: item → Likert value (defaults: all 3 / all 4).
+async function walkToCv({ bigFive = () => 3, riasec = () => 4 } = {}) {
   let { data } = await post("/api/session/start", {
     dreamAnswer: "build useful things",
   });
@@ -66,14 +67,14 @@ async function walkToCv() {
   assert.equal(data.step, "big_five");
 
   for (const item of bigFiveItems) {
-    ({ data } = await post("/api/big-five/answer", { sessionId, itemId: item.id, value: 3 }));
+    ({ data } = await post("/api/big-five/answer", { sessionId, itemId: item.id, value: bigFive(item) }));
   }
   assert.equal(data.step, "riasec");
 
   ({ data } = await post("/api/riasec/start", { sessionId }));
   assert.equal(data.riasecItems.length, 12);
   for (const item of data.riasecItems) {
-    ({ data } = await post("/api/riasec/answer", { sessionId, itemId: item.id, value: 4 }));
+    ({ data } = await post("/api/riasec/answer", { sessionId, itemId: item.id, value: riasec(item) }));
   }
   assert.equal(data.step, "values");
   assert.ok(data.riasecCode, "code derived on completion");
@@ -84,8 +85,8 @@ async function walkToCv() {
   return { sessionId, data, careerJourneyQuestions };
 }
 
-async function completeAssessment() {
-  const walked = await walkToCv();
+async function completeAssessment(answers) {
+  const walked = await walkToCv(answers);
   const { sessionId, careerJourneyQuestions } = walked;
   await post("/api/cv/intent", { sessionId, cvIntent: "new" });
   let data = walked.data;
@@ -448,4 +449,33 @@ test("every output carries a snapshot-grounded onet block; keyless has no salary
   assert.ok(second.onet);
   assert.notEqual(second.socCode, first.socCode);
   assert.notEqual(second.directionId, first.directionId);
+});
+
+// Regression (prod, 2026-11-17): answering the interest quiz all alike tied
+// every field family, ties fell to catalog order, and Agriculture came first
+// whatever else the user said. A near-flat quiz now ranks by Big Five.
+test("a flat interest quiz ranks by personality, not by the alphabet", async () => {
+  const { MINI_IPIP_20 } = require("../assessment/bigFiveItems");
+  const traitOf = new Map(MINI_IPIP_20.map((i) => [i.id, i]));
+  // Likert value that pushes `trait` to `high` (true) or low.
+  const persona = (levels) => (item) => {
+    const { trait, reverse } = traitOf.get(item.id);
+    if (!(trait in levels)) return 3;
+    return levels[trait] !== reverse ? 5 : 1;
+  };
+  const runs = [
+    persona({ O: true, E: false, C: false }), // curious, reserved
+    persona({ O: false, E: true, C: true, A: true }), // outgoing, organised
+  ];
+  const fields = [];
+  for (const bigFive of runs) {
+    const { sessionId, data: done } = await completeAssessment({ bigFive, riasec: () => 3 });
+    assert.ok(done.riasecScores, "the quiz itself is still reported as answered");
+    assert.notDeepEqual(done.rankingRiasecScores, done.riasecScores, "flat quiz is steadied");
+    const { data } = await post("/api/output/first", { sessionId });
+    const field = data.outputs[0].directionId;
+    assert.notEqual(field, "agriculture");
+    fields.push(field);
+  }
+  assert.notEqual(fields[0], fields[1], "different personalities reach different families");
 });

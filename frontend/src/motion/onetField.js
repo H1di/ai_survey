@@ -58,13 +58,15 @@ export function rankDirections(field, riasecScores, { excludeIds = [] } = {}) {
   return field.directions
     .filter((d) => !excluded.has(d.id))
     .map((d) => {
-      let score = 0;
+      let raw = 0;
       for (const [key, weight] of Object.entries(d.weights)) {
-        score += weight * (riasecScores?.[key] ?? 50);
+        raw += weight * (riasecScores?.[key] ?? 50);
       }
-      return { id: d.id, label: d.label, score: Math.round(score) };
+      return { id: d.id, label: d.label, raw };
     })
-    .sort((a, b) => b.score - a.score);
+    // Unrounded, as the backend sorts: rounding first made ties.
+    .sort((a, b) => b.raw - a.raw)
+    .map(({ id, label, raw }) => ({ id, label, score: Math.round(raw) }));
 }
 
 // Occupations by Pearson r against the interest scores, high to low; ties

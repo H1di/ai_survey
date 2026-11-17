@@ -11,7 +11,7 @@ const {
 } = require("./prompts");
 const { WORK_VALUES_META } = require("./workValues");
 const { DIRECTIONS, getDirection } = require("./directions");
-const { rankDirections, inferRiasecScores } = require("./riasec");
+const { rankDirections, inferRiasecScores, rankingRiasec } = require("./riasec");
 const { rankOccupations, getOccupation } = require("./onet");
 
 const WORK_VALUE_LABELS = new Map(WORK_VALUES_META.map((m) => [m.id, m.label]));
@@ -21,8 +21,9 @@ function usedSocs(session) {
   return (session.outputs || []).map((o) => o.socCode).filter(Boolean);
 }
 
+// Ranking input: the quiz, steadied by Big Five when it is near-flat.
 function sessionRiasec(session) {
-  return session.riasecScores ?? inferRiasecScores(session.bigFiveScores);
+  return rankingRiasec(session.riasecScores, session.bigFiveScores);
 }
 
 // The AI must pick from the shortlist; hold it to that. Unknown/missing code

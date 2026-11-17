@@ -17,6 +17,12 @@ const PROFILES = [
   { R: 94, I: 58, A: 15, S: 22, E: 36, C: 80 },
   { R: 18, I: 30, A: 62, S: 92, E: 74, C: 40 },
   { R: 50, I: 50, A: 50, S: 50, E: 50, C: 50 }, // flat: zero variance
+  // What the snapshot's rankingRiasecScores carries for a near-flat quiz:
+  // the backend's own blend toward Big Five, ranked through the mirror.
+  backendRiasec.rankingRiasec(
+    { R: 50, I: 63, A: 50, S: 50, E: 50, C: 38 },
+    { O: 90, C: 35, E: 20, A: 60 }
+  ),
 ];
 
 describe("onet-field.json", () => {

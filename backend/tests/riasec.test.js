@@ -4,6 +4,7 @@ const {
   RIASEC_KEYS,
   DIRECTION_RIASEC,
   inferRiasecScores,
+  rankingRiasec,
   rankDirections,
 } = require("../engine/riasec");
 const { DIRECTION_IDS } = require("../engine/directions");
@@ -57,4 +58,36 @@ test("rankDirections excludes rejected ids and tolerates a missing vector", () =
   assert.ok(!ranked.some((r) => r.id === "science"));
   const neutral = rankDirections(undefined);
   assert.equal(neutral.length, Object.keys(DIRECTION_RIASEC).length);
+});
+
+test("rankingRiasec keeps a quiz with real shape untouched", () => {
+  const measured = { R: 20, I: 90, A: 60, S: 40, E: 30, C: 50 }; // spread 70
+  assert.deepEqual(rankingRiasec(measured, { O: 10, C: 90, E: 90, A: 10 }), measured);
+  const edge = { R: 50, I: 90, A: 60, S: 60, E: 60, C: 60 }; // spread exactly 40
+  assert.deepEqual(rankingRiasec(edge, { O: 10 }), edge);
+});
+
+test("rankingRiasec ranks a flat quiz by Big Five alone, and blends in between", () => {
+  const flat = { R: 50, I: 50, A: 50, S: 50, E: 50, C: 50 };
+  const bigFive = { O: 90, C: 30, E: 20, A: 60 };
+  const inferred = inferRiasecScores(bigFive);
+  const rounded = Object.fromEntries(RIASEC_KEYS.map((k) => [k, Math.round(inferred[k])]));
+  assert.deepEqual(rankingRiasec(flat, bigFive), rounded);
+  // Spread 20 → half quiz, half inference.
+  const mild = { R: 50, I: 70, A: 50, S: 50, E: 50, C: 50 };
+  const blended = rankingRiasec(mild, bigFive);
+  for (const k of RIASEC_KEYS) {
+    assert.equal(blended[k], Math.round(0.5 * mild[k] + 0.5 * inferred[k]));
+  }
+  // No quiz at all → the inference, as before.
+  assert.deepEqual(rankingRiasec(null, bigFive), inferred);
+});
+
+test("a flat quiz no longer defaults to the alphabetically first family", () => {
+  const flat = { R: 50, I: 50, A: 50, S: 50, E: 50, C: 50 };
+  const curious = rankDirections(rankingRiasec(flat, { O: 95, C: 40, E: 15, A: 50 }))[0].id;
+  const outgoing = rankDirections(rankingRiasec(flat, { O: 40, C: 70, E: 95, A: 80 }))[0].id;
+  assert.notEqual(curious, "agriculture");
+  assert.notEqual(outgoing, "agriculture");
+  assert.notEqual(curious, outgoing, "different personalities must reach different families");
 });
