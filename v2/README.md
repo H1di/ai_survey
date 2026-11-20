@@ -1,6 +1,6 @@
 # Invector v2: path-first preview
 
-v2 rebuilds the product around the flow in the November 2026 business report: **a free roadmap built from real courses first, with paid add-ons on top**. It is a copy that sits beside v1. Nothing in the repository root (`backend/`, `frontend/`) was changed or removed, and both versions run at the same time.
+v2 rebuilds the product around the flow in the November 2026 business report ([`docs/invector-business-report-2026-11.pdf`](../docs/invector-business-report-2026-11.pdf)): **a free roadmap built from real courses first, with paid add-ons on top**. It is a copy that sits beside v1. Nothing in the repository root (`backend/`, `frontend/`) was changed or removed, and both versions run at the same time.
 
 |          | v1 (root)                         | v2 (`v2/`)                                 |
 |----------|-----------------------------------|--------------------------------------------|
