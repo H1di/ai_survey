@@ -265,6 +265,30 @@ test("runJsonCompletion forwards an explicit max_output_tokens ceiling", async (
   assert.equal(parsed.ok, true);
 });
 
+// --- ESCO ---
+
+test("keyless first output takes its title and thesis from ESCO", async () => {
+  const { pickEsco, escoTitle } = require("../engine/esco");
+  const output = await engine.generateFirstOutput({ session: fakeSession() });
+  const esco = pickEsco(output.socCode);
+  assert.ok(esco);
+  assert.equal(output.jobTitle, escoTitle(esco));
+  assert.equal(output.thesis, esco.description);
+  assert.equal(output.escoId, esco.id);
+});
+
+test("keyless whyThisFits skills to develop come from ESCO essential skills", async () => {
+  const session = fakeSession();
+  const output = {
+    jobTitle: "nurse",
+    orientedField: "Healthcare",
+    socCode: "29-1141.00",
+    esco: { essentialSkills: ["triage", "patient care", "wound care", "x"] },
+  };
+  const why = await engine.generateWhyThisFits({ session, output });
+  assert.deepEqual(why.skillsToDevelop.slice(0, 3), ["triage", "patient care", "wound care"]);
+});
+
 // Regression (found 2026-11-20): OpenAI rejects json_object mode with a 400
 // unless the *input* mentions JSON — the instructions do not count — so
 // every generator whose user message lacked the word silently fell back.

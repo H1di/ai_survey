@@ -479,3 +479,42 @@ test("a flat interest quiz ranks by personality, not by the alphabet", async () 
   }
   assert.notEqual(fields[0], fields[1], "different personalities reach different families");
 });
+
+// --- ESCO ---
+
+test("outputs carry ESCO content; O*NET stays as the US complement", async () => {
+  const { sessionId } = await completeAssessment();
+  let { data } = await post("/api/output/first", { sessionId });
+  const [first] = data.outputs;
+  assert.match(first.esco.uri, /^http:\/\/data\.europa\.eu\/esco\/occupation\//);
+  assert.equal(typeof first.esco.education.eqfMin, "number");
+  assert.equal(first.jobTitle, first.esco.title);
+  assert.ok(first.esco.essentialSkills.length > 0);
+  assert.match(first.esco.attribution, /ESCO classification of the European Commission/);
+  assert.match(first.onet.attribution, /O\*NET/);
+  assert.equal(first.escoId, undefined, "the pick lives in esco.id only");
+  const { escoForSoc } = require("../engine/esco");
+  assert.ok(escoForSoc(first.socCode).some((o) => o.id === first.esco.id));
+
+  ({ data } = await post("/api/output/refine", { sessionId, outputId: first.id }));
+  assert.ok(data.outputs[1].esco, "a refine output also carries ESCO");
+});
+
+// Review Focus 1: sessions saved before ESCO keep working end to end.
+test("an output stored without esco still refines, accepts and builds a roadmap", async () => {
+  const { store } = require("../server");
+  const { sessionId } = await completeAssessment();
+  let { data } = await post("/api/output/first", { sessionId });
+  const session = store.get(sessionId);
+  delete session.outputs[0].esco;
+
+  let status;
+  ({ status, data } = await post("/api/output/refine", { sessionId, outputId: "output_1" }));
+  assert.equal(status, 200);
+  assert.equal(data.outputs[0].esco, undefined);
+  ({ status, data } = await post("/api/output/accept", { sessionId, outputId: "output_1" }));
+  assert.equal(status, 200);
+  assert.ok(data.outputs[0].detail);
+  ({ status, data } = await post("/api/roadmap/generate", { sessionId, outputId: "output_1" }));
+  assert.equal(status, 200);
+});

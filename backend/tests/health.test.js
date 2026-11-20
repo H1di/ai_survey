@@ -43,3 +43,13 @@ test("health never exposes the O*NET key, in any form", async () => {
     assert.ok(!serialized.includes(forbidden), `health leaked ${forbidden}: ${serialized}`);
   }
 });
+
+test("health reports the ESCO snapshot without any ESCO URL", async () => {
+  const { ESCO_OCCUPATION_COUNT, ESCO_VERSION } = require("../engine/esco");
+  const response = await fetch(`${base}/api/health`);
+  const text = await response.text();
+  const body = JSON.parse(text);
+  assert.equal(body.esco.occupations, ESCO_OCCUPATION_COUNT);
+  assert.equal(body.esco.version, ESCO_VERSION);
+  assert.doesNotMatch(text, /esco\.ec\.europa\.eu/);
+});

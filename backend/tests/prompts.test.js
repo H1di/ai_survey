@@ -191,3 +191,33 @@ test("no builder leaks seeded PII", () => {
   assert.ok(!texts[0].includes("Olena Kovalenko"));
   assert.ok(!texts[3].includes("Olena Kovalenko"));
 });
+
+// --- ESCO grounding ---
+
+test("shortlist lines list up to 3 ESCO candidates per SOC; schema asks for escoId", () => {
+  const { escoForSoc } = require("../engine/esco");
+  const soc = "15-1252.00";
+  assert.ok(escoForSoc(soc).length > 3, "fixture SOC has more than 3 ESCO matches");
+  const { system, user } = prompts.buildOrientedFieldPrompt({
+    profileDigest: "p",
+    occupationShortlist: [{ soc, title: "Software Developers", blurb: "Build software." }],
+  });
+  const line = user.split("\n").find((l) => l.includes(`[${soc}]`));
+  assert.match(line, /\| ESCO: \[/);
+  const escoPart = line.slice(line.indexOf("| ESCO:"));
+  assert.equal((escoPart.match(/\[[0-9a-f-]{36}\]/g) || []).length, 3);
+  assert.match(escoPart, new RegExp(`\\[${escoForSoc(soc)[0].id}\\]`));
+  assert.match(system, /"escoId"/);
+  assert.match(system, /escoId of the listed ESCO occupation/);
+});
+
+test("why-this-fits prompt grounds skills in ESCO essential skills", () => {
+  const { system, user } = prompts.buildWhyThisFitsPrompt({
+    profileDigest: "p",
+    output: { jobTitle: "nurse", orientedField: "Health", thesis: "t" },
+    escoSkills: ["patient care", "triage"],
+  });
+  assert.match(user, /ESCO essential skills for this occupation: patient care, triage/);
+  assert.match(system, /ESCO essential skills/);
+  assert.doesNotMatch(user, /O\*NET core skills/);
+});

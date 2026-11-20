@@ -1,6 +1,7 @@
 const { CAREER_JOURNEY_QUESTIONS } = require("../assessment/questionPool");
 const { WORK_VALUES_META } = require("./workValues");
 const { scrubPii, scrubCvHeader } = require("./piiScrub");
+const { escoForSoc } = require("./esco");
 
 const JOURNEY_QUESTION_BY_ID = new Map(CAREER_JOURNEY_QUESTIONS.map((q) => [q.id, q.question]));
 const WORK_VALUE_LABEL = new Map(WORK_VALUES_META.map((m) => [m.id, m.label]));
@@ -156,21 +157,29 @@ function buildCvParsePrompt(cvText) {
 }
 
 const OUTPUT_SCHEMA =
-  '{"orientedField":"","jobTitle":"","socCode":"","thesis":"","firstMilestone":"","constraintsNote":""}';
+  '{"orientedField":"","jobTitle":"","socCode":"","escoId":"","thesis":"","firstMilestone":"","constraintsNote":""}';
 
 // Real O*NET occupations pre-ranked against the user's measured RIASEC
-// profile. Rendered into the user message so the model chooses from
+// profile, each with up to 3 of its ESCO occupations (titles only — the
+// token budget). Rendered into the user message so the model chooses from
 // evidence, not imagination.
 function shortlistLines(occupationShortlist) {
   return occupationShortlist
-    .map((o) => `- [${o.soc}] ${o.title} — ${o.blurb}`)
+    .map((o) => {
+      const esco = escoForSoc(o.soc)
+        .slice(0, 3)
+        .map((e) => `[${e.id}] ${e.titles.en}`)
+        .join("; ");
+      return `- [${o.soc}] ${o.title} — ${o.blurb}${esco ? ` | ESCO: ${esco}` : ""}`;
+    })
     .join("\n");
 }
 
 const SHORTLIST_RULE =
   "The user message lists real O*NET occupations already matched to the user's measured interests. " +
   "Pick the single best occupation FROM THIS LIST and return its code in socCode. " +
-  "jobTitle may specialize the title (seniority, niche) but must stay recognizably that occupation.";
+  "jobTitle may specialize the title (seniority, niche) but must stay recognizably that occupation. " +
+  "Also return the escoId of the listed ESCO occupation that fits best.";
 
 // directionHint: [{ id, label }] high-to-low from rankDirections — a grounding
 // signal, not a hard constraint. excludeFields: field families the user
@@ -216,7 +225,7 @@ const WHY_THIS_FITS_SCHEMA =
 
 // Second call after an output is generated: a structured, traceable
 // explanation with fixed bullet counts so the UI renders a stable block.
-function buildWhyThisFitsPrompt({ profileDigest, output, topValueLabel, onetSkills = [] }) {
+function buildWhyThisFitsPrompt({ profileDigest, output, topValueLabel, escoSkills = [] }) {
   const system = [
     "You explain why one specific job fits one specific person.",
     "Return valid JSON only and no extra keys.",
@@ -226,16 +235,16 @@ function buildWhyThisFitsPrompt({ profileDigest, output, topValueLabel, onetSkil
     `values: exactly 1 point about the person's top-ranked work value${topValueLabel ? ` (${topValueLabel})` : ""} and how well this occupation satisfies it. If the job conflicts with that value, say so plainly instead of hiding it.`,
     "currentSkills: 2-3 points naming skills or experience the person already reported and how each transfers.",
     "skillsToDevelop: 3-4 short skill names (not sentences) the person should build for this job." +
-      (onetSkills.length
-        ? " Prefer the measured O*NET core skills listed in the user message over invented ones."
+      (escoSkills.length
+        ? " Prefer the ESCO essential skills listed in the user message over invented ones."
         : ""),
     "Every point must trace to a specific score, rank, or answer from the profile - never a generic claim.",
     "Plain, human words. No jargon. No passive voice. Short sentences. Start with the point.",
   ].join(" ");
   const user = [
     `Job: ${output.jobTitle} (${output.orientedField}). ${output.thesis}`,
-    onetSkills.length
-      ? `Measured O*NET core skills for this occupation: ${onetSkills.join(", ")}`
+    escoSkills.length
+      ? `ESCO essential skills for this occupation: ${escoSkills.join(", ")}`
       : null,
     "Profile:",
     profileDigest,
