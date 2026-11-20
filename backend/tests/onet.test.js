@@ -97,3 +97,13 @@ test("attribution, version, and job zone labels are exported", () => {
     assert.equal(typeof JOB_ZONE_LABELS[zone], "string");
   }
 });
+
+test("rankOccupations only returns occupations that have ESCO content", () => {
+  const { hasEsco } = require("../engine/esco");
+  const { RANKABLE_OCCUPATION_COUNT } = require("../engine/onet");
+  const flat = { R: 50, I: 50, A: 50, S: 50, E: 50, C: 50 };
+  const all = rankOccupations(flat, { limit: 1000 });
+  assert.ok(all.every((o) => hasEsco(o.soc)));
+  assert.equal(all.length, RANKABLE_OCCUPATION_COUNT);
+  assert.ok(RANKABLE_OCCUPATION_COUNT < 923);
+});
