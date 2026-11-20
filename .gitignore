@@ -15,7 +15,6 @@ npm-debug.log*
 graphify-out/
 
 frontend/dist/
-v2/frontend/dist/
 .superpowers/
 
 .vercel/

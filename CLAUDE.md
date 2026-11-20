@@ -6,8 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Life Path Explorer** — a two-part web app. Part one is a psychological assessment (demographics → Big Five/OCEAN → RIASEC interests → an adaptive work-values tournament → CV/career-journey signal → character summary). Part two is the **Life Path Engine**: the assessment profile feeds AI prompts (OpenAI `gpt-6-luna` via the Responses API with reasoning off, JSON mode) that produce an Oriented Field + concrete job (the "1st Output") scored on the six Minnesota / O*NET Work Values; the user iterates it through a Yes/No loop (No regenerates from a different field family), and accepting an output reveals four advice blocks plus a step-by-step roadmap — all rendered as an interactive React Flow graph.
 
-**v2 (path-first preview)** lives in `v2/` as a separate copy built from the November 2026 business report: personal questions → case → a roadmap built from a course catalogue (currently sample data) → user-managed edits with 3 free rebuilds → paid add-ons (tests + deeper guidance, unlimited rebuilds; payments mocked). It runs beside v1 on `:3002`/`:5174` and has its own tests and CI (`.github/workflows/ci-v2.yml`). Read `v2/README.md` before touching it; changes to the root `backend/`/`frontend/` do not affect v2 and vice versa.
-
 Active code lives in `backend/` (Node + Express 5, CommonJS) and `frontend/` (React 19 + Vite + `@xyflow/react`). An older CRA implementation was removed in July 2026; if you ever need it, it is preserved at git tag `archive/legacy-cra-2026-07`.
 
 ## Development Commands
