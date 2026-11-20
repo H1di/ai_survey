@@ -252,7 +252,7 @@ test("runJsonCompletion forwards an explicit max_output_tokens ceiling", async (
       },
     },
   };
-  const parsed = await runJsonCompletion(fakeClient, {
+  const { parsed } = await runJsonCompletion(fakeClient, {
     model: "m",
     system: "s",
     user: "u",
@@ -300,4 +300,43 @@ test("runJsonCompletion always mentions JSON in the input message", async () => 
   await runJsonCompletion(fakeClient, { model: "m", system: "Return valid JSON only.", user: "Produce it now." });
   assert.match(captured.input, /json/i);
   assert.match(captured.input, /^Produce it now\./);
+});
+
+// --- token usage log ---
+
+test("each successful AI call logs one ai_usage line from response.usage", async () => {
+  const stub = {
+    responses: {
+      create: async () => ({
+        output_text: '{"summary":"A. B. C."}',
+        usage: { input_tokens: 10, input_tokens_details: { cached_tokens: 4 }, output_tokens: 3 },
+      }),
+    },
+  };
+  const live = createAiEngine({ client: stub, model: "m" });
+  const lines = [];
+  const original = console.log;
+  console.log = (...args) => lines.push(args.join(" "));
+  try {
+    await live.generatePersonaSummary({ session: fakeSession() });
+  } finally {
+    console.log = original;
+  }
+  assert.deepEqual(lines, [
+    '{"kind":"ai_usage","label":"persona summary","input":10,"cached":4,"output":3}',
+  ]);
+});
+
+test("missing usage logs zeros; keyless logs nothing", async () => {
+  const stub = { responses: { create: async () => ({ output_text: '{"summary":"A. B. C."}' }) } };
+  const lines = [];
+  const original = console.log;
+  console.log = (...args) => lines.push(args.join(" "));
+  try {
+    await createAiEngine({ client: stub, model: "m" }).generatePersonaSummary({ session: fakeSession() });
+    await engine.generatePersonaSummary({ session: fakeSession() });
+  } finally {
+    console.log = original;
+  }
+  assert.deepEqual(lines, ['{"kind":"ai_usage","label":"persona summary","input":0,"cached":0,"output":0}']);
 });

@@ -493,13 +493,14 @@ async function runJsonCompletion(client, { model, system, user, maxTokens }) {
     text: { format: { type: "json_object" } },
   });
 
-  return parseJsonObject(response?.output_text);
+  return { parsed: parseJsonObject(response?.output_text), usage: response?.usage };
 }
 
-function createAiEngine({ apiKey, model }) {
+// `client` is injectable for tests; otherwise built from the key.
+function createAiEngine({ apiKey, model, client: injected }) {
   // A hung upstream call must fail fast into the deterministic fallback
   // instead of pinning the request for the SDK's 10-minute default.
-  const client = apiKey ? new OpenAI({ apiKey, timeout: 30_000, maxRetries: 1 }) : null;
+  const client = injected || (apiKey ? new OpenAI({ apiKey, timeout: 30_000, maxRetries: 1 }) : null);
 
   // Every generator has one shape: keyless → fallback; otherwise one JSON call
   // whose payload `normalize` validates, and any failure (network, timeout,
@@ -508,7 +509,17 @@ function createAiEngine({ apiKey, model }) {
     if (!client) return fallback();
     try {
       const { system, user } = prompt();
-      const parsed = await runJsonCompletion(client, { model, system, user, maxTokens });
+      const { parsed, usage } = await runJsonCompletion(client, { model, system, user, maxTokens });
+      // One line per billed call, so token cuts are made from measurements.
+      console.log(
+        JSON.stringify({
+          kind: "ai_usage",
+          label,
+          input: usage?.input_tokens || 0,
+          cached: usage?.input_tokens_details?.cached_tokens || 0,
+          output: usage?.output_tokens || 0,
+        })
+      );
       return normalize(parsed);
     } catch (error) {
       console.error(`[AI ${label} fallback]`, error.message);
