@@ -4,6 +4,8 @@
 // occupation among its crosswalk matches supplies everything the person reads:
 // title, description, skills, education level. No network, no key.
 const snapshot = require("../data/esco-snapshot.json");
+// Titles only — read straight from the data file (onet.js requires this module).
+const onetTitles = new Map(require("../data/onet-snapshot.json").occupations.map((o) => [o.soc, o.title]));
 
 const ESCO_ATTRIBUTION = snapshot.attribution;
 const ESCO_VERSION = snapshot.version;
@@ -11,8 +13,27 @@ const ESCO_OCCUPATION_COUNT = snapshot.occupations.length;
 const ESCO_URI_PREFIX = "http://data.europa.eu/esco/occupation/";
 const MATCH_RANK = { exact: 0, close: 1, narrow: 2, broad: 3 };
 
-// soc → occupations, best match first: exact → close → narrow → broad,
-// crosswalked before ISCO-inherited, then English title.
+// Crude stems (5-letter prefixes, no filler words) for title comparison.
+const STOP_WORDS = new Set(["and", "the", "for", "all", "other", "except", "with"]);
+function stems(title) {
+  return new Set(
+    title
+      .toLowerCase()
+      .split(/[^a-z]+/)
+      .filter((w) => w.length > 2 && !STOP_WORDS.has(w))
+      .map((w) => w.slice(0, 5))
+  );
+}
+function similarity(a, b) {
+  const shared = [...a].filter((w) => b.has(w)).length;
+  return shared / (a.size + b.size - shared || 1);
+}
+
+// soc → occupations, best match first. The crosswalk's match type alone is
+// noisy (alphabetical ties put "database developer" on Software Developers,
+// "timber trader" on farm-product buyers), so a candidate whose title names
+// the O*NET occupation comes first; then exact → close → narrow → broad,
+// crosswalked before ISCO-inherited, closer title, English title.
 const bySoc = new Map();
 for (const occ of snapshot.occupations) {
   for (const [soc, match] of occ.soc) {
@@ -21,7 +42,15 @@ for (const occ of snapshot.occupations) {
   }
 }
 for (const [soc, list] of bySoc) {
-  list.sort((a, b) => a.rank - b.rank || a.occ.titles.en.localeCompare(b.occ.titles.en, "en"));
+  const onet = stems(onetTitles.get(soc) || "");
+  for (const entry of list) entry.sim = similarity(stems(entry.occ.titles.en), onet);
+  list.sort(
+    (a, b) =>
+      (b.sim > 0) - (a.sim > 0) ||
+      a.rank - b.rank ||
+      b.sim - a.sim ||
+      a.occ.titles.en.localeCompare(b.occ.titles.en, "en")
+  );
   bySoc.set(soc, list.map((entry) => entry.occ));
 }
 
@@ -40,8 +69,11 @@ function pickEsco(soc, escoId) {
   return list.find((o) => o.id === escoId) || list[0] || null;
 }
 
+// Headline form of an ESCO label: first letter capitalised (acronyms such as
+// "ICT" untouched), gendered "a/b" pairs spaced.
 function escoTitle(occ, lang = "en") {
-  return occ.titles[lang] || occ.titles.en;
+  const raw = (occ.titles[lang] || occ.titles.en).replace(/\s*\/\s*/g, " / ");
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
 // ISCO-08 skill levels per major group, and the EQF range each level spans.
