@@ -32,15 +32,18 @@ describe("onet-field.json", () => {
     expect(raw).toEqual(JSON.parse(JSON.stringify(buildField())));
   });
 
-  it("covers every snapshot occupation and carries the attribution line", () => {
-    expect(field.occupations).toHaveLength(backendOnet.SNAPSHOT_OCCUPATION_COUNT);
+  it("covers every rankable (ESCO-backed) occupation and carries the attribution line", () => {
+    expect(field.occupations).toHaveLength(backendOnet.RANKABLE_OCCUPATION_COUNT);
+    const { hasEsco } = require("../../../backend/engine/esco.js");
+    expect(field.occupations.every((o) => hasEsco(o.soc))).toBe(true);
     expect(field.version).toBe(backendOnet.SNAPSHOT_VERSION);
     expect(field.attribution).toBe(backendOnet.ONET_ATTRIBUTION);
     expect(field.occupations.every((o) => o.directionId)).toBe(true);
   });
 
-  it("holds no salary or outlook data", () => {
+  it("holds no salary or outlook data, and no ESCO text", () => {
     expect(JSON.stringify(raw)).not.toMatch(/salary|outlook|annualMedian/i);
+    expect(JSON.stringify(raw)).not.toMatch(/\bESCO\b|europa\.eu/);
   });
 });
 

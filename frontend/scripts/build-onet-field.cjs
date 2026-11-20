@@ -1,13 +1,14 @@
 // Builds frontend/src/motion/data/onet-field.json — the slice of the backend's
-// O*NET snapshot the shipped scenes draw: every occupation's measured RIASEC
+// O*NET snapshot the shipped scenes draw: every rankable (ESCO-backed)
+// occupation's measured RIASEC
 // profile, title and field family, plus the per-family Holland weights the
 // backend ranks families with. It is reference data, identical for every
 // user; everything personal still comes from the session snapshot.
 //
 //   node frontend/scripts/build-onet-field.cjs
 //
-// Regenerate whenever backend/data/onet-snapshot.json, engine/riasec.js or
-// engine/directions.js changes — src/motion/onetField.test.js fails on drift.
+// Regenerate whenever backend/data/onet-snapshot.json, esco-snapshot.json,
+// engine/riasec.js or engine/directions.js changes — src/motion/onetField.test.js fails on drift.
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -16,6 +17,7 @@ const snapshot = require(path.join(backend, "data", "onet-snapshot.json"));
 const { RIASEC_KEYS, DIRECTION_RIASEC } = require(path.join(backend, "engine", "riasec.js"));
 const { DIRECTIONS } = require(path.join(backend, "engine", "directions.js"));
 const { ONET_ATTRIBUTION } = require(path.join(backend, "engine", "onet.js"));
+const { hasEsco } = require(path.join(backend, "engine", "esco.js"));
 
 function buildField() {
   const directions = DIRECTIONS.map((d) => ({
@@ -29,8 +31,9 @@ function buildField() {
     attribution: ONET_ATTRIBUTION,
     riasecKeys: RIASEC_KEYS,
     directions,
-    // [soc, title, R, I, A, S, E, C, directionIndex] in snapshot order.
-    occupations: snapshot.occupations.map((o) => [
+    // [soc, title, R, I, A, S, E, C, directionIndex] in snapshot order — only
+    // the SOCs the backend ranks (those with ESCO content). No ESCO text.
+    occupations: snapshot.occupations.filter((o) => hasEsco(o.soc)).map((o) => [
       o.soc,
       o.title,
       ...RIASEC_KEYS.map((k) => o.riasec[k] ?? 0),

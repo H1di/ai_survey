@@ -41,6 +41,7 @@ const {
   SNAPSHOT_VERSION,
   SNAPSHOT_OCCUPATION_COUNT,
 } = require("./engine/onet");
+const { pickEsco, escoBlock, ESCO_VERSION, ESCO_OCCUPATION_COUNT } = require("./engine/esco");
 const { createOnetApi } = require("./services/onetApi");
 const { createSupabaseDb } = require("./services/supabaseDb");
 const { createAuth } = require("./core/auth");
@@ -322,6 +323,7 @@ app.get("/api/health", (_req, res) => {
       occupations: SNAPSHOT_OCCUPATION_COUNT,
       ...onetApi.getStatus(),
     },
+    esco: { version: ESCO_VERSION, occupations: ESCO_OCCUPATION_COUNT },
   });
 });
 
@@ -702,13 +704,17 @@ function buildOnetBlock(socCode, extras) {
 // scores values), its top three, the fit against the user's confirmed
 // hierarchy, the O*NET card, and the traceable whyThisFits explanation.
 async function buildOutput(session, excludeDirectionIds) {
-  const raw = await aiEngine.generateFirstOutput({ session, excludeDirectionIds });
+  const { escoId, ...raw } = await aiEngine.generateFirstOutput({ session, excludeDirectionIds });
   const onetExtras = await onetApi.fetchCareerExtras(raw.socCode);
-  const workValues =
-    (raw.socCode && getOccupation(raw.socCode)?.workValues) ||
-    buildFallbackProfessionValues(raw.directionId);
+  const occupation = raw.socCode ? getOccupation(raw.socCode) : null;
+  const workValues = occupation?.workValues || buildFallbackProfessionValues(raw.directionId);
+  // ESCO wins where it has a value: the AI's escoId only counts when it is
+  // one of this SOC's own ESCO occupations (else the best match).
+  const escoOcc = raw.socCode ? pickEsco(raw.socCode, escoId) : null;
+  const esco = escoOcc ? escoBlock(escoOcc, { jobZone: occupation?.jobZone, soc: raw.socCode }) : null;
   const output = {
     ...raw,
+    ...(esco ? { jobTitle: esco.title, esco } : {}),
     workValues,
     topValues: deriveTopValues(workValues),
     valuesFit: session.userValues ? valuesFit(session.userValues.scores, workValues) : null,

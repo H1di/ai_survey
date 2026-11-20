@@ -342,6 +342,24 @@ export function whyThisFitsSections(output) {
 // Maps an output's O*NET block to one InfoPanel section. Salary/outlook are
 // live-API extras (absent keyless) and always carry the US-market flag —
 // the audience is not US-only. footnote carries the CC-BY attribution.
+// The ESCO block comes first: title, skills and education the person reads are
+// European data. Null for outputs saved before ESCO.
+export function escoSection(output) {
+  const esco = output?.esco;
+  if (!esco) return null;
+  const items = [];
+  const edu = esco.education;
+  if (edu) {
+    const level = edu.eqfMin === edu.eqfMax ? `${edu.eqfMin}` : `${edu.eqfMin}–${edu.eqfMax}`;
+    items.push(`Typical education: EQF ${level} (estimate).`);
+  }
+  if (esco.essentialSkills?.length) {
+    items.push(`Essential skills: ${esco.essentialSkills.slice(0, 12).join(", ")}.`);
+  }
+  return { heading: "European occupation (ESCO)", items, footnote: esco.attribution };
+}
+
+// O*NET complements ESCO: where ESCO has a value (skills), O*NET's is not shown.
 export function onetSection(output) {
   const onet = output?.onet;
   if (!onet) return null;
@@ -359,13 +377,13 @@ export function onetSection(output) {
       `US job outlook: ${onet.outlook.category}${onet.outlook.brightOutlook ? " — new opportunities very likely" : ""}.`
     );
   }
-  if (onet.skills?.length) items.push(`Core skills: ${onet.skills.join(", ")}.`);
+  if (onet.skills?.length && !output.esco) items.push(`Core skills: ${onet.skills.join(", ")}.`);
   if (onet.tech?.length) items.push(`Tools & technology: ${onet.tech.join(", ")}.`);
   if (onet.related?.length) {
     items.push(`Related occupations: ${onet.related.map((r) => r.title).join(", ")}.`);
   }
   return {
-    heading: "Real-world data (O*NET)",
+    heading: "US data (O*NET)",
     items,
     footnote: onet.attribution,
   };

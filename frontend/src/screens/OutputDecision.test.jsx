@@ -105,7 +105,7 @@ describe("OutputDecision", () => {
       render(<OutputDecision {...withField} animateArrival reducedMotion />);
       expect(
         screen.getByRole("img", {
-          name: new RegExp(`${first.title} marked among the 15 occupations.*all 923 occupations`),
+          name: new RegExp(`${first.title} marked among the 15 occupations.*all ${raw.occupations.length} occupations`),
         })
       ).toBeInTheDocument();
       expect(screen.getByText("Among the 15 closest interest profiles")).toBeInTheDocument();

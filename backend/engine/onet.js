@@ -4,11 +4,16 @@
 // deterministic base every AI path and keyless fallback stands on; the live
 // enrichment lives in services/onetApi.js.
 const { RIASEC_KEYS } = require("./riasec");
+const { hasEsco } = require("./esco");
 
 // Checked into the repo and required: every keyless output is picked from it.
 const snapshot = require("../data/onet-snapshot.json");
 
 const bySoc = new Map(snapshot.occupations.map((o) => [o.soc, o]));
+
+// Only occupations with ESCO content can be shown, so only they are ranked.
+const rankable = snapshot.occupations.filter((o) => hasEsco(o.soc));
+const RANKABLE_OCCUPATION_COUNT = rankable.length;
 
 const SNAPSHOT_VERSION = snapshot.version;
 // Exported so /api/health can report grounding coverage without re-requiring
@@ -74,7 +79,7 @@ function rankOccupations(riasecScores, { directionIds, excludeSocs = [], limit =
   const families = directionIds ? new Set(directionIds) : null;
   const excluded = new Set(excludeSocs);
 
-  return snapshot.occupations
+  return rankable
     .filter(
       (o) => !excluded.has(o.soc) && (!families || families.has(o.directionId))
     )
@@ -99,4 +104,5 @@ module.exports = {
   JOB_ZONE_LABELS,
   SNAPSHOT_VERSION,
   SNAPSHOT_OCCUPATION_COUNT,
+  RANKABLE_OCCUPATION_COUNT,
 };

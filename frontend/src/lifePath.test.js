@@ -16,6 +16,7 @@ import {
   bigFiveTakeaways,
   whyThisFitsSections,
   onetSection,
+  escoSection,
   deriveArchetype,
   WORK_VALUE_AXES,
   WORK_VALUE_ORDER,
@@ -84,6 +85,45 @@ describe("onetSection", () => {
     expect(section.items.some((i) => i.includes("outlook"))).toBe(false);
     expect(onetSection({})).toBe(null);
     expect(onetSection(null)).toBe(null);
+  });
+});
+
+describe("escoSection", () => {
+  const esco = {
+    title: "nurse responsible for general care",
+    essentialSkills: Array.from({ length: 14 }, (_, i) => `skill ${i + 1}`),
+    education: { eqfMin: 6, eqfMax: 6, source: "isco+jobzone" },
+    attribution: "This service uses the ESCO classification of the European Commission. Adapted: …",
+  };
+
+  it("is null for an output saved before ESCO", () => {
+    expect(escoSection({})).toBe(null);
+    expect(escoSection(null)).toBe(null);
+  });
+
+  it("shows education as an EQF estimate, the first 12 essential skills, and the attribution", () => {
+    const section = escoSection({ esco });
+    expect(section.heading).toBe("European occupation (ESCO)");
+    expect(section.items).toContain("Typical education: EQF 6 (estimate).");
+    expect(section.items).toContain(
+      `Essential skills: ${esco.essentialSkills.slice(0, 12).join(", ")}.`
+    );
+    expect(section.footnote).toBe(esco.attribution);
+  });
+
+  it("writes an EQF range when min and max differ", () => {
+    const section = escoSection({ esco: { ...esco, education: { eqfMin: 4, eqfMax: 5 } } });
+    expect(section.items).toContain("Typical education: EQF 4–5 (estimate).");
+  });
+});
+
+describe("onetSection next to ESCO", () => {
+  it("drops O*NET core skills when ESCO supplies the skills", () => {
+    const onet = { skills: ["X"], attribution: "a" };
+    const withEsco = onetSection({ esco: { essentialSkills: ["y"] }, onet });
+    expect(withEsco.heading).toBe("US data (O*NET)");
+    expect(withEsco.items.some((i) => i.startsWith("Core skills"))).toBe(false);
+    expect(onetSection({ onet }).items.some((i) => i.startsWith("Core skills"))).toBe(true);
   });
 });
 

@@ -45,14 +45,14 @@ test("oriented-field prompt lists the occupation shortlist and demands a socCode
   assert.match(user, /\[21-1093\.00\] Social and Human Service Assistants/);
 });
 
-test("whyThisFits prompt grounds skills in O*NET when provided", () => {
+test("whyThisFits prompt grounds skills in ESCO when provided", () => {
   const { user } = buildWhyThisFitsPrompt({
     profileDigest: "digest",
     output: { jobTitle: "Registered Nurse", orientedField: "Healthcare", thesis: "t" },
     topValueLabel: "Relationships",
-    onetSkills: ["Service Orientation", "Active Listening"],
+    escoSkills: ["Service Orientation", "Active Listening"],
   });
-  assert.match(user, /O\*NET.*Service Orientation, Active Listening/);
+  assert.match(user, /ESCO.*Service Orientation, Active Listening/);
 });
 
 test("resolveShortlistSoc keeps a valid socCode, falls back to title match, then to the top candidate", () => {
@@ -69,8 +69,8 @@ test("keyless first output is a real snapshot occupation with a socCode", async 
   const output = await engine.generateFirstOutput({ session: fakeSession() });
   const occupation = getOccupation(output.socCode);
   assert.ok(occupation, `socCode ${output.socCode} must exist in the snapshot`);
-  assert.equal(output.jobTitle, occupation.title);
-  assert.equal(output.thesis, occupation.blurb);
+  // Title and thesis come from ESCO now (aiEngine.test.js pins that).
+  assert.ok(output.jobTitle && output.thesis);
   assert.equal(output.directionId, occupation.directionId);
   assert.equal(output.orientedField, getDirection(occupation.directionId).label);
 });

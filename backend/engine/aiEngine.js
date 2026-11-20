@@ -13,6 +13,7 @@ const { WORK_VALUES_META } = require("./workValues");
 const { DIRECTIONS, getDirection } = require("./directions");
 const { rankDirections, inferRiasecScores, rankingRiasec } = require("./riasec");
 const { rankOccupations, getOccupation } = require("./onet");
+const { pickEsco, escoTitle } = require("./esco");
 
 const WORK_VALUE_LABELS = new Map(WORK_VALUES_META.map((m) => [m.id, m.label]));
 
@@ -81,15 +82,19 @@ function buildSessionDigest(session) {
 // ---------------------------------------------------------------------------
 
 // Shared shape for every snapshot-grounded fallback output.
+// ESCO supplies the title and description; O*NET's only when the SOC has none.
 function occupationOutput(session, pick) {
   const direction = getDirection(pick.directionId) || DIRECTIONS[0];
+  const esco = pickEsco(pick.soc);
+  const jobTitle = esco ? escoTitle(esco) : pick.title;
   return {
     directionId: pick.directionId,
     socCode: pick.soc,
+    escoId: esco?.id || null,
     orientedField: direction.label,
-    jobTitle: pick.title,
-    thesis: pick.blurb,
-    firstMilestone: `Spend two weeks talking to people doing this work and shadow one full day of a real ${pick.title.toLowerCase()} shift.`,
+    jobTitle,
+    thesis: esco?.description || pick.blurb,
+    firstMilestone: `Spend two weeks talking to people doing this work and shadow one full day of a real ${jobTitle.toLowerCase()} shift.`,
     constraintsNote:
       "Demo mode — matched from measured O*NET interest profiles by fixed rules; treat it as a structured starting point, not advice.",
   };
@@ -234,11 +239,14 @@ function fallbackWhyThisFits(session, output) {
   };
 }
 
-// Prefer the occupation's measured O*NET core skills over generic phrasing.
+// Prefer the occupation's ESCO essential skills (O*NET core skills only for
+// an output without ESCO) over generic phrasing.
 function buildFallbackSkillsToDevelop(output) {
-  const onetSkills = (output.socCode && getOccupation(output.socCode)?.skills) || [];
-  if (onetSkills.length) {
-    return [...onetSkills.slice(0, 3), `Day-to-day tools of a ${output.jobTitle}`];
+  const skills = output.esco?.essentialSkills?.length
+    ? output.esco.essentialSkills
+    : (output.socCode && getOccupation(output.socCode)?.skills) || [];
+  if (skills.length) {
+    return [...skills.slice(0, 3), `Day-to-day tools of a ${output.jobTitle}`];
   }
   return [
     `${output.orientedField} fundamentals`,
@@ -485,13 +493,14 @@ async function runJsonCompletion(client, { model, system, user, maxTokens }) {
     text: { format: { type: "json_object" } },
   });
 
-  return parseJsonObject(response?.output_text);
+  return { parsed: parseJsonObject(response?.output_text), usage: response?.usage };
 }
 
-function createAiEngine({ apiKey, model }) {
+// `client` is injectable for tests; otherwise built from the key.
+function createAiEngine({ apiKey, model, client: injected }) {
   // A hung upstream call must fail fast into the deterministic fallback
   // instead of pinning the request for the SDK's 10-minute default.
-  const client = apiKey ? new OpenAI({ apiKey, timeout: 30_000, maxRetries: 1 }) : null;
+  const client = injected || (apiKey ? new OpenAI({ apiKey, timeout: 30_000, maxRetries: 1 }) : null);
 
   // Every generator has one shape: keyless → fallback; otherwise one JSON call
   // whose payload `normalize` validates, and any failure (network, timeout,
@@ -500,7 +509,17 @@ function createAiEngine({ apiKey, model }) {
     if (!client) return fallback();
     try {
       const { system, user } = prompt();
-      const parsed = await runJsonCompletion(client, { model, system, user, maxTokens });
+      const { parsed, usage } = await runJsonCompletion(client, { model, system, user, maxTokens });
+      // One line per billed call, so token cuts are made from measurements.
+      console.log(
+        JSON.stringify({
+          kind: "ai_usage",
+          label,
+          input: usage?.input_tokens || 0,
+          cached: usage?.input_tokens_details?.cached_tokens || 0,
+          output: usage?.output_tokens || 0,
+        })
+      );
       return normalize(parsed);
     } catch (error) {
       console.error(`[AI ${label} fallback]`, error.message);
@@ -538,6 +557,7 @@ function createAiEngine({ apiKey, model }) {
         return {
           directionId: occupation?.directionId || ranked[0]?.id || null,
           socCode,
+          escoId: cleanText(parsed?.escoId) || null,
           ...normalizeOutputPayload(parsed),
         };
       },
@@ -557,7 +577,7 @@ function createAiEngine({ apiKey, model }) {
           profileDigest: buildSessionDigest(session),
           output,
           topValueLabel: topValue ? WORK_VALUE_LABELS.get(topValue) : "",
-          onetSkills: (output.socCode && getOccupation(output.socCode)?.skills) || [],
+          escoSkills: output.esco?.essentialSkills?.slice(0, 12) || [],
         });
       },
       normalize: normalizeWhyThisFitsPayload,
