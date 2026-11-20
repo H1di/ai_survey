@@ -264,3 +264,16 @@ test("runJsonCompletion forwards an explicit max_output_tokens ceiling", async (
   assert.equal(captured.temperature, undefined);
   assert.equal(parsed.ok, true);
 });
+
+// Regression (found 2026-11-20): OpenAI rejects json_object mode with a 400
+// unless the *input* mentions JSON — the instructions do not count — so
+// every generator whose user message lacked the word silently fell back.
+test("runJsonCompletion always mentions JSON in the input message", async () => {
+  let captured;
+  const fakeClient = {
+    responses: { create: async (args) => ((captured = args), { output_text: '{"ok":true}' }) },
+  };
+  await runJsonCompletion(fakeClient, { model: "m", system: "Return valid JSON only.", user: "Produce it now." });
+  assert.match(captured.input, /json/i);
+  assert.match(captured.input, /^Produce it now\./);
+});

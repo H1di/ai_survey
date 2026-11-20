@@ -476,7 +476,9 @@ async function runJsonCompletion(client, { model, system, user, maxTokens }) {
     // dream and CV-derived text, and the Responses API stores by default.
     store: false,
     instructions: system,
-    input: user,
+    // json_object mode is a 400 unless the input itself mentions JSON
+    // (instructions do not count) — that silently sent prompts to fallback.
+    input: /json/i.test(user) ? user : `${user}\n\nRespond with the JSON object.`,
     // Explicit output ceiling on every call — an unbounded response is the
     // one OpenAI cost knob nothing else in this file controls.
     ...(Number.isFinite(maxTokens) ? { max_output_tokens: maxTokens } : {}),
