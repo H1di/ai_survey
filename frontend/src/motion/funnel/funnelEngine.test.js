@@ -4,6 +4,8 @@ import occupations from "../../../demos/data/occupations.json";
 import profile from "../../../demos/data/demo-profile.json";
 import {
   HOLD_AT,
+  captionAt,
+  catalogLabel,
   STAGES,
   buildModel,
   frameAt,
@@ -18,7 +20,7 @@ const enlarged = (f) => f.dots.filter((d) => d.r > 3 && d.alpha > 0.5).map((d) =
 
 describe("stages", () => {
   it("cover 0–12 s with the boundaries the scene is written against", () => {
-    expect(STAGES[0].label).toBe(`${occupations.length} occupations from O*NET`);
+    expect(STAGES[0].label).toBe("Occupations (ESCO × O*NET)");
     const b = ends(STAGES);
     [2.4, 5.0, 8.0, 10.5, 12.0].forEach((v, i) => expect(b[i]).toBeCloseTo(v));
     expect(HOLD_AT).toBeCloseTo(b[2]);
@@ -89,5 +91,16 @@ describe("stackLabels", () => {
     expect(out[0].y).toBe(0);
     expect(out[1].y).toBeGreaterThanOrEqual(12);
     expect(out[2].y).toBe(1);
+  });
+});
+
+describe("catalog label", () => {
+  it("names the real count and both sources", () => {
+    expect(catalogLabel(904)).toBe("904 occupations (ESCO × O*NET)");
+  });
+
+  it("the catalog caption uses the field's count", () => {
+    expect(captionAt(0.1, HOLD_AT, 904)).toBe("904 occupations (ESCO × O*NET)");
+    expect(captionAt(0.1, HOLD_AT)).not.toMatch(/923/);
   });
 });

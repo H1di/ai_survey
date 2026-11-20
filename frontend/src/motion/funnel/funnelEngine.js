@@ -2,7 +2,7 @@
 // (T, model, holdUntil) only: no accumulation, no canvas, no DOM.
 //
 // What it shows is the backend's real grounding path for the first result:
-// 923 O*NET occupations → the 5 field families rankDirections picks from the
+// the rankable occupations (ESCO-backed O*NET profiles) → the 5 field families rankDirections picks from the
 // interest scores → the 15 occupations rankOccupations ranks closest by
 // Pearson r inside them → the one the pick lands on.
 //
@@ -17,7 +17,7 @@ import { clamp, easeOutCubic, lerp, mulberry32, smoothstep, stageProgress } from
 import { projectRiasec } from "../riasecPlane";
 
 export const STAGES = [
-  { id: "catalog", label: "923 occupations from O*NET", dur: 2.4 },
+  { id: "catalog", label: "Occupations (ESCO × O*NET)", dur: 2.4 },
   { id: "families", label: "Five field families that match your interests", dur: 2.6 },
   { id: "shortlist", label: "The 15 closest profiles", dur: 3.0 },
   { id: "pick", label: "One pick", dur: 2.5 },
@@ -130,15 +130,20 @@ export function withPick(model, chosen) {
   return { ...model, chosen: index, title: index >= 0 ? chosen.title || "" : "" };
 }
 
+// The catalog caption counts the occupations actually drawn.
+export function catalogLabel(count) {
+  return `${count} occupations (ESCO × O*NET)`;
+}
+
 // The caption for clock time T: the stage being shown, or the waiting line
-// while stage 3 holds for the response.
-export function captionAt(T, holdUntil = HOLD_AT) {
+// while stage 3 holds for the response. `count` = occupations in the field.
+export function captionAt(T, holdUntil = HOLD_AT, count) {
   const { s, held, since } = sceneTime(T, holdUntil);
   if (held > 0 && since === 0) return WAIT_STAGE.label;
   let start = 0;
   for (const stage of STAGES) {
     start += stage.dur;
-    if (s <= start) return stage.label;
+    if (s <= start) return stage.id === "catalog" && count ? catalogLabel(count) : stage.label;
   }
   return STAGES[STAGES.length - 1].label;
 }

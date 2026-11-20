@@ -20,7 +20,11 @@ describe("FirstPathScreen", () => {
   it("reduced motion, still waiting: the shortlist frame, no pick claimed, nothing to click", () => {
     const onDone = vi.fn();
     render(<FirstPathScreen {...base} onDone={onDone} reducedMotion />);
-    expect(screen.getByRole("img", { name: /923 O\*NET occupations.*The pick is being made\./ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", {
+        name: new RegExp(`^${raw.occupations.length} occupations \\(ESCO × O\\*NET\\).*The pick is being made\\.`),
+      })
+    ).toBeInTheDocument();
     expect(screen.getByText("Weighing the shortlist")).toBeInTheDocument();
     // In the layout (no shift later) but hidden and inert until there is a result.
     const cta = screen.getByText("See your path");

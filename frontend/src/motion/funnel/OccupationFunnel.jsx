@@ -1,5 +1,5 @@
 // The shipped funnel: the selection path behind the first result, played while
-// the response is outstanding. 923 O*NET occupations → the five field families
+// the response is outstanding. The rankable occupations (ESCO × O*NET) → the five field families
 // the interest scores point to → the 15 closest profiles (both re-derived here
 // from the same data and rules as the backend) → the pick, which only the
 // response knows. Until it arrives the scene holds on the shortlist and
@@ -13,7 +13,7 @@ import { HOLD_AT, buildModel, captionAt, frameAt, stagesFor, withPick } from "./
 import "./funnel.css";
 
 function funnelAria({ count, riasecCode, families, pick }) {
-  const head = `${count} O*NET occupations placed on the RIASEC hexagon, narrowed to five field families that match ${
+  const head = `${count} occupations (ESCO × O*NET) placed on the RIASEC hexagon, narrowed to five field families that match ${
     riasecCode ? `the ${riasecCode} interest profile` : "your interests"
   } (${families.join(", ")}), then to the 15 occupations with the closest interest profiles.`;
   return pick ? `${head} The pick is ${pick.title}.` : `${head} The pick is being made.`;
@@ -54,7 +54,9 @@ export default function OccupationFunnel({
   const T = clock.reducedMotion ? (pick ? totalDuration(stagesFor(HOLD_AT)) : HOLD_AT) : clock.T;
   const hold = clock.reducedMotion ? HOLD_AT : holdUntil;
   const frame = useMemo(() => frameAt(T, model, hold), [T, model, hold]);
-  const caption = clock.reducedMotion && !pick ? captionAt(HOLD_AT + 1, null) : captionAt(T, hold);
+  const count = field.occupations.length;
+  const caption =
+    clock.reducedMotion && !pick ? captionAt(HOLD_AT + 1, null, count) : captionAt(T, hold, count);
 
   // A pick the map cannot place has no last act to play: finish at once.
   const placed = model.chosen >= 0;
@@ -72,7 +74,7 @@ export default function OccupationFunnel({
       <FunnelCanvas
         frame={frame}
         ariaLabel={funnelAria({
-          count: field.occupations.length,
+          count,
           riasecCode,
           families: ground.topDirections.map((d) => d.label),
           pick,
