@@ -67,6 +67,7 @@ import {
   selectDockCard,
   whyThisFitsSections,
   onetSection,
+  escoSection,
   WORK_VALUE_META,
 } from "./lifePath";
 import "./App.css";
@@ -623,6 +624,7 @@ function LifePathApp({ onReset }) {
       wide: Boolean(fitFigure),
       sections: [
         ...whyThisFitsSections(output),
+        escoSection(output),
         onetSection(output),
         { heading: "First milestone", text: output.firstMilestone },
         output.valuesFit
